@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -29,6 +29,35 @@ export interface ReleaseEntry {
  */
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: '0.5.1',
+    date: '2026-09-20',
+    title: 'Registrazione audio funzionante, volume unico, Docker su Railway',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          'Registrazione audio: `MediaRecorder` produce data URL come `data:audio/webm;codecs=opus;base64,...`, ma il server accettava solo `data:<mime>;base64,` e RIFIUTAVA ogni clip. Ora i parametri opzionali sono ammessi e i messaggi d\'errore mostrano la causa reale invece del generico "registrazione non riuscita".',
+          '`Dockerfile`: rimosso `VOLUME`, che Railway rifiuta ("docker VOLUME is not supported"). Il volume si configura dalla piattaforma.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          'Le schede generate dall\'admin vivono in `DATA_DIR/schede-extra`: un solo volume copre profili e schede, perché i PaaS consentono un volume per servizio.',
+          'Le schede del bundle offline vivono in `/bundled-schede`: con lo stesso nome dell\'API `/schede` la rotta JSON veniva catturata da un redirect 301.',
+          'Mount statico e fallback SPA spostati dopo TUTTE le rotte API.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Su Railway serve `RAILWAY_RUN_UID=0`: i volumi sono montati come root mentre il container gira come `node`, quindi il database non sarebbe scrivibile.',
+          'I volumi non sono in Settings: si creano con `Ctrl+K` → Volume, oppure col tasto destro sul canvas.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.5.0',
     date: '2026-09-20',
     title: 'Sbooble: profili, audio personale e app Android',
@@ -43,20 +72,6 @@ export const RELEASES: ReleaseEntry[] = [
           'Musica di sottofondo reale e royalty-free: 6 tracce CC0 (OpenGameArt) incluse nel bundle. L\'host scegle la traccia per tutta la stanza (`room:config.musicId`).',
           'App Android con Capacitor 8: web e schede inclusi nell\'APK, quindi single player, foto e audio funzionano offline. Multiplayer e sincronizzazione profili quando c\'è rete.',
           'Rebranding: nome Sbooble, logo margherita (icone Android adaptive generate con encoder PNG in Node, senza librerie native) e font Baloo 2 + Fredoka self-hostati.',
-        ],
-      },
-      {
-        kind: 'improvement',
-        items: [
-          'Le schede del bundle offline vivono in `/bundled-schede`: prima collidevano con l\'API `/schede` (un mount statico catturava `/schede` con un redirect 301).',
-          'Il mount statico e il fallback SPA sono stati spostati dopo TUTTE le rotte API.',
-        ],
-      },
-      {
-        kind: 'fix',
-        items: [
-          'Registrazione audio: `MediaRecorder` produce data URL come `data:audio/webm;codecs=opus;base64,...`, ma il server accettava solo `data:<mime>;base64,` e RIFIUTAVA ogni clip. La regex ora ammette i parametri e i messaggi d\'errore mostrano la causa reale.',
-          'Le schede generate dall\'admin vivono in `DATA_DIR/schede-extra`: un solo volume copre profili e schede (Railway consente un volume per servizio).',
         ],
       },
       {
