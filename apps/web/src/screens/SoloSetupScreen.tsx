@@ -7,6 +7,7 @@ import {
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { GridPreview } from '../components/GridPreview.js';
 
 const SIZES: { size: GridSize; label: string; hint: string }[] = [
   { size: 4, label: '4 × 4', hint: 'Classica · 16 lettere' },
@@ -14,7 +15,7 @@ const SIZES: { size: GridSize; label: string; hint: string }[] = [
   { size: 6, label: '6 × 6', hint: 'Grande · 36 lettere' },
 ];
 
-/** Configurazione partita single player: dimensione, difficoltà, durata, round. */
+/** Configurazione partita single player: dimensione, difficoltà, durata, round + anteprima. */
 export function SoloSetupScreen({ onStart }: { onStart: () => void }) {
   const {
     soloGridSize,
@@ -76,6 +77,8 @@ export function SoloSetupScreen({ onStart }: { onStart: () => void }) {
         </div>
       </section>
 
+      <GridPreview gridSize={size} difficulty={difficulty} />
+
       <section className="setup__section">
         <h3 className="setup__label">Durata del round</h3>
         <div className="rounds-options">
@@ -109,8 +112,7 @@ export function SoloSetupScreen({ onStart }: { onStart: () => void }) {
       <div className="setup__summary" style={{ ['--level-accent' as string]: activeDifficulty.theme.accent }}>
         <span className="setup__summary-dot" />
         <span>
-          {activeDifficulty.label} · {size}×{size} · {durationMs / 1000}s · {rounds}{' '}
-          {rounds === 1 ? 'round' : 'round'}
+          {activeDifficulty.label} · {size}×{size} · {durationMs / 1000}s · {rounds} round
         </span>
       </div>
 

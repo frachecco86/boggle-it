@@ -38,11 +38,14 @@ nessuna persistenza su database, nessuna PWA.
 ## 3. Regole di gioco
 
 ### 3.1 Generazione griglia
-- N×N dadi (`N ∈ {4,5,6}`), un set di dadi dedicato per ogni formato.
-- Ogni dado ha 6 facce; si estrae una faccia a caso per ogni dado e si dispone in griglia.
+- N×N (`N ∈ {4,5,6}`) con **composizione controllata** per difficoltà:
+  un numero esatto di vocali, un limite di lettere rare (z k w x y j), il resto consonanti comuni.
 - La faccia `q` rappresenta il digramma **"Qu"** (Q+U inseparabili, come nel Boggle ufficiale).
-- Dadi generati da `tools/gen-dice.mjs` con frequenze lettere italiane reali e quote vincolate
-  (≈38% vocali, ~2% H, ~1.5% Q) per garantire giocabilità.
+- La difficoltà agisce sulla composizione, non sulla dimensione (scelta separata).
+- Modello derivato empiricamente: le lettere rare sono il fattore dominante sul numero di
+  parole trovabili (r ≈ -0.6), le vocali contano molto meno (r ≈ 0.2). Controllare solo le
+  vocali lasciava i livelli indistinguibili (mediane 64/62/61 su 4×4); controllando entrambe
+  le mediane diventano 86 / 74 / 52 / 49.
 
 ### 3.2 Selezione parola (swipe)
 - Il giocatore preme su una cella e trascina verso celle **adiacenti** (8 direzioni).

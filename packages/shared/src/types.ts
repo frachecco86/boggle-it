@@ -29,6 +29,8 @@ export interface Grid {
 export interface PlayerPublic {
   id: string;
   nickname: string;
+  /** Emoji scelta dal giocatore (es. '🦊'). */
+  avatar: string;
   score: number;
   connected: boolean;
   isHost: boolean;
@@ -62,6 +64,7 @@ export interface RoomState {
 
 export interface RoomCreatePayload {
   nickname: string;
+  avatar: string;
   gridSize: GridSize;
   difficulty: Difficulty;
   rounds: number;
@@ -71,6 +74,7 @@ export interface RoomCreatePayload {
 export interface RoomJoinPayload {
   code: string;
   nickname: string;
+  avatar: string;
   playerId?: string;
 }
 
@@ -117,6 +121,7 @@ export interface RoundStartPayload {
 export interface PlayerWordPayload {
   playerId: string;
   nickname: string;
+  avatar: string;
   /** Parola trovata. Stringa VUOTA per gli avversari (non riveliamo le parole). */
   word: string;
   /** Lunghezza della parola: permette al client di scdere il suono giusto anche per gli altri. */

@@ -47,6 +47,7 @@ export interface Player {
   id: string;
   socketId: string | null;
   nickname: string;
+  avatar: string;
   totalScore: number;
   roundScore: number;
   words: FoundWord[];
@@ -98,11 +99,12 @@ export class Room {
     return new Room(generateRoomCode(), dictionary, gridSize, rounds, difficulty, roundDurationMs);
   }
 
-  addPlayer(id: string, nickname: string): Player {
+  addPlayer(id: string, nickname: string, avatar = '🐱'): Player {
     const player: Player = {
       id,
       socketId: null,
       nickname: nickname.trim().slice(0, 20) || 'Giocatore',
+      avatar: String(avatar || '🐱').slice(0, 8),
       totalScore: 0,
       roundScore: 0,
       words: [],
@@ -137,6 +139,7 @@ export class Room {
     return [...this.players.values()].map((p) => ({
       id: p.id,
       nickname: p.nickname,
+      avatar: p.avatar,
       score: p.totalScore,
       connected: p.connected,
       isHost: p.id === this.hostId,

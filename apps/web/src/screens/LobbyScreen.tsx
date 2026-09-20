@@ -6,6 +6,8 @@ import {
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { AvatarPicker } from '../components/AvatarPicker.js';
+import { GridPreview } from '../components/GridPreview.js';
 
 /** Lobby multiplayer: codice stanza, giocatori, impostazioni host. */
 export function LobbyScreen() {
@@ -14,6 +16,8 @@ export function LobbyScreen() {
     roomCode,
     nickname,
     setNickname,
+    avatar,
+    setAvatar,
     startRoom,
     configureRoom,
     leaveRoom,
@@ -66,7 +70,9 @@ export function LobbyScreen() {
         <ul className="player-list">
           {room.players.map((p) => (
             <li key={p.id} className={`player-row${p.connected ? '' : ' player-row--off'}`}>
-              <span className="player-row__avatar">{p.nickname.slice(0, 1).toUpperCase()}</span>
+              <span className="player-row__avatar" aria-hidden>
+                {p.avatar}
+              </span>
               <span className="player-row__name">{p.nickname}</span>
               {p.isHost && <span className="badge">host</span>}
               {p.id === playerId && <span className="badge badge--you">tu</span>}
@@ -78,15 +84,18 @@ export function LobbyScreen() {
 
       <section className="lobby__section">
         <h3 className="summary__label">Impostazioni</h3>
-        <label className="field">
-          <span className="field__label">Il tuo nome</span>
-          <input
-            className="field__input"
-            value={nickname}
-            maxLength={20}
-            onChange={(e) => setNickname(e.target.value)}
-          />
-        </label>
+        <div className="profile-card profile-card--compact">
+          <AvatarPicker value={avatar} onChange={setAvatar} />
+          <label className="field profile-card__field">
+            <span className="field__label">Il tuo nome</span>
+            <input
+              className="field__input"
+              value={nickname}
+              maxLength={20}
+              onChange={(e) => setNickname(e.target.value)}
+            />
+          </label>
+        </div>
 
         {isHost ? (
           <div className="settings-host">
@@ -148,6 +157,8 @@ export function LobbyScreen() {
                 </button>
               ))}
             </div>
+
+            <GridPreview gridSize={room.gridSize} difficulty={room.difficulty} />
 
             <p className="settings-host__hint">Le modifiche sono visibili a tutti in tempo reale.</p>
           </div>

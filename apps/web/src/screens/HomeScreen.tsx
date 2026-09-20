@@ -8,12 +8,16 @@ import {
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { AudioSettings } from '../components/AudioSettings.js';
+import { AvatarPicker } from '../components/AvatarPicker.js';
+import { GridPreview } from '../components/GridPreview.js';
 
-/** Schermata iniziale: nickname, modalità, impostazioni host e audio. */
+/** Schermata iniziale: avatar, nickname, modalità, impostazioni host e audio. */
 export function HomeScreen() {
   const {
     nickname,
     setNickname,
+    avatar,
+    setAvatar,
     setScreen,
     joinRoom,
     createRoom,
@@ -69,16 +73,19 @@ export function HomeScreen() {
         <p className="home__tagline">Trova più parole degli altri. Scorri il dito sulle lettere.</p>
       </header>
 
-      <label className="field">
-        <span className="field__label">Il tuo nome</span>
-        <input
-          className="field__input"
-          value={nickname}
-          maxLength={20}
-          placeholder="Giocatore"
-          onChange={(e) => setNickname(e.target.value)}
-        />
-      </label>
+      <section className="profile-card">
+        <AvatarPicker value={avatar} onChange={setAvatar} />
+        <label className="field profile-card__field">
+          <span className="field__label">Il tuo nome</span>
+          <input
+            className="field__input"
+            value={nickname}
+            maxLength={20}
+            placeholder="Giocatore"
+            onChange={(e) => setNickname(e.target.value)}
+          />
+        </label>
+      </section>
 
       {errorMessage && <div className="banner banner--error">{errorMessage}</div>}
 
@@ -96,7 +103,10 @@ export function HomeScreen() {
         </button>
 
         {showHostOptions && (
-          <div className="host-options" style={{ ['--level-accent' as string]: DIFFICULTIES[hostDifficulty].theme.accent }}>
+          <div
+            className="host-options"
+            style={{ ['--level-accent' as string]: DIFFICULTIES[hostDifficulty].theme.accent }}
+          >
             <span className="field__label">Griglia</span>
             <div className="rounds-options">
               {([4, 5, 6] as GridSize[]).map((s) => (
@@ -140,6 +150,8 @@ export function HomeScreen() {
               ))}
             </div>
 
+            <GridPreview gridSize={hostGridSize} difficulty={hostDifficulty} enabled={showHostOptions} />
+
             <button
               className="btn btn--primary"
               disabled={busy}
@@ -172,7 +184,7 @@ export function HomeScreen() {
       <footer className="home__footer">
         Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni Wikizionario.
         <br />
-        Musica: “Project Utopia” di congusbongus (CC0). Suoni generati nel browser.
+        Musica: “Happy Adventure” di TinyWorlds (CC0). Suoni generati nel browser.
       </footer>
     </div>
   );

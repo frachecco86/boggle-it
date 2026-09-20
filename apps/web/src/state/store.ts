@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Difficulty, Grid, GridSize, PlayerPublic, RoomState, RoundResultEntry } from '@boggle/shared';
 import { audio, type AudioSettings } from '../audio/AudioEngine.js';
+import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket } from '../net/socket.js';
 
 export type Screen = 'home' | 'solo-setup' | 'solo-game' | 'lobby' | 'mp-game' | 'summary';
@@ -23,6 +24,7 @@ export interface OpponentEvent {
 interface AppState {
   screen: Screen;
   nickname: string;
+  avatar: Avatar;
   // single player
   soloGridSize: GridSize;
   soloDifficulty: Difficulty;
@@ -54,6 +56,7 @@ interface AppState {
 
   setScreen: (s: Screen) => void;
   setNickname: (n: string) => void;
+  setAvatar: (a: Avatar) => void;
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
   setAudioSettings: (next: Partial<AudioSettings>) => void;
   createRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => Promise<void>;
@@ -70,6 +73,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       screen: 'home',
       nickname: '',
+      avatar: DEFAULT_AVATAR,
       soloGridSize: 4,
       soloDifficulty: 'normale',
       soloRoundDurationMs: 180_000,
@@ -92,6 +96,7 @@ export const useAppStore = create<AppState>()(
 
       setScreen: (screen) => set({ screen }),
       setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),
+      setAvatar: (avatar) => set({ avatar }),
       setSoloSetup: (gridSize, difficulty, rounds, roundDurationMs) =>
         set({
           soloGridSize: gridSize,
@@ -108,8 +113,12 @@ export const useAppStore = create<AppState>()(
       createRoom: async (gridSize, difficulty, rounds, roundDurationMs) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Host';
+        const avatar = get().avatar || avatarFromNickname(nickname);
         await new Promise<void>((resolve, reject) => {
-          socket.emit('room:create', { nickname, gridSize, difficulty, rounds, roundDurationMs }, (res) => {
+          socket.emit(
+            'room:create',
+            { nickname, avatar, gridSize, difficulty, rounds, roundDurationMs },
+            (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
                 roomCode: res.roomCode,
@@ -123,18 +132,20 @@ export const useAppStore = create<AppState>()(
               set({ errorMessage: 'message' in res ? res.message : 'Errore' });
               reject(new Error('create failed'));
             }
-          });
+            },
+          );
         });
       },
 
       joinRoom: async (code) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Giocatore';
+        const avatar = get().avatar || avatarFromNickname(nickname);
         const upperCode = code.toUpperCase();
         // Riconnessione solo verso la stessa stanza, non verso un'altra partita.
         const playerId = get().playerIds[upperCode];
         await new Promise<void>((resolve, reject) => {
-          socket.emit('room:join', { code: upperCode, nickname, playerId }, (res) => {
+          socket.emit('room:join', { code: upperCode, nickname, avatar, playerId }, (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
                 roomCode: res.state.code,
@@ -194,6 +205,7 @@ export const useAppStore = create<AppState>()(
       name: 'boggle-it',
       partialize: (s) => ({
         nickname: s.nickname,
+        avatar: s.avatar,
         soloGridSize: s.soloGridSize,
         soloDifficulty: s.soloDifficulty,
         soloRounds: s.soloRounds,

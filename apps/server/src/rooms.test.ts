@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createDictionary } from '@boggle/dictionary';
-import { DICE, type Grid } from '@boggle/shared';
+import type { Grid } from '@boggle/shared';
 import { Room, clampDuration } from './rooms.js';
 
 /** Griglia fissa di test: tutte le lettere note, layout 4x4. */
@@ -159,16 +159,6 @@ describe('Difficoltà e durata round', () => {
     expect(counts.facile!).toBeGreaterThan(counts.difficile!);
     expect(counts.facile!).toBeGreaterThan(0.35);
     expect(counts.difficile!).toBeLessThan(0.42);
-  });
-
-  it('usa i set di dadi corretti per difficoltà e dimensione', () => {
-    for (const size of [4, 5, 6] as const) {
-      for (const diff of ['facile', 'normale', 'difficile'] as const) {
-        expect(DICE[size][diff]).toHaveLength(size * size);
-        // ogni dado ha esattamente 6 facce
-        for (const die of DICE[size][diff]) expect(die).toHaveLength(6);
-      }
-    }
   });
 
   it('clampDuration accetta i valori nei limiti di sicurezza', () => {

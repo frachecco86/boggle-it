@@ -7,8 +7,10 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import {
+  generateGrid,
   MIN_WORD_LENGTH,
   solveGrid,
+  type Grid,
   type ClientToServerEvents,
   type Difficulty,
   type GridSize,
@@ -81,13 +83,71 @@ app.get('/dictionary/words.txt', (req, res) => {
 });
 
 // In produzione il server puo' servire anche il build statico del frontend
-// (monolite same-origin). Se la cartella non esiste, si usa Netlify o Vite.
+// (monolite same-origin). Il fallback SPA viene aggiunto in FONDO, dopo tutte le
+// rotte API: altrimenti catturerebbe /preview restituendo index.html.
 const WEB_DIST = process.env.WEB_DIST
   ? path.resolve(process.env.WEB_DIST)
   : path.resolve(__dirname, '../../web/dist');
-if (existsSync(path.join(WEB_DIST, 'index.html'))) {
+const servesWeb = existsSync(path.join(WEB_DIST, 'index.html'));
+if (servesWeb) {
   app.use(express.static(WEB_DIST, { maxAge: '1h', index: false }));
-  app.get(/^\/(?!socket\.io|dictionary|health).*/, (_req, res) => {
+}
+
+/**
+ * Anteprima: genera una griglia reale con le impostazioni richieste e la risolve
+ * col trie, per mostrare quante parole si possono trovare.
+ *
+ * GET /preview?gridSize=4&difficulty=normale
+ * -> { gridSize, difficulty, grid: string[], wordCount, sampleWords, truncated }
+ *
+ * Il solver è limitato: per il conteggio esatto usiamo un tetto alto, ma su griglie
+ * 6x6 il numero può superare il tetto. In quel caso `truncated: true` e il client
+ * mostra "oltre N".
+ */
+app.get('/preview', async (req, res) => {
+  const gridSizeRaw = Number(req.query.gridSize);
+  const gridSize: GridSize = gridSizeRaw === 5 || gridSizeRaw === 6 ? gridSizeRaw : 4;
+  const difficultyRaw = String(req.query.difficulty ?? 'normale');
+  const difficulty: Difficulty = isValidDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
+
+  const grid = generateGrid(gridSize, Math.random, difficulty);
+
+  let wordCount = 0;
+  let truncated = false;
+  let sampleWords: string[] = [];
+  try {
+    const trie = await getDictionaryTrie();
+    const found = solveGrid(grid, trie, { limit: PREVIEW_SOLVE_LIMIT, minLength: MIN_WORD_LENGTH });
+    wordCount = found.length;
+    truncated = found.length >= PREVIEW_SOLVE_LIMIT;
+    sampleWords = [...found].sort((a, b) => b.length - a.length).slice(0, 8);
+  } catch {
+    // Se il solver non è disponibile mostriamo comunque la griglia.
+    return res.json({ gridSize, difficulty, grid: gridToLetters(grid), wordCount: null, sampleWords: [], truncated: false });
+  }
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ gridSize, difficulty, grid: gridToLetters(grid), wordCount, sampleWords, truncated });
+});
+
+/** Riga di lettere per la griglia (usata dall'anteprima). */
+function gridToLetters(grid: Grid): string[] {
+  const rows: string[] = [];
+  for (let r = 0; r < grid.size; r++) {
+    rows.push(
+      grid.tiles
+        .filter((t) => t.row === r)
+        .map((t) => t.display)
+        .join(''),
+    );
+  }
+  return rows;
+}
+
+// Fallback SPA: tutte le rotte non-API vanno a index.html.
+// Aggiunto DOPO le rotte API (preview, dictionary, health) per non oscurarle.
+if (servesWeb) {
+  app.get(/^\/(?!socket\.io|dictionary|health|preview).*/, (_req, res) => {
     res.sendFile(path.join(WEB_DIST, 'index.html'));
   });
   console.log(`✓ Frontend statico servito da ${WEB_DIST}`);
@@ -105,6 +165,12 @@ const socketState = new Map<string, { code: string; playerId: string }>();
 
 const errorPayload = (code: string, message: string): ErrorPayload => ({ code, message });
 
+/**
+ * Tetto di parole enumerate dall'anteprima. Su griglie grandi il numero reale può
+ * superarlo: in quel caso il client mostra "oltre N" invece di un valore sbagliato.
+ */
+const PREVIEW_SOLVE_LIMIT = 600;
+
 function broadcastState(room: Room): void {
   io.to(room.code).emit('room:update', room.publicState());
 }
@@ -119,7 +185,7 @@ function clampRounds(n: unknown): number {
 }
 
 function isValidDifficulty(v: unknown): v is Difficulty {
-  return v === 'facile' || v === 'normale' || v === 'difficile';
+  return v === 'molto-facile' || v === 'facile' || v === 'normale' || v === 'difficile';
 }
 
 io.on('connection', (socket) => {
@@ -131,7 +197,7 @@ io.on('connection', (socket) => {
       const roundDurationMs = clampDuration(payload?.roundDurationMs);
       const room = registry.create(gridSize, rounds, difficulty, roundDurationMs);
       const playerId = randomUUID();
-      const player = room.addPlayer(playerId, payload?.nickname ?? 'Host');
+      const player = room.addPlayer(playerId, payload?.nickname ?? 'Host', payload?.avatar);
       player.socketId = socket.id;
       socket.join(room.code);
       socketState.set(socket.id, { code: room.code, playerId });
@@ -159,7 +225,7 @@ io.on('connection', (socket) => {
       if (room.phase !== 'lobby') return ack(errorPayload('GAME_STARTED', 'Partita gia\' iniziata'));
       if (room.isFull) return ack(errorPayload('ROOM_FULL', 'Stanza piena'));
       playerId = randomUUID();
-      const player = room.addPlayer(playerId, payload?.nickname ?? 'Giocatore');
+      const player = room.addPlayer(playerId, payload?.nickname ?? 'Giocatore', payload?.avatar);
       player.socketId = socket.id;
     }
     socket.join(room.code);
@@ -246,6 +312,7 @@ io.on('connection', (socket) => {
       io.to(room.code).except(player.socketId ?? '').emit('game:playerWord', {
         playerId: player.id,
         nickname: player.nickname,
+        avatar: player.avatar,
         word: '',
         wordLength: result.word!.length,
         points: result.points!,
@@ -256,6 +323,7 @@ io.on('connection', (socket) => {
         io.to(player.socketId).emit('game:playerWord', {
           playerId: player.id,
           nickname: player.nickname,
+          avatar: player.avatar,
           word: result.word!,
           wordLength: result.word!.length,
           points: result.points!,

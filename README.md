@@ -9,7 +9,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
 ## Caratteristiche v0.1
 
-- **Griglie 4×4, 5×5 e 6×6**, generate da dadi dedicati costruiti sulle frequenze lettere italiane.
+- **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare).
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
 - **Dizionario italiano ampio**: ~387.000 forme, incluse **tutte le coniugazioni verbali**
@@ -20,12 +20,17 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto.
-- **Difficoltà** (facile / normale / difficile): cambia la distribuzione delle lettere
-  (45% / 39% / 32% vocali) e il tema visivo. La dimensione della griglia è una scelta separata.
+- **4 difficoltà** (molto facile / facile / normale / difficile) con tema visivo dedicato.
+  La difficoltà controlla la composizione della griglia; la dimensione è una scelta separata.
+- **Anteprima reale**: il server genera una griglia di esempio con le impostazioni scelte e
+  mostra quante parole si possono trovare (risolta col dizionario, non stimata).
+- **Avatar**: 32 emoji selezionabili, visibili in classifica e nelle notifiche.
 - **Durata del round** selezionabile: 90, 120 o 180 secondi.
 - **Audio**: effetti sintetizzati con Web Audio (nessun asset da scaricare), motivi musicali
   crescenti in base alla lunghezza della parola, e musica di sottofondo CC0.
   Tutto disattivabile con volumi separati.
+- **Swipe preciso**: hit-test sul centro più vicino + bias diagonale + interpolazione
+  dei movimenti veloci. Le diagonali non richiedono più precisione millimetrica.
 - **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
   flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
   Tutte rispettano `prefers-reduced-motion`.

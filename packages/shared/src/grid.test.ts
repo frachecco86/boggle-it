@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
+import { COMPOSITION, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
 import { normalizeWord, scoreForWord, generateRoomCode } from './scoring.js';
 import type { Tile } from './types.js';
 
@@ -61,5 +61,56 @@ describe('grid', () => {
       tiles: [tile(0, 0, 0, 'q'), tile(1, 0, 1, 'a'), tile(2, 0, 2, 'd'), ...Array.from({ length: 13 }, (_, i) => tile(i + 3, 0, 0))],
     };
     expect(wordFromPath(g, [0, 1, 2])).toBe('quad');
+  });
+});
+
+describe('Difficoltà: composizione controllata', () => {
+  const RARE = new Set(['z', 'k', 'w', 'x', 'y', 'j']);
+  const isVowel = (c: string) => 'aeiou'.includes(c);
+
+  it('rispetta i limiti di vocali e lettere rare per ogni difficoltà', () => {
+    for (const size of [4, 5, 6] as const) {
+      for (const diff of ['molto-facile', 'facile', 'normale', 'difficile'] as const) {
+        const comp = COMPOSITION[diff];
+        const total = size * size;
+        const minV = Math.round(total * comp.vowels.min);
+        const maxV = Math.round(total * comp.vowels.max);
+        const maxRare = Math.max(0, Math.round(total * comp.rareMax));
+
+        for (let i = 0; i < 25; i++) {
+          const g = generateGrid(size, Math.random, diff);
+          const vowels = g.tiles.filter((t) => isVowel(t.letter)).length;
+          const rare = g.tiles.filter((t) => RARE.has(t.letter)).length;
+          expect(vowels, `${diff} ${size}x${size}: vocali ${vowels} fuori [${minV},${maxV}]`).toBeGreaterThanOrEqual(minV);
+          expect(vowels, `${diff} ${size}x${size}: vocali ${vowels} fuori [${minV},${maxV}]`).toBeLessThanOrEqual(maxV);
+          expect(rare, `${diff} ${size}x${size}: ${rare} rare (max ${maxRare})`).toBeLessThanOrEqual(maxRare);
+        }
+      }
+    }
+  });
+
+  it('molto-facile non ha lettere rare', () => {
+    for (let i = 0; i < 30; i++) {
+      const g = generateGrid(4, Math.random, 'molto-facile');
+      expect(g.tiles.filter((t) => RARE.has(t.letter)).length).toBe(0);
+    }
+  });
+
+  it('ogni difficoltà superiore ha meno vocali della precedente (medie)', () => {
+    const avgVowels = (diff: (typeof COMPOSITION)['normale'] extends never ? never : 'molto-facile' | 'facile' | 'normale' | 'difficile') => {
+      let sum = 0;
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        sum += generateGrid(5, Math.random, diff).tiles.filter((t) => isVowel(t.letter)).length;
+      }
+      return sum / N;
+    };
+    const a = avgVowels('molto-facile');
+    const b = avgVowels('facile');
+    const c = avgVowels('normale');
+    const d = avgVowels('difficile');
+    expect(a).toBeGreaterThan(b);
+    expect(b).toBeGreaterThan(c);
+    expect(c).toBeGreaterThan(d);
   });
 });

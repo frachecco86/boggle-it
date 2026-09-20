@@ -33,7 +33,8 @@ const DEFAULT_SETTINGS: AudioSettings = {
   musicVolume: 0.28,
 };
 
-const MUSIC_SRC = '/audio/music-main.ogg';
+// "Happy Adventure" di TinyWorlds (CC0) — 8-bit allegro ma leggero, in loop.
+const MUSIC_SRC = '/audio/music-happy.mp3';
 
 /**
  * Frequenze dei motivi per lunghezza parola.
