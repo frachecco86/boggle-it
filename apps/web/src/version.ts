@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.5.2';
+export const APP_VERSION = '0.5.3';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,33 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.5.3',
+    date: '2026-09-20',
+    title: 'Profili al sicuro: chiusura pulita del database',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          'SQLite gira in modalità WAL: le scritture recenti restano in `boggle.db-wal` finché non avviene un checkpoint. Il server non chiudeva mai il database, quindi `boggle.db` poteva restare QUASI VUOTO (4 KB, senza nemmeno la tabella) e un backup del solo file principale perdeva tutti i profili.',
+          'Ora il server intercetta `SIGTERM`/`SIGINT` (come fa un redeploy) ed esegue `PRAGMA wal_checkpoint(TRUNCATE)` prima di chiudere: `boggle.db` resta autosufficiente.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          'Diagnostica e backup del database per l\'admin: `GET /admin/db` mostra profili e byte di `.db`/`-wal`; `POST /admin/db/checkpoint` forza il consolidamento prima di copiare il volume.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il profilo è persistito su SQLite lato server (tabella `profiles`): la persistenza tra dispositivi e redeploy è già garantita da volume + database.',
+          'Test di persistenza: riapertura del solo file `.db`, assenza del `-wal` dopo la chiusura, più cicli di scrittura/riapertura, risorse (foto e clip) conservate.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.5.2',
     date: '2026-09-20',

@@ -68,6 +68,27 @@ caso): il volume si configura dalla piattaforma.
 Senza volume i profili e le schede admin si perdono a ogni deploy; le schede di
 base sono versionate nell'immagine e restano.
 
+#### WAL e backup: attenzione al file singolo
+
+SQLite è in modalità **WAL**: le scritture recenti restano in `boggle.db-wal`
+finché non avviene un checkpoint. Un backup del **solo** `boggle.db` senza i file
+`-wal`/`-shm` perderebbe i profili appena creati (verificato: il file principale
+può contenere 4 KB, senza nemmeno la tabella, mentre il WAL ne ha 60+ KB).
+
+Il server consolida automaticamente alla chiusura: su `SIGTERM`/`SIGINT` esegue
+`PRAGMA wal_checkpoint(TRUNCATE)` e chiude, quindi `boggle.db` resta
+autosufficiente anche da solo.
+
+Per controllare o forzare il consolidamento (utile prima di copiare il volume):
+
+| Rotta | Cosa fa |
+|---|---|
+| `GET /admin/db` | profili, byte del `.db` e del `-wal` |
+| `POST /admin/db/checkpoint` | consolida il WAL nel file principale |
+
+Entrambe richiedono il token admin (`Authorization: Bearer $ADMIN_TOKEN`).
+Un `walBytes` maggiore di zero significa scritture non ancora consolidate.
+
 ---
 
 ## Opzione A — Netlify (frontend) + Railway (server)

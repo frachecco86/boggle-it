@@ -449,6 +449,28 @@ app.post('/admin/schede/genera', async (req, res) => {
   });
 });
 
+/**
+ * Stato del database e backup manuale.
+ *
+ * GET /admin/db  -> metriche (profili, dimensione, stato WAL)
+ * POST /admin/db/checkpoint -> consolida il WAL nel file principale
+ *
+ * Utile perché con la modalità WAL le scritture recenti stanno in `boggle.db-wal`:
+ * un backup del solo `boggle.db` le perderebbe. Il server consolida alla chiusura
+ * (SIGTERM), ma in caso di crash o durante la copia manuale del volume questi
+ * comandi danno un punto di ripristino coerente.
+ */
+app.get('/admin/db', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json(profiles.stats());
+});
+
+app.post('/admin/db/checkpoint', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  profiles.checkpoint();
+  res.json({ ok: true, ...profiles.stats() });
+});
+
 // Fallback SPA e asset statici: DOPO tutte le rotte API (schede, preview, admin,
 // auth, profili, dizionario, health) per non oscurarle.
 if (servesWeb) {
@@ -754,3 +776,35 @@ httpServer.listen(PORT, () => {
   const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
   console.log(`  RSS all'avvio: ${mem} MB (nessun trie del solver: parole dalle schede)`);
 });
+
+/**
+ * Chiusura pulita del database.
+ *
+ * Perche' conta: SQLite e' in modalita' WAL, quindi le scritture recenti stanno nel
+ * file `boggle.db-wal` finche' non avviene un checkpoint. Senza `close()` il WAL
+ * resta popolato e `boggle.db` puo' risultare quasi VUOTO: un backup o un volume
+ * copiato senza i file `-wal`/`-shm` perderebbe i profili.
+ *
+ * `close()` esegue il checkpoint e consolida tutto nel file principale.
+ */
+let shuttingDown = false;
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} ricevuto: chiudo il database e termino…`);
+  try {
+    // TRUNCATE: consolida il WAL nel .db e azzera il file -wal.
+    profiles.checkpoint();
+    profiles.close();
+    console.log('✓ Database chiuso (WAL consolidato in boggle.db)');
+  } catch (err) {
+    console.error('⚠ Chiusura del database non riuscita:', err);
+  }
+  httpServer.close(() => process.exit(0));
+  // Rete di sicurezza: se le connessioni non si chiudono, esci comunque.
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(signal, () => shutdown(signal));
+}

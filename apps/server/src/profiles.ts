@@ -13,7 +13,7 @@
  * lo stesso file e non serve un object storage.
  */
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import {
@@ -315,7 +315,60 @@ export class ProfileStore {
     };
   }
 
+  /**
+   * Consolida il WAL nel file principale (`boggle.db`).
+   *
+   * Con la modalita' WAL le scritture recenti vivono in `boggle.db-wal`: un backup
+   * o una copia del solo `boggle.db` perderebbe i dati. `TRUNCATE` scrive tutto nel
+   * file principale e azzera il -wal, quindi il DB resta valido anche da solo.
+   */
+  checkpoint(): void {
+    this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  }
+
+  /** Copia di sicurezza CONSISTENTE (include WAL): usa VACUUM INTO di SQLite. */
+  backupTo(filePath: string): void {
+    this.db.exec(`VACUUM INTO '${filePath.replace(/'/g, "''")}'`);
+  }
+
+  /**
+   * Metriche del database, per diagnosi e verifica dei backup.
+   * `walBytes` > 0 significa scritture non ancora consolidate nel file principale.
+   */
+  stats(): {
+    file: string;
+    profiles: number;
+    dbBytes: number;
+    walBytes: number;
+    journalMode: string;
+  } {
+    const row = this.db.prepare('PRAGMA database_list').all() as Array<{ file?: string }>;
+    const file = row.find((r) => r.file)?.file ?? '';
+    const count = this.db.prepare('SELECT count(*) AS n FROM profiles').get() as { n: number };
+    const mode = this.db.prepare('PRAGMA journal_mode').get() as { journal_mode: string };
+    const size = (p: string) => {
+      try {
+        return statSync(p).size;
+      } catch {
+        return 0;
+      }
+    };
+    return {
+      file,
+      profiles: count.n,
+      dbBytes: size(file),
+      walBytes: file ? size(`${file}-wal`) : 0,
+      journalMode: mode.journal_mode,
+    };
+  }
+
   close(): void {
+    // Consolidamento prima della chiusura: il file .db resta autosufficiente.
+    try {
+      this.checkpoint();
+    } catch {
+      /* se fallisce, la chiusura avviene comunque */
+    }
     this.db.close();
   }
 }
