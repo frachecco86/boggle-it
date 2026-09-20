@@ -173,6 +173,11 @@ export interface WordCatalogQuery {
   gridSize?: GridSize;
   /** Restringe alle schede di una difficoltà. */
   difficulty?: Difficulty;
+  /**
+   * Restringe a UNA scheda specifica.
+   * Serve a rispondere a "questa parola vale nella scheda che sto giocando?".
+   */
+  schedaId?: string;
   sort: 'word' | 'length' | 'occurrences';
   direction: 'asc' | 'desc';
   limit: number;
@@ -190,3 +195,38 @@ export interface WordCatalogResponse {
 }
 
 export const WORD_CATALOG_DEFAULT_LIMIT = 100;
+
+
+/* ------------------------------------------------------------------ */
+/* Statistiche di una scheda                                           */
+/* ------------------------------------------------------------------ */
+
+/** Distribuzione delle parole di una scheda per lunghezza. */
+export interface SchedaStats {
+  id: string;
+  size: GridSize;
+  difficulty: Difficulty;
+  grid: string;
+  /** Totale parole componibili. */
+  wordCount: number;
+  /** Punteggio massimo realizzabile (somma dei punti di tutte le parole). */
+  maxScore: number;
+  /** Parola più lunga. */
+  longest: string;
+  /** Quante parole per ogni lunghezza (ordinate crescente). */
+  byLength: Array<{ length: number; words: number; points: number }>;
+  /** Record: miglior punteggio mai fatto su questa scheda, se esiste. */
+  record: {
+    score: number;
+    nickname: string;
+    avatar: string;
+    playedAt: number;
+  } | null;
+  /** Quante partite sono state giocate su questa scheda. */
+  gamesPlayed: number;
+}
+
+/** Punteggio di una parola nella scheda: 1 punto ogni 3 lettere. */
+export function schedaWordPoints(length: number): number {
+  return Math.floor(length / 3);
+}

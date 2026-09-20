@@ -168,8 +168,14 @@ export class SchedaCatalog {
 
     // Filtro per dimensione/difficoltà: serve la mappa parola -> schede.
     // Se non ci sono filtri di scheda usiamo l'indice globale (più veloce).
-    const restrictSchedaIds =
-      query.gridSize !== undefined || query.difficulty !== undefined
+    /*
+     * Filtro per schede. Con `schedaId` si restringe a UNA scheda (per sapere se
+     * una parola vale in partita); con dimensione/difficoltà si restringe a un gruppo.
+     * Senza filtri si usa l'indice globale, più veloce.
+     */
+    const restrictSchedaIds = query.schedaId
+      ? new Set([query.schedaId])
+      : query.gridSize !== undefined || query.difficulty !== undefined
         ? new Set(this.list(query.gridSize, query.difficulty).map((s) => s.id))
         : null;
 
@@ -243,8 +249,54 @@ export class SchedaCatalog {
   }
 
   /**
+   * Persiste PIU' schede in una sola passata, raggruppandole per file.
+   *
+   * Perché: `persist()` rilegge e riscrive il file intero per ogni scheda. Generando
+   * 100 schede su una 6x6 si arriva a scrivere ~49 MB invece di 0,8 MB (60 volte
+   * tanto), lento e a rischio timeout su un disco di rete come quello di Railway.
+   * Qui raggruppiamo per file e scriviamo una volta sola per gruppo.
+   */
+  persistMany(schede: Scheda[]): string[] {
+    if (schede.length === 0) return [];
+    mkdirSync(EXTRA_SCHEDE_DIR, { recursive: true });
+
+    // Raggruppa per file di destinazione.
+    const perFile = new Map<string, Scheda[]>();
+    for (const scheda of schede) {
+      const file = path.join(EXTRA_SCHEDE_DIR, schedaFileName(scheda.size, scheda.difficulty));
+      const list = perFile.get(file) ?? [];
+      list.push(scheda);
+      perFile.set(file, list);
+    }
+
+    const written: string[] = [];
+    for (const [file, gruppo] of perFile) {
+      const existing: SchedaFile = existsSync(file)
+        ? (JSON.parse(readFileSync(file, 'utf8')) as SchedaFile)
+        : {
+            version: SCHEDA_FORMAT_VERSION,
+            generatedAt: new Date().toISOString(),
+            size: gruppo[0]!.size,
+            difficulty: gruppo[0]!.difficulty,
+            schede: [],
+          };
+      for (const scheda of gruppo) {
+        const idx = existing.schede.findIndex((s) => s.id === scheda.id);
+        if (idx >= 0) existing.schede[idx] = scheda;
+        else existing.schede.push(scheda);
+      }
+      existing.generatedAt = new Date().toISOString();
+      writeFileSync(file, JSON.stringify(existing, null, 2) + '\n');
+      written.push(file);
+    }
+    return written;
+  }
+
+  /**
    * Persiste una scheda nuova nella cartella extra, aggiornando il file del suo
    * gruppo (creandolo se manca). Ritorna il file scritto.
+   *
+   * Per più schede insieme preferisci `persistMany`, che scrive una volta sola.
    */
   persist(scheda: Scheda): string {
     mkdirSync(EXTRA_SCHEDE_DIR, { recursive: true });

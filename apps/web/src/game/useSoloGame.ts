@@ -15,6 +15,7 @@ import { loadRandomScheda } from './schedeLoader.js';
 import { audio } from '../audio/AudioEngine.js';
 import { activeToken } from './profileStore.js';
 import { submitGame } from './statsClient.js';
+import { useAppStore } from '../state/store.js';
 
 export type WordFeedback =
   | { kind: 'valid'; word: string; points: number }
@@ -91,7 +92,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
   );
 
   const startRound = useCallback(
-    async (roundNumber: number) => {
+    async (roundNumber: number, prescelta?: Scheda) => {
       setLoading(true);
       setLoadError(null);
       setPhase('playing');
@@ -99,9 +100,13 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setFeedback(null);
       setMissedWords([]);
       try {
-        const next = await loadRandomScheda(gridSize, difficulty);
+        // La scheda può arrivare dall'anteprima (scelta dal giocatore) oppure
+        // essere pescata a caso per i round successivi.
+        const next = prescelta ?? (await loadRandomScheda(gridSize, difficulty));
         if (!next) throw new Error('Nessuna scheda disponibile');
         setScheda(next);
+        // Serve al catalogo Parole per il filtro "solo la scheda in corso".
+        useAppStore.setState({ currentSchedaId: next.id });
         setFound([]);
         setRound(roundNumber);
         const end = Date.now() + roundDurationMs;
@@ -116,11 +121,15 @@ export function useSoloGame(options: UseSoloGameOptions) {
     [gridSize, difficulty, roundDurationMs],
   );
 
-  const start = useCallback(() => {
-    savedRef.current = false;
-    setRoundScores([]);
-    void startRound(1);
-  }, [startRound]);
+  /** Avvia la partita. `prescelta` è la scheda scelta nell'anteprima. */
+  const start = useCallback(
+    (prescelta?: Scheda) => {
+      savedRef.current = false;
+      setRoundScores([]);
+      void startRound(1, prescelta);
+    },
+    [startRound],
+  );
 
   // Timer
   useEffect(() => {

@@ -144,6 +144,8 @@ interface AppState {
   ) => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
+  /** L'host pesca una nuova scheda per il round (visibile a tutti in lobby). */
+  shuffleScheda: () => void;
   configureRoom: (
     gridSize: GridSize,
     difficulty: Difficulty,
@@ -607,6 +609,12 @@ export const useAppStore = create<AppState>()(
         const code = get().roomCode;
         if (!code) return;
         getSocket().emit('room:start', { code });
+      },
+
+      shuffleScheda: () => {
+        const code = get().roomCode;
+        if (!code) return;
+        getSocket().emit('room:shuffleScheda', { code });
       },
 
       configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers) => {

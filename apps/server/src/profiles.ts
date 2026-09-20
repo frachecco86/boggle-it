@@ -566,6 +566,41 @@ export class ProfileStore {
     };
   }
 
+  /**
+   * Record di una scheda: miglior punteggio mai realizzato, chi lo detiene e
+   * quante partite sono state giocate. Alimenta l'anteprima della scheda.
+   */
+  schedaRecord(schedaId: string): {
+    record: { score: number; nickname: string; avatar: string; playedAt: number } | null;
+    gamesPlayed: number;
+  } {
+    const best = this.db
+      .prepare(
+        `SELECT score, nickname, avatar, played_at FROM games
+          WHERE scheda_id = ? AND words > 0
+          ORDER BY score DESC, played_at ASC LIMIT 1`,
+      )
+      .get(schedaId) as
+      | { score: number; nickname: string; avatar: string; played_at: number }
+      | undefined;
+
+    const countRow = this.db
+      .prepare('SELECT COUNT(*) AS n FROM games WHERE scheda_id = ? AND words > 0')
+      .get(schedaId) as { n: number } | undefined;
+
+    return {
+      record: best
+        ? {
+            score: best.score,
+            nickname: best.nickname,
+            avatar: best.avatar,
+            playedAt: best.played_at,
+          }
+        : null,
+      gamesPlayed: countRow?.n ?? 0,
+    };
+  }
+
   /** Cancella le partite di un profilo (test e privacy). */
   clearGames(profileId: string): number {
     const res = this.db.prepare('DELETE FROM games WHERE profile_id = ?').run(profileId);

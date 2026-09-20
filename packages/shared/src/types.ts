@@ -65,6 +65,11 @@ export interface RoomState {
   roundDurationMs: number;
   /** Numero massimo di giocatori ammessi (2, 4 o 8). */
   maxPlayers: number;
+  /**
+   * Scheda scelta per il prossimo round, visibile in lobby.
+   * L'host può cambiarla prima di avviare; tutti la vedono.
+   */
+  pendingSchedaId?: string;
   currentRound: number;
   phase: GamePhase;
   players: PlayerPublic[];
@@ -202,6 +207,8 @@ export interface ClientToServerEvents {
   'room:join': (payload: RoomJoinPayload, ack: (res: RoomJoinAck | ErrorPayload) => void) => void;
   'room:start': (payload: { code: string }) => void;
   'room:config': (payload: RoomConfigPayload) => void;
+  /** L'host pesca una nuova scheda per il prossimo round (visibile a tutti). */
+  'room:shuffleScheda': (payload: { code: string }) => void;
   'game:submitWord': (payload: SubmitWordPayload, ack: (res: SubmitWordAck) => void) => void;
   'room:leave': (payload: { code: string }) => void;
 }

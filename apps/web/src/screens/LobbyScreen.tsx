@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Scheda } from '@boggle/shared';
 import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
@@ -7,6 +8,8 @@ import {
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
+import { SchedaPreview } from '../components/SchedaPreview.js';
+import { loadScheda } from '../game/schedeLoader.js';
 import { GridPreview } from '../components/GridPreview.js';
 import { MusicPicker } from '../components/MusicPicker.js';
 import type { MusicChoice } from '@boggle/shared';
@@ -21,6 +24,7 @@ export function LobbyScreen() {
     avatar,
     setAvatar,
     startRoom,
+    shuffleScheda,
     configureRoom,
     leaveRoom,
     playerId,
@@ -28,6 +32,32 @@ export function LobbyScreen() {
   const [copied, setCopied] = useState(false);
 
   const isHost = room?.hostId === playerId;
+
+  /**
+   * Carica la scheda scelta dall'host, per mostrarne griglia e statistiche a TUTTI.
+   * La scheda è la stessa per tutti: si gioca quella.
+   */
+  const [pendingScheda, setPendingScheda] = useState<Scheda | null>(null);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const pendingId = room?.pendingSchedaId;
+  useEffect(() => {
+    if (!pendingId) {
+      setPendingScheda(null);
+      return;
+    }
+    let alive = true;
+    setPendingLoading(true);
+    loadScheda(pendingId)
+      .then((s) => {
+        if (alive) setPendingScheda(s ?? null);
+      })
+      .finally(() => {
+        if (alive) setPendingLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [pendingId]);
   const canStart = (room?.players.filter((p) => p.connected).length ?? 0) >= 1;
 
   const copyCode = async () => {
@@ -207,6 +237,29 @@ export function LobbyScreen() {
           </div>
         )}
       </section>
+
+      {/* Anteprima della scheda: la vedono TUTTI, così nessuno è sorpreso.
+          Solo l'host può pescarne un'altra. */}
+      {room.pendingSchedaId ? (
+        <SchedaPreview
+          size={room.gridSize}
+          difficulty={room.difficulty}
+          scheda={pendingScheda}
+          canShuffle={isHost}
+          busy={pendingLoading}
+          onPlay={() => startRoom()}
+          playLabel="Avvia partita"
+        />
+      ) : (
+        isHost && (
+          <div className="lobby__pick">
+            <p className="screen__hint">Pesca una scheda per vedere cosa aspettarti.</p>
+            <button className="btn btn--secondary" onClick={shuffleScheda}>
+              🎲 Scegli la scheda
+            </button>
+          </div>
+        )
+      )}
 
       {isHost ? (
         <button className="btn btn--primary btn--big" disabled={!canStart} onClick={startRoom}>

@@ -11,6 +11,7 @@ import type {
   LeaderboardResponse,
   PlayerStats,
   SubmitGamePayload,
+  SchedaStats,
   WordCatalogQuery,
   WordCatalogResponse,
 } from '@boggle/shared';
@@ -101,6 +102,20 @@ export async function fetchWordCatalog(
     const res = await fetch(`${SERVER_BASE}/words?${params.toString()}`, { signal });
     if (!res.ok) return null;
     return (await res.json()) as WordCatalogResponse;
+  } catch {
+    return null;
+  }
+}
+
+/** Statistiche di una scheda: parole, punteggio massimo, record. */
+export async function fetchSchedaStats(
+  schedaId: string,
+  signal?: AbortSignal,
+): Promise<SchedaStats | null> {
+  try {
+    const res = await fetch(`${SERVER_BASE}/schede/${encodeURIComponent(schedaId)}/stats`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as SchedaStats;
   } catch {
     return null;
   }

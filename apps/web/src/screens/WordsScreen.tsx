@@ -36,7 +36,12 @@ export function WordsScreen() {
   const [gridSize, setGridSize] = useState<GridSize | 'all'>('all');
   const [difficulty, setDifficulty] = useState<Difficulty | 'all'>('all');
   const [minLength, setMinLength] = useState<number | 'all'>('all');
+  /** Se true, mostra solo le parole componibili nella scheda in corso. */
+  const [onlyCurrent, setOnlyCurrent] = useState(false);
   const [offset, setOffset] = useState(0);
+
+  // Scheda in corso: single player oppure stanza multiplayer.
+  const currentSchedaId = useAppStore((s) => s.currentSchedaId ?? s.room?.schedaId ?? null);
 
   const [data, setData] = useState<WordCatalogResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +50,7 @@ export function WordsScreen() {
   // Ogni cambio di filtro riparte dalla prima pagina.
   useEffect(() => {
     setOffset(0);
-  }, [search, sort, direction, gridSize, difficulty, minLength]);
+  }, [search, sort, direction, gridSize, difficulty, minLength, onlyCurrent, currentSchedaId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,6 +65,8 @@ export function WordsScreen() {
           gridSize: gridSize === 'all' ? undefined : gridSize,
           difficulty: difficulty === 'all' ? undefined : difficulty,
           minLength: minLength === 'all' ? undefined : minLength,
+          // "Solo in questa scheda" restringe al catalogo della scheda corrente.
+          schedaId: onlyCurrent && currentSchedaId ? currentSchedaId : undefined,
           limit: PAGE_SIZE,
           offset,
         },
@@ -82,7 +89,7 @@ export function WordsScreen() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [search, sort, direction, gridSize, difficulty, minLength, offset]);
+  }, [search, sort, direction, gridSize, difficulty, minLength, onlyCurrent, currentSchedaId, offset]);
 
   const maxByLength = useMemo(() => {
     if (!data?.byLength.length) return 1;
@@ -100,8 +107,20 @@ export function WordsScreen() {
       <header className="words__head">
         <h2 className="screen__title">Parole</h2>
         <p className="screen__hint">
-          Tutte le parole componibili nelle schede, con quante volte compaiono.
+          Tutte le parole componibili nelle schede, con quante volte compaiono. Il numero
+          indica <strong>in quante schede</strong> appare, non se vale in quella che stai
+          giocando.
         </p>
+        {currentSchedaId && (
+          <label className="words__only-current">
+            <input
+              type="checkbox"
+              checked={onlyCurrent}
+              onChange={(e) => setOnlyCurrent(e.target.checked)}
+            />
+            <span>Solo le parole della scheda in corso</span>
+          </label>
+        )}
       </header>
 
       {/* Distribuzione per lunghezza: dà subito l'idea di quante parole lunghe esistono */}

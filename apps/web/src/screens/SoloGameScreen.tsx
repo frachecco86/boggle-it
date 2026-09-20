@@ -4,6 +4,7 @@ import { Timer } from '../components/Timer.js';
 import { WordList } from '../components/WordList.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
+import { SchedaPreview } from '../components/SchedaPreview.js';
 
 /** Partita single player completa (schede pre-calcolate dal server). */
 export function SoloGameScreen() {
@@ -49,10 +50,16 @@ export function SoloGameScreen() {
     return (
       <div className="screen">
         <h2 className="screen__title">Pronto?</h2>
-        <p className="screen__hint">Trova parole di almeno 3 lettere scorrendo sulle lettere adiacenti.</p>
-        <button className="btn btn--primary btn--big" onClick={game.start}>
-          Inizia il round
-        </button>
+        <p className="screen__hint">
+          Trova parole di almeno 3 lettere scorrendo sulle lettere adiacenti.
+        </p>
+        {/* Anteprima: mostra la scheda e cosa aspettarsi prima di iniziare. */}
+        <SchedaPreview
+          size={soloGridSize}
+          difficulty={soloDifficulty}
+          onPlay={(scheda) => game.start(scheda)}
+          playLabel="Inizia il round"
+        />
         <button className="btn btn--ghost" onClick={() => setScreen('home')}>
           Torna alla home
         </button>

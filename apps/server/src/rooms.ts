@@ -79,6 +79,11 @@ export class Room {
   /** Id della scheda in gioco nel round corrente. */
   schedaId: string | null = null;
   /**
+   * Scheda scelta in lobby per il prossimo round.
+   * Persiste fra i round finché l'host non ne pesca un'altra.
+   */
+  pendingSchedaId: string | null = null;
+  /**
    * Musica di sottofondo scelta dall'HOST, valida per tutta la stanza.
    * In lobby la cambia l'host; durante la partita resta quella scelta.
    */
@@ -175,6 +180,7 @@ export class Room {
       players: this.publicPlayers(),
       endsAt: this.phase === 'playing' ? this.roundEndsAt : undefined,
       schedaId: this.schedaId ?? undefined,
+      pendingSchedaId: this.pendingSchedaId ?? undefined,
       musicId: this.musicId,
     };
   }

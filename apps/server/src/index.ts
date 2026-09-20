@@ -19,11 +19,13 @@ import {
   type LeaderboardKind,
   type LeaderboardPeriod,
   type WordCatalogQuery,
+  type SchedaStats,
+  schedaWordPoints,
   WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
-import { DATA_DIR, SchedaCatalog, toMeta } from './schede.js';
+import { DATA_DIR, EXTRA_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
@@ -217,6 +219,7 @@ app.get('/words', (req, res) => {
     maxLength: num(req.query.maxLength),
     gridSize,
     difficulty,
+    schedaId: typeof req.query.schedaId === 'string' ? req.query.schedaId : undefined,
     sort,
     direction,
     limit,
@@ -225,6 +228,53 @@ app.get('/words', (req, res) => {
 
   res.setHeader('Cache-Control', 'no-store');
   res.json(result);
+});
+
+
+/**
+ * Statistiche di una scheda: quante parole, per ogni lunghezza, punteggio massimo
+ * e record. Alimenta l'anteprima prima di iniziare una partita.
+ *
+ * Tutto derivato dalle parole PRE-CALCOLATE della scheda: nessun solver a runtime.
+ * Il record invece richiede il database (miglior punteggio mai fatto sulla scheda).
+ *
+ * NOTA sull'ordine delle rotte: questa è dichiarata PRIMA di `/schede/:id`,
+ * altrimenti Express interpreterebbe 'stats' come un id di scheda.
+ */
+app.get('/schede/:id/stats', (req, res) => {
+  const scheda = schede.get(String(req.params.id));
+  if (!scheda) return res.status(404).json({ error: 'Scheda non trovata' });
+
+  // Distribuzione per lunghezza + punteggio massimo.
+  const counts = new Map<number, number>();
+  let maxScore = 0;
+  for (const word of scheda.words) {
+    const len = word.length;
+    counts.set(len, (counts.get(len) ?? 0) + 1);
+    maxScore += schedaWordPoints(len);
+  }
+  const byLength = [...counts.entries()]
+    .map(([length, words]) => ({
+      length,
+      words,
+      points: words * schedaWordPoints(length),
+    }))
+    .sort((a, b) => a.length - b.length);
+
+  const { record, gamesPlayed } = profiles.schedaRecord(scheda.id);
+
+  res.json({
+    id: scheda.id,
+    size: scheda.size,
+    difficulty: scheda.difficulty,
+    grid: scheda.grid,
+    wordCount: scheda.words.length,
+    maxScore,
+    longest: scheda.words.reduce((m, w) => (w.length > m.length ? w : m), ''),
+    byLength,
+    record,
+    gamesPlayed,
+  } satisfies SchedaStats);
 });
 
 app.get('/schede/:id', (req, res) => {
@@ -658,21 +708,46 @@ app.post('/admin/schede/genera', async (req, res) => {
   }
 
   const startedAt = Date.now();
-  const pool = await getSchedaPool();
-  const startIndex = schede.list(size, difficulty).length + 1;
-  const created = pool.generate(size, difficulty, count, { startIndex });
-  for (const scheda of created) {
-    schede.add(scheda);
-    schede.persist(scheda);
+  try {
+    const pool = await getSchedaPool();
+    const startIndex = schede.list(size, difficulty).length + 1;
+    const created = pool.generate(size, difficulty, count, { startIndex });
+
+    /*
+     * ORDINE IMPORTANTE: prima si scrive su DISCO, poi si aggiunge in memoria.
+     *
+     * L'ordine inverso dava un problema insidioso: se la scrittura falliva (volume
+     * non scrivibile, permessi, disco pieno) la scheda restava SOLO in memoria.
+     * Il catalogo la mostrava, sembrava tutto a posto, ma al riavvio spariva
+     * senza che nessuno se ne accorgesse.
+     * Scrivendo prima, un errore blocca tutto e viene riportato subito.
+     */
+    // Prima su disco (in blocco), poi in memoria: se la scrittura fallisce,
+    // il catalogo non cambia e l'errore viene riportato.
+    const files = schede.persistMany(created);
+    for (const scheda of created) schede.add(scheda);
+
+    console.log(
+      `✓ Admin: generate ${created.length} schede ${size}x${size} ${difficulty} in ${Date.now() - startedAt}ms → ${files.length} file`,
+    );
+    res.json({
+      created: created.map(toMeta),
+      total: schede.size,
+      byKey: schede.countByKey(),
+      savedTo: EXTRA_SCHEDE_DIR,
+    });
+  } catch (err) {
+    // Errore di scrittura: lo diciamo chiaramente invece di dare un 500 opaco.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`✗ Admin: generazione schede fallita: ${message}`);
+    const isPerm = /EACCES|EPERM|EROFS/.test(message);
+    res.status(500).json({
+      error: isPerm
+        ? `Impossibile scrivere in ${EXTRA_SCHEDE_DIR}: permessi negati. Verifica che il volume sia montato e scrivibile (su Railway serve RAILWAY_RUN_UID=0).`
+        : `Generazione fallita: ${message}`,
+      savedTo: EXTRA_SCHEDE_DIR,
+    });
   }
-  console.log(
-    `✓ Admin: generate ${created.length} schede ${size}x${size} ${difficulty} in ${Date.now() - startedAt}ms`,
-  );
-  res.json({
-    created: created.map(toMeta),
-    total: schede.size,
-    byKey: schede.countByKey(),
-  });
 });
 
 /**
@@ -839,6 +914,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  /**
+   * L'host pesca una nuova scheda per il prossimo round. Tutti la vedono in lobby,
+   * così in multiplayer si gioca la STESSA scheda e nessuno è sorpreso.
+   */
+  socket.on('room:shuffleScheda', ({ code }) => {
+    const st = socketState.get(socket.id);
+    const room = registry.get(code);
+    if (!room || !st || st.code !== room.code) return;
+    if (st.playerId !== room.hostId) return;
+    if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
+    const scheda = schede.random(room.gridSize, room.difficulty);
+    if (!scheda) return;
+    room.pendingSchedaId = scheda.id;
+    broadcastState(room);
+  });
+
   socket.on('room:start', ({ code }) => {
     const st = socketState.get(socket.id);
     const room = registry.get(code);
@@ -847,8 +938,13 @@ io.on('connection', (socket) => {
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
 
     const startRound = () => {
-      // Ogni round pesca una scheda dal catalogo: griglia e soluzione già pronte.
-      const scheda = schede.random(room.gridSize, room.difficulty);
+      // Usa la scheda scelta in lobby se c'è (l'host l'ha vista e approvata),
+      // altrimenti ne pesca una a caso. Per i round successivi al primo, se non
+      // c'è una pending si pesca una scheda nuova.
+      const fromPending = room.pendingSchedaId ? schede.get(room.pendingSchedaId) : undefined;
+      const scheda = fromPending ?? schede.random(room.gridSize, room.difficulty);
+      // La pending è consumata: il prossimo round ne pescherà una nuova.
+      room.pendingSchedaId = null;
       const { grid, endsAt } = room.startRound(scheda);
       io.to(room.code).emit('game:roundStart', {
         round: room.currentRound,
@@ -884,6 +980,11 @@ io.on('connection', (socket) => {
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby') return;
+    // Se cambia dimensione o difficoltà, la scheda scelta non è più valida:
+    // appartiene a un'altra combinazione. La azzeriamo.
+    const sizeChanged = isValidGridSize(gridSize) && gridSize !== room.gridSize;
+    const diffChanged = isDifficulty(difficulty) && difficulty !== room.difficulty;
+    if (sizeChanged || diffChanged) room.pendingSchedaId = null;
     if (isValidGridSize(gridSize)) room.gridSize = gridSize;
     if (isDifficulty(difficulty)) room.difficulty = difficulty;
     room.rounds = clampRounds(rounds);

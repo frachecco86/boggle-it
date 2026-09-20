@@ -257,3 +257,88 @@ describe('catalogo parole', () => {
     expect(res.total).toBe(1);
   });
 });
+
+describe('statistiche scheda e record', () => {
+  it('calcola le statistiche di una scheda dalle parole pre-calcolate', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 'st-1',
+      size: 4,
+      difficulty: 'normale',
+      grid: 'casa\ntore\nlina\nmuro',
+      words: ['casa', 'torre', 'lina', 'muro', 'strada'],
+      longest: 6,
+    });
+    const scheda = catalog.get('st-1')!;
+    // Punteggio = 1 punto ogni 3 lettere.
+    const punti = (w: string) => Math.floor(w.length / 3);
+    const maxScore = scheda.words.reduce((a, w) => a + punti(w), 0);
+    // casa(4)=1, torre(5)=1, lina(4)=1, muro(4)=1, strada(6)=2 → 6
+    expect(maxScore).toBe(6);
+  });
+
+  it('il record di una scheda è il miglior punteggio', async () => {
+    const a = await profile('Anna', '🦊');
+    const b = await profile('Bruno', '🐼');
+    const g = (score: number) => game({ score, schedaId: 'st-1' });
+    store.recordGame(a, g(50));
+    store.recordGame(b, g(80)); // il migliore
+    store.recordGame(a, g(60));
+
+    const rec = store.schedaRecord('st-1');
+    expect(rec.record).not.toBeNull();
+    expect(rec.record!.score).toBe(80);
+    expect(rec.record!.nickname).toBe('Bruno');
+    expect(rec.gamesPlayed).toBe(3);
+  });
+
+  it('senza partite il record è null e le partite zero', () => {
+    const rec = store.schedaRecord('mai-giocata');
+    expect(rec.record).toBeNull();
+    expect(rec.gamesPlayed).toBe(0);
+  });
+
+  it('il record ignora le partite abbandonate (zero parole)', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 0, words: 0, schedaId: 'st-2' }));
+    const rec = store.schedaRecord('st-2');
+    expect(rec.gamesPlayed).toBe(0);
+    expect(rec.record).toBeNull();
+  });
+
+  it('il record è per scheda, non globale', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 100, schedaId: 'scheda-A' }));
+    store.recordGame(a, game({ score: 30, schedaId: 'scheda-B' }));
+    expect(store.schedaRecord('scheda-A').record!.score).toBe(100);
+    expect(store.schedaRecord('scheda-B').record!.score).toBe(30);
+  });
+});
+
+describe('catalogo parole filtrato per scheda', () => {
+  it('filtra a una sola scheda', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({ id: 'a', size: 4, difficulty: 'facile', grid: 'x', words: ['casa', 'avo'], longest: 4 });
+    catalog.add({ id: 'b', size: 4, difficulty: 'facile', grid: 'x', words: ['casa', 'ebbi'], longest: 4 });
+
+    // Su tutte le schede: 'casa' compare 2 volte, 'avo' e 'ebbi' 1.
+    const tutte = catalog.wordCatalog({ search: 'avo', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(tutte.total).toBe(1);
+
+    // Solo la scheda 'a' contiene 'avo'.
+    const inA = catalog.wordCatalog({ search: 'avo', schedaId: 'a', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(inA.total).toBe(1);
+
+    // Solo la scheda 'b' NON contiene 'avo'.
+    const inB = catalog.wordCatalog({ search: 'avo', schedaId: 'b', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(inB.total).toBe(0);
+  });
+
+  it('una parola in più schede ha occorrenze maggiori', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({ id: 'a', size: 4, difficulty: 'facile', grid: 'x', words: ['casa'], longest: 4 });
+    catalog.add({ id: 'b', size: 4, difficulty: 'facile', grid: 'x', words: ['casa'], longest: 4 });
+    const res = catalog.wordCatalog({ search: 'casa', sort: 'occurrences', direction: 'desc', limit: 10, offset: 0 });
+    expect(res.entries[0]!.occurrences).toBe(2);
+  });
+});

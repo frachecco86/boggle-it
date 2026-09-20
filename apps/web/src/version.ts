@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.9.1';
+export const APP_VERSION = '0.10.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,38 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.10.0',
+    date: '2026-09-20',
+    title: 'Anteprima della scheda con statistiche, record e filtro parole',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Anteprima della scheda** prima di giocare: vedi la griglia reale e cosa aspettarti — quante parole, quante per ogni lunghezza (con barre), il **punteggio massimo** realizzabile e il **record** su quella scheda con chi lo detiene.',
+          'Pulsante **"🎲 Cambia scheda"**: se una scheda non ti convince, ne peschi un\'altra prima di iniziare.',
+          'L\'anteprima funziona anche in **multiplayer**: l\'host sceglie la scheda in lobby, tutti la vedono (griglia e statistiche) e si gioca quella. Nessuno è sorpreso.',
+          'Nel catalogo **Parole** c\'è ora il filtro **"Solo le parole della scheda in corso"**: sai subito se una parola vale nella partita che stai giocando.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          'Corretto un problema per cui le schede generate dall\'admin potevano **sparire al riavvio**: venivano aggiunte in memoria PRIMA di essere scritte su disco, quindi se la scrittura falliva la scheda restava solo in memoria. Ora si scrive prima su disco.',
+          'Corretto l\'errore poco chiaro quando la scrittura fallisce: ora dice esplicitamente se è un problema di permessi e cosa controllare.',
+          'La generazione di più schede scriveva il file **60 volte tanto** (49 MB invece di 0,8 MB per 100 schede): ora scrive in blocco.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Chiarita la confusione sul numero accanto alle parole: indica **in quante schede** appare la parola, non se vale in quella in corso. Il filtro risolve il dubbio.',
+          'Nuovo endpoint `GET /schede/:id/stats` con statistiche, punteggio massimo e record. Il record usa `scheda_id`, già salvato nel database.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.9.1',
     date: '2026-09-20',
