@@ -99,9 +99,11 @@ nell'app compare in alto a destra e apre la pagina **Novità**.
 # URL del server per il multiplayer (una volta sola)
 echo 'VITE_SERVER_URL=https://tuo-server.up.railway.app' > .env
 
-pnpm --filter @boggle/web cap:sync    # builda il web + sincronizza Android
-cd apps/web/android && ./gradlew assembleDebug
+./tools/build-apk.sh     # build web + cap sync + gradle → APK debug (~14.6 MB)
 ```
+
+Verificato: APK firmato e installabile, compilato senza Android Studio
+(JDK 21 + command-line tools, nessun root).
 
 Guida completa (requisiti, firma, store gratuiti): [`docs/ANDROID.md`](docs/ANDROID.md).
 

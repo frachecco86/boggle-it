@@ -41,3 +41,7 @@ apps/web/public/bundled-schede/
 
 # Dati persistenti del server in sviluppo: DB profili + schede admin
 /data/
+
+# Output della build APK (artefatti, non sorgenti)
+dist-android/
+apps/web/android/local.properties

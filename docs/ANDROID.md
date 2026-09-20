@@ -13,35 +13,60 @@ pubblicarlo **gratis**.
 | **Android SDK** | API 35 | Installabile da Android Studio (SDK Manager) |
 | **Node** | 22+ | Per buildare il web e sincronizzare Capacitor |
 
-Dopo aver installato Android Studio, imposta:
+### Senza Android Studio (solo riga di comando)
+
+Verificato su Linux: bastano JDK e i command-line tools, **senza root**.
 
 ```bash
-export JAVA_HOME=/path/to/android-studio/jbr
-export ANDROID_HOME=$HOME/Android/Sdk
-export PATH=$PATH:$ANDROID_HOME/platform-tools
+# JDK 21 (Temurin)
+mkdir -p ~/android-toolchain/jdk
+curl -L https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse \
+  | tar xz -C ~/android-toolchain/jdk --strip-components=1
+
+# Android command-line tools
+mkdir -p ~/android-sdk/cmdline-tools
+curl -L -o /tmp/cmdline.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+python3 -c "import zipfile;zipfile.ZipFile('/tmp/cmdline.zip').extractall('/tmp/clt')"
+mv /tmp/clt/cmdline-tools ~/android-sdk/cmdline-tools/latest
+chmod +x ~/android-sdk/cmdline-tools/latest/bin/*   # lo zip non conserva i permessi
+
+export JAVA_HOME=~/android-toolchain/jdk
+export ANDROID_HOME=~/android-sdk
+yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+  "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 ```
+
+Poi tutto si riduce a un comando:
+
+```bash
+./tools/build-apk.sh          # APK di debug
+./tools/build-apk.sh release  # AAB per gli store
+```
+
+Lo script imposta `JAVA_HOME`/`ANDROID_HOME`, builda il web, esegue `cap sync`,
+scrive `local.properties` e compila. Se preferisci Android Studio, apri
+`apps/web/android` e usa `Run`.
 
 ---
 
 ## 2. Build dell'app
 
 ```bash
-# 1. URL del server per il multiplayer (una volta sola)
+# URL del server per il multiplayer (una volta sola)
 echo 'VITE_SERVER_URL=https://tuo-server.up.railway.app' > .env
 
-# 2. Builda il web (schede incluse) e sincronizza Android
-pnpm --filter @boggle/web cap:sync
-
-# 3. Compila
-cd apps/web/android
-./gradlew assembleDebug      # APK di prova
-./gradlew bundleRelease      # AAB per gli store
+# Compila (build web + cap sync + gradle)
+./tools/build-apk.sh
 ```
 
 Output:
 
 - debug: `apps/web/android/app/build/outputs/apk/debug/app-debug.apk`
 - release: `apps/web/android/app/build/outputs/bundle/release/app-release.aab`
+
+Misurato: **14.6 MB** l'APK debug, build in ~3 minuti. Contiene web, 480 schede,
+6 tracce musicali, font e icone (l'AI scarica i modelli al primo uso, vedi §3).
 
 ### Firma della release
 
