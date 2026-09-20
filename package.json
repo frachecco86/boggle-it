@@ -1,0 +1,23 @@
+{
+  "name": "boggle-it",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Boggle in italiano \u2014 single player e multiplayer con codice stanza",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @boggle/web dev",
+    "dev:server": "pnpm --filter @boggle/server dev",
+    "build": "pnpm -r build",
+    "build:dict": "pnpm --filter @boggle/dictionary build:full",
+    "test": "pnpm -r test",
+    "test:e2e": "node tests/e2e/run-all.mjs",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "packageManager": "pnpm@10.8.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1"
+  }
+}

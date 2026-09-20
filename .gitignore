@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.turbo/
+
+# Log e OS
+*.log
+.DS_Store
+
+# Ambiente
+.env
+.env.local
+
+# Dati dizionario grezzi e generati (rigenerabili con `pnpm build:dict`)
+packages/dictionary/data/morph-it_048.txt
+packages/dictionary/data/current_version/
+packages/dictionary/data/60000_parole_italiane.txt
+packages/dictionary/data/words.txt
+packages/dictionary/data/words.br
+packages/dictionary/data/.sources.json
+
+# Vite
+apps/web/.vite/
+tsconfig.tsbuildinfo
