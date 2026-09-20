@@ -11,11 +11,25 @@ export interface TrieNode {
   word?: string;
 }
 
-export function buildTrie(words: Iterable<string>): TrieNode {
+export interface BuildTrieOptions {
+  /** Lunghezza massima delle parole inserite (default MAX_WORD_LENGTH). */
+  maxLength?: number;
+  /** Lunghezza minima delle parole inserite (default MIN_WORD_LENGTH). */
+  minLength?: number;
+}
+
+/**
+ * Costruisce il trie. Limitare `maxLength` riduce drasticamente la memoria:
+ * le parole lunghe creano moltissimi nodi e sono raramente componibili in griglia.
+ * Su 387k parole: full = 652k nodi (~142 MB), maxLength 8 = 125k nodi (~24 MB).
+ */
+export function buildTrie(words: Iterable<string>, options: BuildTrieOptions = {}): TrieNode {
+  const minLength = options.minLength ?? MIN_WORD_LENGTH;
+  const maxLength = options.maxLength ?? MAX_WORD_LENGTH;
   const root: TrieNode = { children: new Map() };
   for (const raw of words) {
     const w = raw.trim().toLowerCase();
-    if (w.length < MIN_WORD_LENGTH || w.length > MAX_WORD_LENGTH) continue;
+    if (w.length < minLength || w.length > maxLength) continue;
     let node = root;
     for (const ch of w) {
       let next = node.children.get(ch);

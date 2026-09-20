@@ -1,0 +1,21 @@
+# Non copiare nell'immagine: dipendenze e artefatti locali (vengono ricreati in build).
+node_modules
+**/node_modules
+**/dist
+**/.vite
+.git
+.gitignore
+
+# Dati dizionario grezzi: il build li riscarica nella stage builder.
+packages/dictionary/data/morph-it_048.txt
+packages/dictionary/data/current_version
+packages/dictionary/data/60000_parole_italiane.txt
+packages/dictionary/data/words.txt
+packages/dictionary/data/words.br
+
+# Documentazione e test (non servono a runtime)
+docs
+tests
+*.md
+.env
+.env.local

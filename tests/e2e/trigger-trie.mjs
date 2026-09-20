@@ -1,0 +1,11 @@
+import { io } from 'socket.io-client';
+const URL='http://localhost:3001';
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+const once=(s,ev)=>new Promise(res=>s.once(ev,res));
+const ack=(s,ev,p)=>new Promise(res=>s.emit(ev,p,res));
+const a=io(URL,{transports:['websocket']}); await once(a,'connect');
+const c=await ack(a,'room:create',{nickname:'T',gridSize:4,rounds:1});
+a.emit('room:start',{code:c.roomCode});
+const re=await once(a,'game:roundEnd');
+console.log('roundEnd ricevuto. parole mancate:', re.missedWords.length);
+a.close(); process.exit(0);

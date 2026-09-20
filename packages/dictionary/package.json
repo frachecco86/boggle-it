@@ -12,9 +12,10 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch-sources.mjs",
-    "build": "node scripts/build-words.mjs",
+    "build": "node scripts/ensure-words.mjs && node scripts/build-words.mjs",
     "build:full": "node scripts/fetch-sources.mjs && node scripts/build-words.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ensure": "node scripts/ensure-words.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

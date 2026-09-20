@@ -8,8 +8,17 @@ import { createDictionaryFromText, type Dictionary } from '@boggle/dictionary';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA = path.resolve(__dirname, '../../../packages/dictionary/data/words.txt');
 
+/**
+ * Lunghezza massima delle parole caricate nel trie per il solver ("parole mancate").
+ * Limite chiave per la memoria: su 387k parole, un trie senza limite occupa ~142 MB,
+ * mentre con maxLength 8 scende a ~24 MB. 10 copre comodamente anche le parole da 5 punti.
+ */
+const TRIE_MAX_WORD_LENGTH = Number(process.env.TRIE_MAX_WORD_LENGTH ?? 10);
+
 let cached: Dictionary | null = null;
+let cachedWords: string[] | null = null;
 let cachedTrie: TrieNode | null = null;
+let trieBuilding: Promise<TrieNode> | null = null;
 
 /**
  * Carica il dizionario dal file generato da @boggle/dictionary.
@@ -23,19 +32,46 @@ export async function loadServerDictionary(filePath = DEFAULT_DATA): Promise<Dic
     console.warn('  Uso una mini-lista di fallback per lo sviluppo.');
     const { MINI_FALLBACK } = await import('./dictionary-fallback.js');
     cached = createDictionaryFromText(MINI_FALLBACK);
+    cachedWords = MINI_FALLBACK.split('\n').map((w) => w.trim()).filter(Boolean);
     return cached;
   }
   const text = await readFile(filePath, 'utf8');
   cached = createDictionaryFromText(text);
-  cachedTrie = buildTrie(text.split('\n'));
+  cachedWords = text.split('\n').filter(Boolean);
   console.log(`✓ Dizionario caricato: ${cached.size.toLocaleString('it-IT')} parole`);
   return cached;
 }
 
-/** Trie per risolvere la griglia (parole mancate). Costruito una sola volta. */
+/**
+ * Trie per risolvere la griglia (parole mancate).
+ *
+ * Costruito **lazy**, solo alla prima richiesta: se nessuno arriva a fine round,
+ * i ~24 MB del trie non vengono mai allocati. Le chiamate concorrenti condividono
+ * la stessa promise per non costruirlo due volte.
+ */
 export async function getDictionaryTrie(): Promise<TrieNode> {
-  if (!cachedTrie) await loadServerDictionary();
-  return cachedTrie!;
+  if (cachedTrie) return cachedTrie;
+  if (!trieBuilding) {
+    trieBuilding = (async () => {
+      if (!cachedWords) await loadServerDictionary();
+      const startedAt = Date.now();
+      const trie = buildTrie(cachedWords ?? [], { maxLength: TRIE_MAX_WORD_LENGTH });
+      cachedTrie = trie;
+      const mem = (process.memoryUsage().heapUsed / 1048576).toFixed(0);
+      console.log(
+        `✓ Trie del solver costruito (max ${TRIE_MAX_WORD_LENGTH} lettere) in ${Date.now() - startedAt}ms — heap ${mem} MB`,
+      );
+      return trie;
+    })().finally(() => {
+      trieBuilding = null;
+    });
+  }
+  return trieBuilding;
+}
+
+/** Rilascia il trie (utile per test o per liberare memoria su richiesta). */
+export function releaseTrie(): void {
+  cachedTrie = null;
 }
 
 export type { Dictionary };

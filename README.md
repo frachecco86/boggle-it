@@ -118,6 +118,31 @@ Risultato tipico: **386.946 parole**, 4,3 MB raw → **616 KB Brotli** (14%).
 
 ---
 
+## Deploy
+
+Guida completa in [`docs/DEPLOY.md`](docs/DEPLOY.md). Due opzioni:
+
+- **Gratis** — frontend + dizionario su **Netlify** (CDN), server Socket.IO su **Railway Free**.
+- **Semplice** — monolite su **Railway Hobby** ($5/mese): Express serve anche il frontend.
+
+> Netlify **non può** ospitare il multiplayer: le Functions non supportano WebSocket
+> né connessioni persistenti. Ospita solo il frontend statico e il dizionario.
+
+**Memoria del server** (build di produzione, misurata):
+
+| Stato | RSS |
+|---|---|
+| Avvio (dizionario in memoria) | 168 MB |
+| Dopo il primo fine round (trie lazy) | 211 MB |
+
+Il trie del solver è **lazy** e limitato con `TRIE_MAX_WORD_LENGTH` (default 10, ~66 MB;
+8 → ~24 MB; senza limite → ~142 MB). Costruito in ~150 ms alla prima fine round.
+
+I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quindi
+`pnpm --filter @boggle/dictionary build` rigenera `words.txt` senza rete.
+
+---
+
 ## Note tecniche
 
 - **Faccia "Qu"**: nel modello una cella con `letter === 'q'` vale `qu` (Q+U inseparabili),

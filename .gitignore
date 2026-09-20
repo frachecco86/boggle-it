@@ -10,14 +10,18 @@ dist/
 .env
 .env.local
 
-# Dati dizionario grezzi e generati (rigenerabili con `pnpm build:dict`)
+# Dati dizionario: fonti grezze e output non compresso (words.br E' versionato:
+# e' il dizionario compresso, 616 KB, e rende i deploy riproducibili).
 packages/dictionary/data/morph-it_048.txt
 packages/dictionary/data/current_version/
 packages/dictionary/data/60000_parole_italiane.txt
 packages/dictionary/data/words.txt
-packages/dictionary/data/words.br
 packages/dictionary/data/.sources.json
 
 # Vite
 apps/web/.vite/
 tsconfig.tsbuildinfo
+
+# Dizionario copiato per la CDN (rigenerato dal build)
+apps/web/public/dictionary/
+apps/web/tsconfig.tsbuildinfo

@@ -7,6 +7,7 @@ import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
 import { bindSocketEvents, useAppStore } from './state/store.js';
+import { SERVER_BASE } from './net/socket.js';
 
 export function App() {
   const screen = useAppStore((s) => s.screen);
@@ -14,10 +15,12 @@ export function App() {
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
   const [dictError, setDictError] = useState<string | null>(null);
 
-  // Carica il dizionario una sola volta (servito dal server, compressione trasparente).
+  // Carica il dizionario una sola volta.
+  // Con `VITE_DICTIONARY_URL` (es. CDN Netlify) lo prende da li', altrimenti dal server.
   useEffect(() => {
     let cancelled = false;
-    loadDictionary()
+    const dictBase = import.meta.env.VITE_DICTIONARY_URL ?? `${SERVER_BASE}/dictionary`;
+    loadDictionary(dictBase)
       .then((d) => {
         if (!cancelled) setDictionary(d);
       })

@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -18,39 +19,84 @@ import { RoomRegistry, ROUND_DURATION_MS, ROUND_END_PAUSE_MS, COUNTDOWN_MS, type
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173';
 
+/**
+ * Origini consentite: una o piu' separate da virgola (es. Netlify + locale).
+ * Con `*` si accettano tutte (utile in sviluppo).
+ */
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
+  if (!origin) return callback(null, true); // curl, health check, same-origin
+  if (CLIENT_ORIGINS.includes('*') || CLIENT_ORIGINS.includes(origin)) return callback(null, true);
+  // In sviluppo consenti localhost su qualsiasi porta.
+  if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+    return callback(null, true);
+  }
+  return callback(null, false);
+};
+
+// Il dizionario (Set) e' sempre in memoria; il trie del solver e' lazy.
 const dictionary = await loadServerDictionary();
-const dictionaryTrie = await getDictionaryTrie();
 const registry = new RoomRegistry(dictionary);
 
 // pulizia periodica delle stanze vuote/terminate
 setInterval(() => registry.cleanup(), 60_000).unref();
 
 const app = express();
-app.use(cors({ origin: CLIENT_ORIGIN }));
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, rooms: 'ok', words: dictionary.size });
+  const mem = process.memoryUsage();
+  res.json({
+    ok: true,
+    rooms: 'ok',
+    words: dictionary.size,
+    uptimeSec: Math.round(process.uptime()),
+    rssMb: Math.round(mem.rss / 1048576),
+  });
 });
 
 /** Serve il dizionario al client con compressione trasparente. */
-const DICT_DIR = path.resolve(__dirname, '../../../packages/dictionary/data');
+const DICT_DIR = process.env.DICT_DIR
+  ? path.resolve(process.env.DICT_DIR)
+  : path.resolve(__dirname, '../../../packages/dictionary/data');
 app.get('/dictionary/words.txt', (req, res) => {
   const accept = req.headers['accept-encoding'] ?? '';
-  if (accept.includes('br')) {
+  const brPath = path.join(DICT_DIR, 'words.br');
+  if (accept.includes('br') && existsSync(brPath)) {
     res.type('text/plain; charset=utf-8');
     res.setHeader('Content-Encoding', 'br');
-    return res.sendFile(path.join(DICT_DIR, 'words.br'));
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+    return res.sendFile(brPath);
   }
   res.type('text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
   res.sendFile(path.join(DICT_DIR, 'words.txt'));
 });
 
+// In produzione il server puo' servire anche il build statico del frontend
+// (monolite same-origin). Se la cartella non esiste, si usa Netlify o Vite.
+const WEB_DIST = process.env.WEB_DIST
+  ? path.resolve(process.env.WEB_DIST)
+  : path.resolve(__dirname, '../../web/dist');
+if (existsSync(path.join(WEB_DIST, 'index.html'))) {
+  app.use(express.static(WEB_DIST, { maxAge: '1h', index: false }));
+  app.get(/^\/(?!socket\.io|dictionary|health).*/, (_req, res) => {
+    res.sendFile(path.join(WEB_DIST, 'index.html'));
+  });
+  console.log(`✓ Frontend statico servito da ${WEB_DIST}`);
+}
+
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-  cors: { origin: CLIENT_ORIGIN, methods: ['GET', 'POST'] },
+  cors: { origin: corsOrigin, methods: ['GET', 'POST'] },
+  // Dietro proxy (Railway, Fly): rispetta X-Forwarded-For per IP e rate limit.
+  transports: ['websocket', 'polling'],
 });
 
 /** Associazioni socket <-> stanza/giocatore. */
@@ -230,10 +276,11 @@ function handleLeave(socketId: string, code: string, playerId: string, explicit:
 
 /** Pianifica la fine del round e gestisce la transizione al round successivo. */
 function scheduleRoundEnd(room: Room): void {
-  setTimeout(() => {
+  setTimeout(async () => {
     if (room.phase !== 'playing') return;
     const results = room.endRound();
-    const missed = computeMissedWords(room);
+    // Il trie e' lazy: viene costruito qui, solo quando serve davvero.
+    const missed = await computeMissedWords(room);
     io.to(room.code).emit('game:roundEnd', {
       round: room.currentRound,
       results,
@@ -257,15 +304,17 @@ function scheduleRoundEnd(room: Room): void {
  * Usa il solver con trie (packages/shared) e filtra le parole piu' interessanti
  * (>= 5 lettere, max 20).
  */
-function computeMissedWords(room: Room): string[] {
+async function computeMissedWords(room: Room): Promise<string[]> {
   if (!room.grid) return [];
-  const all = solveGrid(room.grid, dictionaryTrie, { limit: 400, minLength: MIN_WORD_LENGTH });
-  return all
-    .filter((w) => w.length >= 5 && !room.roundFoundWords.has(w))
-    .slice(0, 20);
+  const trie = await getDictionaryTrie();
+  const all = solveGrid(room.grid, trie, { limit: 400, minLength: MIN_WORD_LENGTH });
+  return all.filter((w) => w.length >= 5 && !room.roundFoundWords.has(w)).slice(0, 20);
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`✓ Boggle-IT server su http://localhost:${PORT}  (client: ${CLIENT_ORIGIN})`);
+  console.log(`✓ Boggle-IT server su http://localhost:${PORT}`);
+  console.log(`  origini client consentite: ${CLIENT_ORIGINS.join(', ')}`);
   console.log(`  parole in dizionario: ${dictionary.size.toLocaleString('it-IT')}`);
+  const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
+  console.log(`  RSS all'avvio: ${mem} MB (trie del solver non ancora costruito)`);
 });

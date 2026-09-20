@@ -39,15 +39,64 @@ async function findMorphIt() {
   if (existsSync(preferred)) return preferred;
   const entries = await readdir(DATA).catch(() => []);
   const match = entries.find((f) => /^morph-it.*\.txt$/.test(f));
-  if (!match) throw new Error('File Morph-it non trovato. Esegui prima: pnpm --filter @boggle/dictionary fetch');
-  return path.join(DATA, match);
+  return match ? path.join(DATA, match) : null;
+}
+
+/**
+ * Rigenera `words.br` da una lista di parole normalizzate e ordinate.
+ */
+async function writeOutputs(sorted) {
+  const txt = sorted.join('\n') + '\n';
+  const wordsTxt = path.join(DATA, 'words.txt');
+  const wordsBr = path.join(DATA, 'words.br');
+  await writeFile(wordsTxt, txt);
+  const br = brotliCompressSync(Buffer.from(txt, 'utf8'), {
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: 11,
+      [constants.BROTLI_PARAM_SIZE_HINT]: txt.length,
+    },
+  });
+  await writeFile(wordsBr, br);
+  return { txt, br };
+}
+
+/**
+ * Caso offline: le fonti grezze non ci sono, ma `words.txt` esiste.
+ * Il dizionario e' gia' generato: normalizziamo e riscriviamo l'output, senza rete.
+ * E' il percorso usato nei build di deploy (Netlify, Docker).
+ */
+async function buildFromExistingWords() {
+  const existing = path.join(DATA, 'words.txt');
+  const words = new Set();
+  for (const line of (await readFile(existing, 'utf8')).split('\n')) {
+    const w = normalizeWord(line.trim());
+    if (isUsable(w)) words.add(w);
+  }
+  const sorted = [...words].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const { txt, br } = await writeOutputs(sorted);
+  const kb = (n) => (n / 1024).toFixed(1) + ' KB';
+  console.log(`✓ words.txt  ${sorted.length.toLocaleString('it-IT')} parole  (${kb(txt.length)})  [da lista gia' generata]`);
+  console.log(`✓ words.br   ${kb(br.length)}  (ratio ${((br.length / txt.length) * 100).toFixed(1)}%)`);
+  console.log('  (fonti grezze assenti: salto il merge. Usa `build:full` per rigenerare da Morph-it!)');
 }
 
 async function main() {
+  const morphPath = await findMorphIt();
+
+  // Nessuna fonte grezza ma dizionario presente: build offline.
+  if (!morphPath) {
+    if (existsSync(path.join(DATA, 'words.txt'))) {
+      await buildFromExistingWords();
+      return;
+    }
+    throw new Error(
+      'Nessuna fonte disponibile. Esegui `pnpm --filter @boggle/dictionary build:full` per scaricare le fonti.',
+    );
+  }
+
   const words = new Set();
 
   // 1. Morph-it: la prima colonna e' la forma flessa.
-  const morphPath = await findMorphIt();
   const morphRaw = await readFile(morphPath, 'utf8');
   let morphCount = 0;
   for (const line of morphRaw.split('\n')) {
@@ -94,22 +143,11 @@ async function main() {
   }
 
   const sorted = [...words].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const txt = sorted.join('\n') + '\n';
-
-  const wordsTxt = path.join(DATA, 'words.txt');
-  const wordsBr = path.join(DATA, 'words.br');
-  await writeFile(wordsTxt, txt);
-  const br = brotliCompressSync(Buffer.from(txt, 'utf8'), {
-    params: {
-      [constants.BROTLI_PARAM_QUALITY]: 11,
-      [constants.BROTLI_PARAM_SIZE_HINT]: txt.length,
-    },
-  });
-  await writeFile(wordsBr, br);
+  const { txt, br } = await writeOutputs(sorted);
 
   const kb = (n) => (n / 1024).toFixed(1) + ' KB';
   console.log(`✓ words.txt  ${sorted.length.toLocaleString('it-IT')} parole  (${kb(txt.length)})`);
-  console.log(`✓ words.br   ${kb(br.length)}  (ratio ${(br.length / txt.length * 100).toFixed(1)}%)`);
+  console.log(`✓ words.br   ${kb(br.length)}  (ratio ${((br.length / txt.length) * 100).toFixed(1)}%)`);
   console.log(`  da Morph-it: ${morphCount.toLocaleString('it-IT')}`);
   console.log(`  da comuni:   +${commonCount.toLocaleString('it-IT')}`);
   console.log(`  abbreviazioni: +${abbrCount}`);
