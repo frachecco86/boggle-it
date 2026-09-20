@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.10.0';
+export const APP_VERSION = '0.10.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,21 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.10.1',
+    date: '2026-09-20',
+    title: 'L\'anteprima non rivela più la parola più lunga',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          'Nell\'anteprima della scheda la **parola più lunga** non viene più mostrata: sapere che la soluzione è `BOSCAIOLI` la regalava. Ora si vede solo il **numero di lettere** ("parola più lunga: 9 lettere"), così sai cosa aspettarti senza ricevere la risposta.',
+          'La correzione è anche **lato server**: la parola non è più nella risposta dell\'API. Mostrarla solo meno nella UI non bastava — chiunque può leggere la risposta dalla console del browser.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.10.0',
     date: '2026-09-20',

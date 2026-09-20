@@ -270,7 +270,13 @@ app.get('/schede/:id/stats', (req, res) => {
     grid: scheda.grid,
     wordCount: scheda.words.length,
     maxScore,
-    longest: scheda.words.reduce((m, w) => (w.length > m.length ? w : m), ''),
+    /*
+     * SOLO la lunghezza della parola piu' lunga, NON la parola.
+     * Restituirla significherebbe regalarla: l'anteprima e' pubblica e chiunque
+     * puo' leggere la risposta dell'API dalla console del browser, anche se la
+     * UI non la mostra.
+     */
+    longestLength: scheda.words.reduce((m, w) => Math.max(m, w.length), 0),
     byLength,
     record,
     gamesPlayed,

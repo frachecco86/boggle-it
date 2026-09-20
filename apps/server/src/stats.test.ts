@@ -342,3 +342,31 @@ describe('catalogo parole filtrato per scheda', () => {
     expect(res.entries[0]!.occurrences).toBe(2);
   });
 });
+
+describe('anteprima scheda: la soluzione non trapela', () => {
+  it('le statistiche espongono la LUNGHEZZA della parola più lunga, non la parola', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 'priv-1',
+      size: 5,
+      difficulty: 'normale',
+      grid: 'aaaaa\nbbbbb\nccccc\nddddd\neeeee',
+      words: ['boscaioli', 'casa', 'avo'],
+      longest: 'boscaioli',
+    });
+    const scheda = catalog.get('priv-1')!;
+
+    /*
+     * Regressione: l'anteprima è PUBBLICA. Restituire la parola più lunga la
+     * regalerebbe — chiunque può leggere la risposta dell'API dalla console del
+     * browser, anche se la UI non la mostra.
+     * Il client riceve solo il NUMERO di lettere.
+     */
+    const longestLength = scheda.words.reduce((m, w) => Math.max(m, w.length), 0);
+    expect(longestLength).toBe(9);
+    expect(scheda.words).toContain('boscaioli'); // la parola esiste nella scheda…
+    // …ma non deve mai essere esposta in una risposta di anteprima.
+    const anteprima = { id: scheda.id, wordCount: scheda.words.length, longestLength };
+    expect(JSON.stringify(anteprima)).not.toContain('boscaioli');
+  });
+});

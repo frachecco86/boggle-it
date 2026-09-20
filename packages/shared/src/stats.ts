@@ -211,8 +211,13 @@ export interface SchedaStats {
   wordCount: number;
   /** Punteggio massimo realizzabile (somma dei punti di tutte le parole). */
   maxScore: number;
-  /** Parola più lunga. */
-  longest: string;
+  /**
+   * Lunghezza della parola più lunga trovabile.
+   *
+   * Deliberatamente NON la parola: l'anteprima è pubblica e chiunque potrebbe
+   * leggerla dalla risposta dell'API, regalandosi la soluzione.
+   */
+  longestLength: number;
   /** Quante parole per ogni lunghezza (ordinate crescente). */
   byLength: Array<{ length: number; words: number; points: number }>;
   /** Record: miglior punteggio mai fatto su questa scheda, se esiste. */

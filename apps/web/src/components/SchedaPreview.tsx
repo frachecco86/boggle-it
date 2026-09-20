@@ -150,10 +150,9 @@ export function SchedaPreview({
                 ))}
               </div>
 
-              {stats.longest && (
+              {stats.longestLength > 0 && (
                 <p className="scheda-preview__longest">
-                  Parola più lunga possibile: <strong>{stats.longest.toUpperCase()}</strong> (
-                  {stats.longest.length} lettere)
+                  Parola più lunga: <strong>{stats.longestLength} lettere</strong>
                 </p>
               )}
 
