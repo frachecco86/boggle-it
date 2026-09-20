@@ -54,7 +54,7 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=builder /app/apps/web/dist ./apps/web/dist
 
 # Catalogo schede: le base versionate. (Le schede aggiunte dall'admin vivono in
-# SCHEDE_EXTRA_DIR, montata come volume: non fanno parte dell'immagine.)
+# SCHEDE_EXTRA_DIR: per conservarle tra i deploy, monta un volume anche lì.)
 COPY --from=builder /app/packages/shared/schede ./packages/shared/schede
 
 # Dizionario (serve ancora al server per validare in multiplayer e per generare
@@ -64,11 +64,13 @@ COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary
 COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 
-# Profili SQLite: il DB vive in DATA_DIR. Senza un volume montato qui i profili
-# (foto e suoni dei giocatori) si perdono a ogni nuovo deploy.
+# Profili SQLite: il DB vive in DATA_DIR.
+#
+# NOTA: qui NON si usa `VOLUME` — Railway (e altri PaaS) non lo supportano e
+# rifiutano il Dockerfile. Il volume si configura dalla piattaforma montandolo
+# su /app/data; senza volume i profili si perdono a ogni nuovo deploy.
 ENV DATA_DIR=/app/data
 RUN mkdir -p /app/data && chown -R node:node /app/data
-VOLUME ["/app/data"]
 
 ENV PORT=3001
 # Il picco misurato è ~211 MB: 448 MB lascia margine ampio senza rischiare l'OOM.

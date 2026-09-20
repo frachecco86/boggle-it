@@ -16,12 +16,28 @@ Due opzioni. Scegli in base a quanto vuoi spendere e quanto vuoi semplificare.
 
 | Stato | RSS |
 |---|---|
-| All'avvio (dizionario in `Set`, senza trie) | **168 MB** |
-| Dopo il primo fine round (trie lazy, max 10 lettere) | **211 MB** |
+| All'avvio (dizionario + catalogo schede) | **~170 MB** |
+| Generazione schede dall'admin (pool trie) | picco ~350 MB |
 
-Il trie del solver è **lazy**: viene costruito alla prima fine round, in ~150 ms.
-Se la partita non arriva a fine round, quei ~45 MB non vengono mai allocati.
-Il tetto è configurabile con `TRIE_MAX_WORD_LENGTH` (8 → ~24 MB, 10 → ~66 MB, illimitato → ~142 MB).
+Le parole valide arrivano dalle **schede pre-calcolate**: il server non costruisce più
+il trie da solver, quindi il picco è molto più basso di prima (~211 MB).
+`TRIE_MAX_WORD_LENGTH` non è più usato a runtime.
+
+### Volumi (profili e schede admin)
+
+Il server salva profili (foto + clip audio) in un database SQLite dentro `DATA_DIR`
+(default `/app/data`). Il `Dockerfile` **non dichiara `VOLUME`** perché Railway non lo
+supporta: il volume va creato dalla piattaforma.
+
+In **Railway → Settings → Volumes**, aggiungi un volume e montato su:
+
+| Mount path | Cosa conserva |
+|---|---|
+| `/app/data` | profili (utente, foto, clip audio) |
+| `/app/packages/shared/schede-extra` | schede generate dall'admin |
+
+Senza volume quei dati si perdono a ogni nuovo deploy (le schede di base sono
+versionate nell'immagine e restano).
 
 ---
 
@@ -36,8 +52,9 @@ Il tetto è configurabile con `TRIE_MAX_WORD_LENGTH` (8 → ~24 MB, 10 → ~66 M
    | Variabile | Valore |
    |---|---|
    | `CLIENT_ORIGIN` | `https://TUO-SITO.netlify.app,http://localhost:5173` |
-   | `TRIE_MAX_WORD_LENGTH` | `10` |
+   | `ADMIN_TOKEN` | token lungo e casuale (`openssl rand -hex 24`) |
    | `NODE_OPTIONS` | `--max-old-space-size=448` |
+   | `DATA_DIR` | `/app/data` (default; montaci un volume) |
 
    `PORT` viene iniettata da Railway: non serve impostarla.
 
@@ -61,7 +78,9 @@ Il tetto è configurabile con `TRIE_MAX_WORD_LENGTH` (8 → ~24 MB, 10 → ~66 M
    | Variabile | Valore |
    |---|---|
    | `VITE_SERVER_URL` | `https://TUO-DOMINIO.up.railway.app` |
-   | `VITE_DICTIONARY_URL` | `/dictionary` |
+
+   `VITE_DICTIONARY_URL` non serve più: il client non scarica il dizionario, le
+   parole arrivano dalle schede (incluso il bundle offline per l'app Android).
 
    `VITE_DICTIONARY_URL=/dictionary` fa caricare il dizionario dalla CDN Netlify
    (build già copiata in `public/dictionary/words.txt`), alleggerendo il server.
