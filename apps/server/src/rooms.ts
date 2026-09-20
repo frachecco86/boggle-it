@@ -1,6 +1,8 @@
 import {
+  DEFAULT_MUSIC_ID,
   generateGrid,
   generateRoomCode,
+  isMusicChoice,
   isValidPath,
   pathMatchesWord,
   rowsToGrid,
@@ -10,6 +12,7 @@ import {
   type FoundWord,
   type Grid,
   type GridSize,
+  type MusicId,
   type PlayerPublic,
   type RoomState,
   type Scheda,
@@ -50,6 +53,10 @@ export interface Player {
   socketId: string | null;
   nickname: string;
   avatar: string;
+  /** Id del profilo persistente, se il giocatore è loggato. */
+  profileId: string | null;
+  /** Foto profilo pubblica (mostrata in stanza al posto dell'emoji). */
+  photoUrl: string | null;
   totalScore: number;
   roundScore: number;
   words: FoundWord[];
@@ -69,6 +76,11 @@ export class Room {
   grid: Grid | null = null;
   /** Id della scheda in gioco nel round corrente. */
   schedaId: string | null = null;
+  /**
+   * Musica di sottofondo scelta dall'HOST, valida per tutta la stanza.
+   * In lobby la cambia l'host; durante la partita resta quella scelta.
+   */
+  musicId: MusicId | 'none' = DEFAULT_MUSIC_ID;
   roundEndsAt = 0;
   players = new Map<string, Player>();
   /** Tutte le parole valide trovate nel round corrente (per il riepilogo mancate). */
@@ -108,12 +120,19 @@ export class Room {
     return new Room(generateRoomCode(), dictionary, gridSize, rounds, difficulty, roundDurationMs);
   }
 
-  addPlayer(id: string, nickname: string, avatar = '🐱'): Player {
+  addPlayer(
+    id: string,
+    nickname: string,
+    avatar = '🐱',
+    profile?: { id: string; photoUrl: string | null } | null,
+  ): Player {
     const player: Player = {
       id,
       socketId: null,
       nickname: nickname.trim().slice(0, 20) || 'Giocatore',
       avatar: String(avatar || '🐱').slice(0, 8),
+      profileId: profile?.id ?? null,
+      photoUrl: profile?.photoUrl ?? null,
       totalScore: 0,
       roundScore: 0,
       words: [],
@@ -142,14 +161,15 @@ export class Room {
       players: this.publicPlayers(),
       endsAt: this.phase === 'playing' ? this.roundEndsAt : undefined,
       schedaId: this.schedaId ?? undefined,
+      musicId: this.musicId,
     };
   }
 
-  publicPlayers(): PlayerPublic[] {
-    return [...this.players.values()].map((p) => ({
+  publicPlayers(): PlayerPublic[] {    return [...this.players.values()].map((p) => ({
       id: p.id,
       nickname: p.nickname,
       avatar: p.avatar,
+      photoUrl: p.photoUrl ?? undefined,
       score: p.totalScore,
       connected: p.connected,
       isHost: p.id === this.hostId,
@@ -288,6 +308,11 @@ export class Room {
       }))
       .sort((a, b) => b.totalScore - a.totalScore || a.nickname.localeCompare(b.nickname));
   }
+  /** Imposta la musica di tutta la stanza (chiamata solo per l'host). */
+  setMusic(choice: MusicId | 'none'): void {
+    if (isMusicChoice(choice)) this.musicId = choice;
+  }
+
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
     if (this.hostId === playerId) {

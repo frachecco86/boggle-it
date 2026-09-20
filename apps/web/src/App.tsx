@@ -4,6 +4,10 @@ import { SoloSetupScreen } from './screens/SoloSetupScreen.js';
 import { SoloGameScreen } from './screens/SoloGameScreen.js';
 import { SchedaScreen } from './screens/SchedaScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
+import { ProfilesScreen } from './screens/ProfilesScreen.js';
+import { ProfileScreen } from './screens/ProfileScreen.js';
+import { ChangelogScreen } from './screens/ChangelogScreen.js';
+import { VersionBar } from './components/VersionBar.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
@@ -50,11 +54,15 @@ export function App() {
 
   return (
     <div className="app">
+      <VersionBar />
       {screen === 'home' && <HomeScreen />}
       {screen === 'solo-setup' && <SoloSetupScreen onStart={() => setScreen('solo-game')} />}
       {screen === 'solo-game' && <SoloGameScreen />}
       {screen === 'scheda' && <SchedaScreen />}
       {screen === 'admin' && <AdminScreen />}
+      {screen === 'profiles' && <ProfilesScreen />}
+      {screen === 'profile' && <ProfileScreen />}
+      {screen === 'changelog' && <ChangelogScreen />}
       {screen === 'lobby' && <LobbyScreen />}
       {screen === 'mp-game' && <MultiplayerGameScreen />}
       {screen === 'summary' && <MultiplayerSummaryScreen />}

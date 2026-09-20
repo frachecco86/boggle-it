@@ -11,7 +11,7 @@ import {
   type GridSize,
   type Scheda,
 } from '@boggle/shared';
-import { SERVER_BASE } from '../net/socket.js';
+import { loadRandomScheda } from './schedeLoader.js';
 import { audio } from '../audio/AudioEngine.js';
 
 export type WordFeedback =
@@ -44,27 +44,6 @@ export interface SoloGameState {
   missedWords: string[];
   /** true mentre si carica la scheda dal server. */
   loading: boolean;
-}
-
-/** Scarica una scheda casuale dal catalogo del server. */
-async function fetchScheda(
-  gridSize: GridSize,
-  difficulty: Difficulty,
-  signal?: AbortSignal,
-): Promise<Scheda | null> {
-  const url = `${SERVER_BASE}/preview?gridSize=${gridSize}&difficulty=${encodeURIComponent(difficulty)}`;
-  const preview = await fetch(url, { signal }).then(async (res) => {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as { schedaId: string | null };
-  });
-  if (!preview.schedaId) return null;
-  const scheda = await fetch(`${SERVER_BASE}/schede/${encodeURIComponent(preview.schedaId)}`, {
-    signal,
-  }).then(async (res) => {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as Scheda;
-  });
-  return scheda;
 }
 
 /**
@@ -116,7 +95,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setFeedback(null);
       setMissedWords([]);
       try {
-        const next = await fetchScheda(gridSize, difficulty);
+        const next = await loadRandomScheda(gridSize, difficulty);
         if (!next) throw new Error('Nessuna scheda disponibile');
         setScheda(next);
         setFound([]);

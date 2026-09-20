@@ -8,6 +8,8 @@ import {
 import { useAppStore } from '../state/store.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { GridPreview } from '../components/GridPreview.js';
+import { MusicPicker } from '../components/MusicPicker.js';
+import type { MusicChoice } from '@boggle/shared';
 
 /** Lobby multiplayer: codice stanza, giocatori, impostazioni host. */
 export function LobbyScreen() {
@@ -71,7 +73,7 @@ export function LobbyScreen() {
           {room.players.map((p) => (
             <li key={p.id} className={`player-row${p.connected ? '' : ' player-row--off'}`}>
               <span className="player-row__avatar" aria-hidden>
-                {p.avatar}
+                {p.photoUrl ? <img src={p.photoUrl} alt="" /> : p.avatar}
               </span>
               <span className="player-row__name">{p.nickname}</span>
               {p.isHost && <span className="badge">host</span>}
@@ -105,7 +107,7 @@ export function LobbyScreen() {
                 <button
                   key={s}
                   className={`pill${room.gridSize === s ? ' pill--active' : ''}`}
-                  onClick={() => configureRoom(s, room.difficulty, room.rounds, room.roundDurationMs)}
+                  onClick={() => configureRoom(s, room.difficulty, room.rounds, room.roundDurationMs, room.musicId)}
                 >
                   {s}×{s}
                 </button>
@@ -123,7 +125,7 @@ export function LobbyScreen() {
                       room.difficulty === id ? ' difficulty-option--active' : ''
                     }`}
                     style={{ ['--level-accent' as string]: meta.theme.accent }}
-                    onClick={() => configureRoom(room.gridSize, id, room.rounds, room.roundDurationMs)}
+                    onClick={() => configureRoom(room.gridSize, id, room.rounds, room.roundDurationMs, room.musicId)}
                   >
                     <span className="difficulty-option__dot" />
                     <span className="difficulty-option__label">{meta.label}</span>
@@ -138,7 +140,7 @@ export function LobbyScreen() {
                 <button
                   key={sec}
                   className={`pill${room.roundDurationMs === sec * 1000 ? ' pill--active' : ''}`}
-                  onClick={() => configureRoom(room.gridSize, room.difficulty, room.rounds, sec * 1000)}
+                  onClick={() => configureRoom(room.gridSize, room.difficulty, room.rounds, sec * 1000, room.musicId)}
                 >
                   {sec} sec
                 </button>
@@ -151,12 +153,21 @@ export function LobbyScreen() {
                 <button
                   key={r}
                   className={`pill${room.rounds === r ? ' pill--active' : ''}`}
-                  onClick={() => configureRoom(room.gridSize, room.difficulty, r, room.roundDurationMs)}
+                  onClick={() => configureRoom(room.gridSize, room.difficulty, r, room.roundDurationMs, room.musicId)}
                 >
                   {r}
                 </button>
               ))}
             </div>
+
+            <MusicPicker
+              value={(room.musicId ?? 'none') as MusicChoice}
+              onChange={(choice) =>
+                configureRoom(room.gridSize, room.difficulty, room.rounds, room.roundDurationMs, choice)
+              }
+              title="Musica della stanza"
+              hint="La traccia la sentono tutti i giocatori."
+            />
 
             <GridPreview gridSize={room.gridSize} difficulty={room.difficulty} />
 

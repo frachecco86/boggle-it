@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Difficulty, GridSize } from '@boggle/shared';
-import { SERVER_BASE } from '../net/socket.js';
+import { loadRandomScheda } from './schedeLoader.js';
 
 export interface PreviewResult {
   gridSize: GridSize;
@@ -43,20 +43,31 @@ export function useGridPreview(
       abortRef.current = controller;
 
       setState((prev) => ({ ...prev, loading: true, error: null }));
-      const url = `${SERVER_BASE}/preview?gridSize=${gridSize}&difficulty=${encodeURIComponent(difficulty)}`;
 
-      fetch(url, { signal: controller.signal })
-        .then(async (res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return (await res.json()) as PreviewResult;
+      // Server se raggiungibile, altrimenti scheda dal bundle (app offline).
+      void loadRandomScheda(gridSize, difficulty)
+        .then((scheda) => {
+          if (controller.signal.aborted) return;
+          if (!scheda) throw new Error('Nessuna scheda disponibile');
+          setState({
+            loading: false,
+            data: {
+              gridSize,
+              difficulty,
+              grid: scheda.grid.split('\n').map((row) => row.toUpperCase()),
+              wordCount: scheda.words.length,
+              sampleWords: [...scheda.words].sort((a, b) => b.length - a.length).slice(0, 8),
+              truncated: false,
+            },
+            error: null,
+          });
         })
-        .then((data) => setState({ loading: false, data, error: null }))
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return;
+        .catch(() => {
+          if (controller.signal.aborted) return;
           setState((prev) => ({
             loading: false,
             data: prev.data,
-            error: 'Anteprima non disponibile (server offline)',
+            error: 'Anteprima non disponibile',
           }));
         });
     }, 350);

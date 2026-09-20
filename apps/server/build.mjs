@@ -18,7 +18,7 @@ await build({
   format: 'esm',
   sourcemap: true,
   // Solo le dipendenze npm esterne; i pacchetti @boggle/* vengono inclusi nel bundle.
-  external: ['express', 'cors', 'socket.io'],
+  external: ['express', 'cors', 'socket.io', 'node:sqlite'],
   banner: {
     js: [
       "import { createRequire as __cr } from 'node:module';",

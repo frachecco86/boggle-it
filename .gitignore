@@ -29,3 +29,16 @@ apps/web/tsconfig.tsbuildinfo
 
 # Schede generate dall'admin (arte runtime, non versionate)
 packages/shared/schede-extra/
+
+# Android (Capacitor): web sincronizzato e output di build
+apps/web/dist/
+apps/web/android/app/src/main/assets/public/
+apps/web/android/app/src/main/assets/capacitor.config.json
+apps/web/android/.gradle/
+apps/web/android/build/
+apps/web/android/app/build/
+apps/web/android/local.properties
+apps/web/public/bundled-schede/
+
+# Database profili locale (creato dal server di sviluppo)
+/data/

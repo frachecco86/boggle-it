@@ -13,10 +13,46 @@
   --success: #16a34a;
   --warning: #e08b00;
   --danger: #e04545;
-  --radius: 14px;
-  --radius-lg: 22px;
+  --radius: 18px;
+  --radius-lg: 28px;
   --shadow: 0 10px 28px rgba(45, 60, 110, 0.14);
-  --font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  /* Font giocosi, self-hostati (funzionano anche offline nell'app Android). */
+  --font: 'Baloo 2', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-display: 'Fredoka', 'Baloo 2', system-ui, sans-serif;
+}
+
+/* Font inclusi nel bundle: niente richieste a Google Fonts. */
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/baloo2-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Baloo 2';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/fonts/baloo2-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/fredoka-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/fredoka-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 * {
@@ -115,30 +151,53 @@ body {
   margin-top: 6vh;
 }
 
+.home__logo {
+  width: clamp(84px, 22vw, 128px);
+  height: auto;
+  display: block;
+  margin: 0 auto 6px;
+  filter: drop-shadow(0 8px 18px rgba(255, 179, 212, 0.55));
+  animation: logo-bob 3.4s ease-in-out infinite;
+}
+
+@keyframes logo-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-6px) rotate(2deg); }
+}
+
 .title {
-  font-size: clamp(2.6rem, 12vw, 4.6rem);
+  font-family: var(--font-display);
+  font-size: clamp(2.8rem, 13vw, 5rem);
   margin: 0;
-  letter-spacing: 3px;
-  font-weight: 800;
+  letter-spacing: 1px;
+  font-weight: 700;
   display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .title__b {
-  background: linear-gradient(120deg, var(--primary-soft), #56d9ff);
+  background: linear-gradient(100deg, #ff5fa2 0%, #ff9d3f 55%, #ffd23f 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* Niente text-stroke: su alcuni browser "mangia" i caratteri.
+     L'effetto adesivo arriva da un'ombra morbida e da un piccolo rilievo. */
+  filter: drop-shadow(0 3px 0 rgba(255, 255, 255, 0.95))
+          drop-shadow(0 6px 12px rgba(255, 157, 63, 0.45));
   animation: title-pop 0.7s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 
 .title__it {
-  font-size: 0.42em;
-  color: var(--warning);
-  border: 2px solid var(--warning);
-  border-radius: 8px;
-  padding: 2px 8px;
+  font-family: var(--font-display);
+  font-size: 0.34em;
+  color: #7a4bff;
+  background: #f3ecff;
+  border: 3px solid #c9b6ff;
+  border-radius: 999px;
+  padding: 4px 14px;
+  transform: rotate(-6deg);
 }
 
 @keyframes title-pop {
@@ -1775,4 +1834,451 @@ body {
   border-color: var(--primary-soft);
   color: var(--primary);
   font-weight: 700;
+}
+
+/* ---------- Profili ---------- */
+
+.profile-list {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(460px, 100%);
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.profile-row--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.profile-row--empty {
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.profile-row__avatar {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-content: center;
+  font-size: 1.5rem;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--difficulty-bg, #eee);
+  flex: 0 0 auto;
+}
+
+.profile-row__avatar img,
+.profile-card__avatar img,
+.player-row__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.profile-row__name {
+  flex: 1;
+  font-weight: 700;
+}
+
+.profile-row__badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.profile-card--active {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-card__avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--primary-soft);
+  background: var(--difficulty-bg, #eee);
+  font-size: 2rem;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.profile-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.profile-card__name {
+  font-size: 1.15rem;
+}
+
+.profile-card__links {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.profile__head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.profile-section {
+  width: min(620px, 100%);
+  margin: 0 auto 26px;
+  text-align: center;
+}
+
+.profile-section__hint {
+  color: var(--text-dim);
+  font-size: 0.86rem;
+  margin: 6px auto 12px;
+  max-width: 46ch;
+}
+
+/* ---------- Foto profilo ---------- */
+
+.photo-editor {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.photo-editor__preview {
+  position: relative;
+  width: 176px;
+  height: 176px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--difficulty-bg, #eee);
+  flex: 0 0 auto;
+}
+
+.photo-editor__canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-editor__placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.photo-editor__placeholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-editor__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  max-width: 320px;
+}
+
+.photo-editor__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.photo-editor__filter {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.photo-editor__filter--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.photo-editor__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.photo-editor__error {
+  color: #c0392b;
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.photo-editor__note {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* ---------- Suoni personali ---------- */
+
+.sfx-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(520px, 100%);
+}
+
+.sfx-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sfx-row__label {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+}
+
+.sfx-row__ok,
+.sfx-row__empty,
+.sfx-row__elapsed {
+  font-size: 0.78rem;
+  min-width: 78px;
+  text-align: right;
+}
+
+.sfx-row__ok {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.sfx-row__empty {
+  color: var(--text-dim);
+}
+
+.sfx-row__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn--tiny {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
+.btn--danger {
+  background: #c0392b;
+  color: #fff;
+  border-color: #c0392b;
+}
+
+/* ---------- Musica ---------- */
+
+.music-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(520px, 100%);
+  margin: 0 auto;
+}
+
+.music-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.music-option--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.music-option__label {
+  font-weight: 700;
+}
+
+.music-option__mood {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.music-option__credits {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  opacity: 0.75;
+}
+
+/* Foto profilo nei giocatori in stanza */
+.player-row__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* ---------- Versione e pagina Novità ---------- */
+
+.versionbar {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  right: 10px;
+  z-index: 50;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.versionbar:hover {
+  color: var(--primary);
+  border-color: var(--primary-soft);
+  transform: translateY(-1px);
+}
+
+.changelog__head {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.release {
+  width: min(680px, 100%);
+  margin: 0 auto 22px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.release__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.release__version {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--primary);
+}
+
+.release__current {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.release__date {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.release__title {
+  margin: 6px 0 12px;
+  font-size: 1.02rem;
+}
+
+.release__group {
+  margin-bottom: 12px;
+}
+
+.release__kind {
+  margin: 0 0 6px;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.release__kind--feature { color: var(--primary); }
+.release__kind--improvement { color: #1f9bbf; }
+.release__kind--fix { color: #16a34a; }
+.release__kind--tech { color: var(--text-dim); }
+
+.release__items {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.release__items li {
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.release__items code {
+  font-size: 0.82em;
+  background: var(--surface-2);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+
+/* Le pagine con la versione fissa in alto non devono finirci sotto. */
+.screen {
+  padding-top: 30px;
 }

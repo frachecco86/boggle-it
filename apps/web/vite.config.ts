@@ -20,6 +20,9 @@ export default defineConfig({
       '/schede': { target: 'http://localhost:3001' },
       '/preview': { target: 'http://localhost:3001' },
       '/admin': { target: 'http://localhost:3001' },
+      '/auth': { target: 'http://localhost:3001' },
+      '/me': { target: 'http://localhost:3001' },
+      '/profiles': { target: 'http://localhost:3001' },
     },
   },
 });

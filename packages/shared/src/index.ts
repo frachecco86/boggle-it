@@ -6,3 +6,5 @@ export * from './solver.js';
 export * from './scheda.js';
 export * from './schedaGen.js';
 export * from './schedaPool.js';
+export * from './music.js';
+export * from './profile.js';

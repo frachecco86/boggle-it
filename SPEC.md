@@ -1,4 +1,4 @@
-# Boggle-IT — Specifica v0.1
+# Sbooble — Specifica v0.1
 
 > Gioco web stile Boggle in italiano. Single player + multiplayer con codice stanza.
 > Le parole si compongono **scorrendo il dito sulle lettere** del quadrato (swipe/drag).

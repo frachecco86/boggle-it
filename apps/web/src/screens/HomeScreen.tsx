@@ -7,7 +7,7 @@ import {
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
-import { SERVER_BASE } from '../net/socket.js';
+import { loadCatalog } from '../game/schedeLoader.js';
 import { AudioSettings } from '../components/AudioSettings.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { GridPreview } from '../components/GridPreview.js';
@@ -24,6 +24,7 @@ export function HomeScreen() {
     createRoom,
     errorMessage,
     clearError,
+    profile,
     soloGridSize,
     soloDifficulty,
     soloRoundDurationMs,
@@ -37,12 +38,8 @@ export function HomeScreen() {
   const [schedeTotal, setSchedeTotal] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`${SERVER_BASE}/schede`)
-      .then(async (res) => (res.ok ? ((await res.json()) as { total: number }) : null))
-      .then((data) => {
-        if (data) setSchedeTotal(data.total);
-      })
-      .catch(() => setSchedeTotal(null));
+    // Il conteggio arriva dal server; offline usa l'indice incluso nel bundle.
+    void loadCatalog().then((data) => setSchedeTotal(data?.total ?? null));
   }, []);
 
   // Impostazioni usate come default quando si crea una stanza.
@@ -78,9 +75,9 @@ export function HomeScreen() {
   return (
     <div className="screen home">
       <header className="home__header">
+        <img className="home__logo" src="/logo.svg" alt="" aria-hidden />
         <h1 className="title">
-          <span className="title__b">BOGGLE</span>
-          <span className="title__it">IT</span>
+          <span className="title__b">sbooble</span>
         </h1>
         <p className="home__tagline">Trova più parole degli altri. Scorri il dito sulle lettere.</p>
         {schedeTotal !== null && (
@@ -90,19 +87,46 @@ export function HomeScreen() {
         )}
       </header>
 
-      <section className="profile-card">
-        <AvatarPicker value={avatar} onChange={setAvatar} />
-        <label className="field profile-card__field">
-          <span className="field__label">Il tuo nome</span>
-          <input
-            className="field__input"
-            value={nickname}
-            maxLength={20}
-            placeholder="Giocatore"
-            onChange={(e) => setNickname(e.target.value)}
-          />
-        </label>
-      </section>
+      {profile ? (
+        <section className="profile-card profile-card--active">
+          <button className="profile-card__avatar" onClick={() => setScreen('profile')} title="Il mio profilo">
+            {profile.photoUrl ? (
+              <img src={profile.photoUrl} alt="" />
+            ) : (
+              <span aria-hidden>{profile.avatar}</span>
+            )}
+          </button>
+          <div className="profile-card__body">
+            <span className="field__label">Stai giocando come</span>
+            <strong className="profile-card__name">{profile.nickname}</strong>
+            <div className="profile-card__links">
+              <button className="btn btn--tiny" onClick={() => setScreen('profile')}>
+                Il mio profilo
+              </button>
+              <button className="btn btn--tiny btn--ghost" onClick={() => setScreen('profiles')}>
+                Cambia profilo
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="profile-card">
+          <AvatarPicker value={avatar} onChange={setAvatar} />
+          <label className="field profile-card__field">
+            <span className="field__label">Il tuo nome</span>
+            <input
+              className="field__input"
+              value={nickname}
+              maxLength={20}
+              placeholder="Giocatore"
+              onChange={(e) => setNickname(e.target.value)}
+            />
+          </label>
+          <button className="btn btn--tiny btn--ghost" onClick={() => setScreen('profiles')}>
+            Accedi o crea un profilo
+          </button>
+        </section>
+      )}
 
       {errorMessage && <div className="banner banner--error">{errorMessage}</div>}
 
@@ -207,6 +231,9 @@ export function HomeScreen() {
         </button>
         <button className="btn btn--ghost" onClick={() => setScreen('admin')}>
           Admin
+        </button>
+        <button className="btn btn--ghost" onClick={() => setScreen('profiles')}>
+          Profili
         </button>
       </div>
 

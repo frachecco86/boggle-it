@@ -4,6 +4,7 @@
  */
 
 import type { Difficulty } from './difficulty.js';
+import type { MusicId } from './music.js';
 
 export type GridSize = 4 | 5 | 6;
 
@@ -31,6 +32,12 @@ export interface PlayerPublic {
   nickname: string;
   /** Emoji scelta dal giocatore (es. '🦊'). */
   avatar: string;
+  /**
+   * URL della foto profilo, se il giocatore ne ha una e la condivide.
+   * Le foto sono servite dal server e pubbliche in stanza (è l'equivalente
+   * dell'avatar, solo più personale).
+   */
+  photoUrl?: string;
   score: number;
   connected: boolean;
   isHost: boolean;
@@ -63,6 +70,11 @@ export interface RoomState {
   endsAt?: number;
   /** Id della scheda giocata nel round corrente (vedi `Scheda`). */
   schedaId?: string;
+  /**
+   * Musica di sottofondo scelta dall'host, valida per TUTTA la stanza.
+   * `'none'` = musica spenta per tutti. In single player la scelta è locale.
+   */
+  musicId?: MusicId | 'none';
 }
 
 /* ------------------------------------------------------------------ */
@@ -76,6 +88,8 @@ export interface RoomCreatePayload {
   difficulty: Difficulty;
   rounds: number;
   roundDurationMs: number;
+  /** Token del profilo, se il giocatore è loggato (per foto e avatar). */
+  token?: string;
 }
 
 export interface RoomJoinPayload {
@@ -83,6 +97,8 @@ export interface RoomJoinPayload {
   nickname: string;
   avatar: string;
   playerId?: string;
+  /** Token del profilo, se il giocatore è loggato (per foto e avatar). */
+  token?: string;
 }
 
 export interface RoomCreateAck {
@@ -104,6 +120,8 @@ export interface RoomConfigPayload {
   difficulty: Difficulty;
   rounds: number;
   roundDurationMs: number;
+  /** Musica di sottofondo per tutta la stanza (solo host). */
+  musicId?: MusicId | 'none';
 }
 
 export interface SubmitWordPayload {

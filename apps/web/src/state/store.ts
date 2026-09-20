@@ -1,11 +1,43 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Difficulty, Grid, GridSize, PlayerPublic, RoomState, RoundResultEntry } from '@boggle/shared';
+import type {
+  Difficulty,
+  Grid,
+  GridSize,
+  MusicId,
+  PlayerPublic,
+  ProfilePrivate,
+  RoomState,
+  RoundResultEntry,
+  SfxSlot,
+} from '@boggle/shared';
+import { SFX_SLOTS } from '@boggle/shared';
 import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
-import { getSocket } from '../net/socket.js';
+import { getSocket, SERVER_BASE } from '../net/socket.js';
+import {
+  activeToken,
+  getActiveProfile,
+  listProfiles,
+  removeProfile,
+  saveProfile,
+  setActiveProfile,
+  updateSavedProfile,
+  type SavedProfile,
+} from '../game/profileStore.js';
 
-export type Screen = 'home' | 'solo-setup' | 'solo-game' | 'lobby' | 'mp-game' | 'summary' | 'scheda' | 'admin';
+export type Screen =
+  | 'home'
+  | 'solo-setup'
+  | 'solo-game'
+  | 'lobby'
+  | 'mp-game'
+  | 'summary'
+  | 'scheda'
+  | 'admin'
+  | 'profiles'
+  | 'profile'
+  | 'changelog';
 
 /**
  * Notifica di una parola trovata da un avversario.
@@ -55,8 +87,29 @@ interface AppState {
   missedWords: string[];
   finalScores: RoundResultEntry[] | null;
   errorMessage: string | null;
+  /** Profilo attivo (loggato) e profili salvati sul dispositivo. */
+  profiles: SavedProfile[];
+  activeProfileId: string | null;
+  profile: ProfilePrivate | null;
+  /** URL delle clip audio personali, per fascia. */
+  sfxUrls: Partial<Record<SfxSlot, string>>;
+  profileBusy: boolean;
+  profileError: string | null;
 
   setScreen: (s: Screen) => void;
+  refreshProfiles: () => void;
+  /** Applica un profilo salvato a store e motore audio. */
+  applyActiveProfile: (saved: SavedProfile | null) => void;
+  switchProfile: (id: string) => Promise<void>;
+  registerProfile: (nickname: string, password: string) => Promise<void>;
+  loginProfile: (nickname: string, password: string) => Promise<void>;
+  logoutProfile: () => Promise<void>;
+  deleteProfile: (id: string) => void;
+  setProfileAvatar: (avatar: string) => Promise<void>;
+  saveProfilePhoto: (dataUrl: string | null) => Promise<void>;
+  saveProfileSfx: (slot: SfxSlot, dataUrl: string, durationMs: number) => Promise<void>;
+  deleteProfileSfx: (slot: SfxSlot) => Promise<void>;
+  setProfileMusic: (musicId: MusicId | 'none') => Promise<void>;
   /** Scheda da mostrare nella pagina scheda (id dal catalogo). */
   schedaId: string | null;
   setSchedaId: (id: string | null) => void;
@@ -70,7 +123,13 @@ interface AppState {
   createRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
-  configureRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
+  configureRoom: (
+    gridSize: GridSize,
+    difficulty: Difficulty,
+    rounds: number,
+    roundDurationMs: number,
+    musicId?: MusicId | 'none',
+  ) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
   leaveRoom: () => void;
   clearError: () => void;
@@ -104,10 +163,315 @@ export const useAppStore = create<AppState>()(
       errorMessage: null,
       schedaId: null,
       adminToken: '',
+      profiles: listProfiles(),
+      activeProfileId: getActiveProfile()?.id ?? null,
+      profile: getActiveProfile()?.profile ?? null,
+      sfxUrls: {},
+      profileBusy: false,
+      profileError: null,
 
       setScreen: (screen) => set({ screen }),
       setSchedaId: (schedaId) => set({ schedaId }),
       setAdminToken: (adminToken) => set({ adminToken }),
+      refreshProfiles: () =>
+        set({ profiles: listProfiles(), activeProfileId: getActiveProfile()?.id ?? null }),
+
+      /** Applica un profilo attivo a store + audio (nome, avatar, clip, musica). */
+      applyActiveProfile: (() => {
+        const apply = (saved: SavedProfile | null) => {
+          if (!saved) return;
+          const sfxUrls: Partial<Record<SfxSlot, string>> = {};
+          for (const clip of saved.profile.sfx) sfxUrls[clip.slot] = `${SERVER_BASE}${clip.url}`;
+          audio.setPersonalClips(
+            SFX_SLOTS.filter((slot) => sfxUrls[slot]).map((slot) => ({ slot, url: sfxUrls[slot]! })),
+          );
+          if (saved.profile.musicId !== undefined) {
+            audio.setMusicTrack(saved.profile.musicId);
+            set({ audioSettings: audio.getSettings() });
+          }
+          set({
+            nickname: saved.profile.nickname,
+            avatar: (saved.profile.avatar as Avatar) ?? DEFAULT_AVATAR,
+            profile: saved.profile,
+            sfxUrls,
+            activeProfileId: saved.id,
+            profiles: listProfiles(),
+          });
+        };
+        return apply;
+      })(),
+
+      switchProfile: async (id) => {
+        const saved = listProfiles().find((p) => p.id === id);
+        if (!saved) return;
+        setActiveProfile(id);
+        set({ profileBusy: true, profileError: null });
+        try {
+          // Ricarica il profilo dal server per avere clip e foto aggiornate.
+          const res = await fetch(`${SERVER_BASE}/me`, {
+            headers: { Authorization: `Bearer ${saved.token}` },
+          });
+          if (res.ok) {
+            const profile = (await res.json()) as ProfilePrivate;
+            updateSavedProfile(id, {
+              profile,
+              nickname: profile.nickname,
+              avatar: profile.avatar,
+              photoUrl: profile.photoUrl,
+            });
+          } else if (res.status === 401) {
+            // Token scaduto: il profilo locale resta ma va rifatto il login.
+            set({ profileError: 'Sessione scaduta: accedi di nuovo' });
+          }
+          const fresh = listProfiles().find((p) => p.id === id) ?? saved;
+          get().applyActiveProfile(fresh);
+        } catch {
+          set({ profileError: 'Server non raggiungibile: uso i dati locali' });
+          get().applyActiveProfile(saved);
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      registerProfile: async (nickname, password) => {
+        set({ profileBusy: true, profileError: null });
+        try {
+          const res = await fetch(`${SERVER_BASE}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname, password, avatar: get().avatar }),
+          });
+          const body = (await res.json()) as { token?: string; profile?: ProfilePrivate; error?: string };
+          if (!res.ok || !body.token || !body.profile) {
+            throw new Error(body.error ?? 'Registrazione non riuscita');
+          }
+          const entry: SavedProfile = {
+            id: body.profile.id,
+            token: body.token,
+            nickname: body.profile.nickname,
+            avatar: body.profile.avatar,
+            photoUrl: body.profile.photoUrl,
+            profile: body.profile,
+          };
+          saveProfile(entry);
+          get().applyActiveProfile(entry);
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+          throw err;
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      loginProfile: async (nickname, password) => {
+        set({ profileBusy: true, profileError: null });
+        try {
+          const res = await fetch(`${SERVER_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname, password }),
+          });
+          const body = (await res.json()) as { token?: string; profile?: ProfilePrivate; error?: string };
+          if (!res.ok || !body.token || !body.profile) {
+            throw new Error(body.error ?? 'Accesso non riuscito');
+          }
+          const entry: SavedProfile = {
+            id: body.profile.id,
+            token: body.token,
+            nickname: body.profile.nickname,
+            avatar: body.profile.avatar,
+            photoUrl: body.profile.photoUrl,
+            profile: body.profile,
+          };
+          saveProfile(entry);
+          get().applyActiveProfile(entry);
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+          throw err;
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      logoutProfile: async () => {
+        const token = activeToken();
+        if (token) {
+          void fetch(`${SERVER_BASE}/auth/logout`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => undefined);
+        }
+        const id = get().activeProfileId;
+        if (id) removeProfile(id);
+        audio.setPersonalClips([]);
+        const next = getActiveProfile();
+        if (next) {
+          get().applyActiveProfile(next);
+        } else {
+          set({
+            profile: null,
+            activeProfileId: null,
+            profiles: listProfiles(),
+            sfxUrls: {},
+            nickname: '',
+            avatar: DEFAULT_AVATAR,
+          });
+        }
+      },
+
+      deleteProfile: (id) => {
+        removeProfile(id);
+        const next = getActiveProfile();
+        if (next) get().applyActiveProfile(next);
+        else set({ profile: null, activeProfileId: null, profiles: listProfiles(), sfxUrls: {} });
+      },
+
+      setProfileAvatar: async (avatar) => {
+        const token = activeToken();
+        if (!token) return;
+        set({ profileBusy: true, profileError: null });
+        try {
+          const res = await fetch(`${SERVER_BASE}/me`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ avatar }),
+          });
+          if (!res.ok) throw new Error('Aggiornamento non riuscito');
+          const profile = (await res.json()) as ProfilePrivate;
+          const id = get().activeProfileId;
+          if (id) updateSavedProfile(id, { profile, avatar: profile.avatar });
+          set({ profile, avatar: profile.avatar as Avatar });
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      saveProfilePhoto: async (dataUrl) => {
+        const token = activeToken();
+        const id = get().activeProfileId;
+        if (!token || !id) return;
+        set({ profileBusy: true, profileError: null });
+        try {
+          if (dataUrl === null) {
+            await fetch(`${SERVER_BASE}/me/photo`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+          } else {
+            const res = await fetch(`${SERVER_BASE}/me/photo`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ dataUrl }),
+            });
+            if (!res.ok) {
+              const body = (await res.json().catch(() => ({}))) as { error?: string };
+              throw new Error(body.error ?? 'Salvataggio non riuscito');
+            }
+          }
+          // Rilegge il profilo: l'URL della foto ha un parametro di versione.
+          const me = await fetch(`${SERVER_BASE}/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (me.ok) {
+            const profile = (await me.json()) as ProfilePrivate;
+            updateSavedProfile(id, { profile, photoUrl: profile.photoUrl });
+            set({ profile });
+          }
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+          throw err;
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      saveProfileSfx: async (slot, dataUrl, durationMs) => {
+        const token = activeToken();
+        const id = get().activeProfileId;
+        if (!token || !id) return;
+        set({ profileBusy: true, profileError: null });
+        try {
+          const res = await fetch(`${SERVER_BASE}/me/sfx/${slot}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ dataUrl, durationMs }),
+          });
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? 'Salvataggio non riuscito');
+          }
+          const me = await fetch(`${SERVER_BASE}/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (me.ok) {
+            const profile = (await me.json()) as ProfilePrivate;
+            const sfxUrls: Partial<Record<SfxSlot, string>> = { ...get().sfxUrls };
+            const clip = profile.sfx.find((c) => c.slot === slot);
+            if (clip) sfxUrls[slot] = `${SERVER_BASE}${clip.url}`;
+            audio.setPersonalClip(slot, `${SERVER_BASE}${clip?.url ?? ''}`);
+            updateSavedProfile(id, { profile });
+            set({ profile, sfxUrls });
+          }
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+          throw err;
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      deleteProfileSfx: async (slot) => {
+        const token = activeToken();
+        const id = get().activeProfileId;
+        if (!token || !id) return;
+        set({ profileBusy: true, profileError: null });
+        try {
+          await fetch(`${SERVER_BASE}/me/sfx/${slot}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          audio.clearPersonalClip(slot);
+          const me = await fetch(`${SERVER_BASE}/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (me.ok) {
+            const profile = (await me.json()) as ProfilePrivate;
+            const sfxUrls = { ...get().sfxUrls };
+            delete sfxUrls[slot];
+            updateSavedProfile(id, { profile });
+            set({ profile, sfxUrls });
+          }
+        } catch (err) {
+          set({ profileError: err instanceof Error ? err.message : String(err) });
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
+      setProfileMusic: async (musicId) => {
+        audio.setMusicTrack(musicId);
+        set({ audioSettings: audio.getSettings() });
+        const token = activeToken();
+        const id = get().activeProfileId;
+        if (!token || !id) return;
+        try {
+          const res = await fetch(`${SERVER_BASE}/me`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ musicId }),
+          });
+          if (res.ok) {
+            const profile = (await res.json()) as ProfilePrivate;
+            updateSavedProfile(id, { profile });
+            set({ profile });
+          }
+        } catch {
+          // La preferenza è già applicata localmente: il salvataggio può attendere.
+        }
+      },
+
       setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),
       setAvatar: (avatar) => set({ avatar }),
       setSoloSetup: (gridSize, difficulty, rounds, roundDurationMs) =>
@@ -130,7 +494,7 @@ export const useAppStore = create<AppState>()(
         await new Promise<void>((resolve, reject) => {
           socket.emit(
             'room:create',
-            { nickname, avatar, gridSize, difficulty, rounds, roundDurationMs },
+            { nickname, avatar, gridSize, difficulty, rounds, roundDurationMs, token: activeToken() ?? undefined },
             (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
@@ -158,7 +522,7 @@ export const useAppStore = create<AppState>()(
         // Riconnessione solo verso la stessa stanza, non verso un'altra partita.
         const playerId = get().playerIds[upperCode];
         await new Promise<void>((resolve, reject) => {
-          socket.emit('room:join', { code: upperCode, nickname, avatar, playerId }, (res) => {
+          socket.emit('room:join', { code: upperCode, nickname, avatar, playerId, token: activeToken() ?? undefined }, (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
                 roomCode: res.state.code,
@@ -182,10 +546,10 @@ export const useAppStore = create<AppState>()(
         getSocket().emit('room:start', { code });
       },
 
-      configureRoom: (gridSize, difficulty, rounds, roundDurationMs) => {
+      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId) => {
         const code = get().roomCode;
         if (!code) return;
-        getSocket().emit('room:config', { code, gridSize, difficulty, rounds, roundDurationMs });
+        getSocket().emit('room:config', { code, gridSize, difficulty, rounds, roundDurationMs, musicId });
       },
 
       submitWord: async (word, path) => {
@@ -241,7 +605,14 @@ export function bindSocketEvents(): () => void {
   const socket = getSocket();
   const set = useAppStore.setState;
 
-  const onRoomUpdate = (room: RoomState) => set({ room });
+  const onRoomUpdate = (room: RoomState) => {
+    // In multiplayer la musica la scegle l'host: vince sulla preferenza locale.
+    if (room.musicId !== undefined) {
+      audio.setMusicTrack(room.musicId);
+      useAppStore.setState({ audioSettings: audio.getSettings() });
+    }
+    set({ room });
+  };
   const onRoundStart = (p: { grid: Grid; endsAt: number; durationMs: number; schedaId?: string }) =>
     set({
       grid: p.grid,

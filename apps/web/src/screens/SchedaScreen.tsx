@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { scoreForWord, type Scheda } from '@boggle/shared';
-import { SERVER_BASE } from '../net/socket.js';
+import { loadCatalog, loadScheda, type CatalogInfo } from '../game/schedeLoader.js';
 import { useAppStore } from '../state/store.js';
-
-interface CatalogInfo {
-  total: number;
-  byKey: Record<string, number>;
-  /** Id delle schede raggruppati per chiave `size-difficulty`. */
-  ids: Record<string, string[]>;
-}
 
 /**
  * Pagina scheda: griglia e TUTTE le parole trovabili.
@@ -23,35 +16,30 @@ export function SchedaScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Carica il catalogo (per il selettore) una volta sola.
+  // Carica il catalogo (per il selettore): server, con fallback alle schede incluse.
   useEffect(() => {
-    fetch(`${SERVER_BASE}/schede`)
-      .then(async (res) => (res.ok ? ((await res.json()) as CatalogInfo) : null))
-      .then((data) => {
-        if (!data) return;
-        setCatalog(data);
-        if (!schedaId) {
-          const first = Object.entries(data.byKey).find(([, n]) => n > 0);
-          const firstId = first ? data.ids[first[0]]?.[0] : undefined;
-          if (firstId) setSchedaId(firstId);
-        }
-      })
-      .catch(() => setCatalog(null));
+    void loadCatalog().then((data) => {
+      if (!data) return;
+      setCatalog(data);
+      if (!schedaId) {
+        const first = Object.entries(data.byKey).find(([, n]) => n > 0);
+        const firstId = first ? data.ids[first[0]]?.[0] : undefined;
+        if (firstId) setSchedaId(firstId);
+      }
+    });
   }, [schedaId, setSchedaId]);
 
-  // Carica la scheda scelta.
+  // Carica la scheda scelta (server, con fallback offline).
   useEffect(() => {
     if (!schedaId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`${SERVER_BASE}/schede/${encodeURIComponent(schedaId)}`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as Scheda;
-      })
+    void loadScheda(schedaId)
       .then((data) => {
-        if (!cancelled) setScheda(data);
+        if (cancelled) return;
+        if (!data) throw new Error('Scheda non disponibile');
+        setScheda(data);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));

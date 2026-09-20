@@ -64,6 +64,12 @@ COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary
 COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 
+# Profili SQLite: il DB vive in DATA_DIR. Senza un volume montato qui i profili
+# (foto e suoni dei giocatori) si perdono a ogni nuovo deploy.
+ENV DATA_DIR=/app/data
+RUN mkdir -p /app/data && chown -R node:node /app/data
+VOLUME ["/app/data"]
+
 ENV PORT=3001
 # Il picco misurato è ~211 MB: 448 MB lascia margine ampio senza rischiare l'OOM.
 ENV NODE_OPTIONS=--max-old-space-size=448

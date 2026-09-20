@@ -1,12 +1,18 @@
 /**
  * Motore audio: effetti sintetizzati (Web Audio API) + musica di sottofondo.
  *
- * Perché sintesi e non file: zero asset da scaricare, zero licenze da verificare,
- * latenza nulla. Eccetto la musica, che è un loop CC0 reale (~231 KB).
+ * Musica: tracce REALI royalty-free incluse nel bundle (vedi shared/music.ts),
+ * non generate sinteticamente. In multiplayer l'host scegle la traccia per
+ * tutta la stanza; in single player si usa la preferenza del profilo.
  *
- * Tutto è "lazy": l'AudioContext viene creato al primo gesto utente (policy dei browser),
- * e nulla suona finché l'utente non interagisce.
+ * Clip personali: se il profilo ha registrato un suono per la fascia di
+ * lunghezza, `playWordFound` lo usa al posto della sintesi (vedi PersonalSfx).
+ *
+ * Tutto e' "lazy": l'AudioContext viene creato al primo gesto utente (policy dei browser),
+ * e nulla suona finche' l'utente non interagisce.
  */
+import { DEFAULT_MUSIC_ID, musicTrack, type MusicId } from '@boggle/shared';
+import { PersonalSfx, slotForLength } from '../game/audioRecorder.js';
 
 export type SfxKind =
   | 'word-3'
@@ -24,6 +30,12 @@ export interface AudioSettings {
   musicEnabled: boolean;
   sfxVolume: number;
   musicVolume: number;
+  /**
+   * Traccia musicale attiva. In multiplayer è quella scelta dall'host (vince
+   * sulla preferenza locale), in single player è la preferenza del profilo.
+   * `'none'` = musica spenta.
+   */
+  musicTrack: MusicId | 'none';
 }
 
 const DEFAULT_SETTINGS: AudioSettings = {
@@ -31,10 +43,8 @@ const DEFAULT_SETTINGS: AudioSettings = {
   musicEnabled: true,
   sfxVolume: 0.6,
   musicVolume: 0.28,
+  musicTrack: DEFAULT_MUSIC_ID,
 };
-
-// "Happy Adventure" di TinyWorlds (CC0) — 8-bit allegro ma leggero, in loop.
-const MUSIC_SRC = '/audio/music-happy.mp3';
 
 /**
  * Frequenze dei motivi per lunghezza parola.
@@ -61,6 +71,10 @@ export class AudioEngine {
   private musicSource: MediaElementAudioSourceNode | null = null;
   private settings: AudioSettings = { ...DEFAULT_SETTINGS };
   private unlocked = false;
+  /** Clip personali del profilo, indicizzate per fascia di lunghezza. */
+  private readonly personalSfx = new PersonalSfx();
+  /** Traccia attualmente caricata (per capire quando cambiarla). */
+  private loadedTrack: MusicId | 'none' | null = null;
 
   /** Crea il contesto audio. Va chiamato dopo un gesto utente. */
   unlock(): void {
@@ -101,6 +115,24 @@ export class AudioEngine {
     return { ...this.settings };
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Clip personali del profilo                                         */
+  /* ------------------------------------------------------------------ */
+
+  /** Registra le clip del profilo attivo (chiamata dopo il login o il refresh). */
+  setPersonalClips(clips: Array<{ slot: Parameters<PersonalSfx['set']>[0]; url: string }>): void {
+    this.personalSfx.clearAll();
+    for (const clip of clips) this.personalSfx.set(clip.slot, clip.url);
+  }
+
+  setPersonalClip(slot: Parameters<PersonalSfx['set']>[0], url: string): void {
+    this.personalSfx.set(slot, url);
+  }
+
+  clearPersonalClip(slot: Parameters<PersonalSfx['set']>[0]): void {
+    this.personalSfx.clear(slot);
+  }
+
   setSettings(next: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...next };
     if (this.sfxGain && this.ctx) {
@@ -111,6 +143,43 @@ export class AudioEngine {
       this.musicGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
     }
     if (this.settings.musicEnabled && this.unlocked) this.startMusic();
+  }
+
+  /**
+   * Cambia la traccia musicale mantenendo il contesto audio.
+   * Chiamata quando l'host cambia musica in stanza, o quando cambia la preferenza.
+   */
+  setMusicTrack(track: MusicId | 'none'): void {
+    if (this.settings.musicTrack === track) return;
+    this.settings = { ...this.settings, musicTrack: track };
+    this.reloadMusicTrack();
+  }
+
+  /** Ricrea l'elemento audio se la traccia attiva è cambiata. */
+  private reloadMusicTrack(): void {
+    const wanted = this.settings.musicTrack;
+    if (this.loadedTrack === wanted) return;
+    this.loadedTrack = wanted;
+    const wasPlaying = this.musicEl ? !this.musicEl.paused : false;
+    if (this.musicEl) {
+      this.musicEl.pause();
+      this.musicSource?.disconnect();
+      this.musicSource = null;
+      this.musicEl = null;
+    }
+    if (wanted === 'none') return;
+    if (!this.settings.musicEnabled || !this.unlocked) return;
+    this.startMusic();
+    const element = this.currentMusicElement();
+    if (wasPlaying && element) void element.play().catch(() => undefined);
+  }
+
+  /**
+   * Legge l'elemento musicale evitando il narrowing di TypeScript: `startMusic()`
+   * può riassegnarlo, quindi va riletto dopo la chiamata.
+   */
+  private currentMusicElement(): HTMLAudioElement | null {
+    return this.musicEl;
   }
 
   /* ------------------------------------------------------------------ */
@@ -142,8 +211,19 @@ export class AudioEngine {
     }
   }
 
-  /** Sceglie l'effetto giusto per una parola trovata. */
+  /**
+   * Sceglie l'effetto per una parola trovata.
+   * Se il profilo ha registrato una clip per quella fascia, suona quella;
+   * altrimenti usa il motivo sintetizzato.
+   */
   playWordFound(length: number): void {
+    if (this.settings.sfxEnabled) {
+      const slot = slotForLength(length);
+      if (this.personalSfx.play(slot, this.settings.sfxVolume)) {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
+        return;
+      }
+    }
     if (length >= 7) return this.play('word-7plus');
     if (length === 6) return this.play('word-6');
     if (length === 5) return this.play('word-5');
@@ -251,8 +331,11 @@ export class AudioEngine {
   /** Avvia (o riprende) la musica di sottofondo, con fade-in. */
   startMusic(): void {
     if (!this.settings.musicEnabled || !this.ctx || !this.musicGain) return;
+    if (this.settings.musicTrack === 'none') return;
     if (!this.musicEl) {
-      this.musicEl = new Audio(MUSIC_SRC);
+      // La traccia attiva arriva dal catalogo condiviso (tracce reali CC0).
+      this.loadedTrack = this.settings.musicTrack;
+      this.musicEl = new Audio(musicTrack(this.settings.musicTrack).file);
       this.musicEl.loop = true;
       this.musicEl.preload = 'auto';
       this.musicEl.crossOrigin = 'anonymous';

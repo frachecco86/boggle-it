@@ -7,6 +7,8 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import {
+  isSfxSlot,
+  PROFILE_LIMITS,
   type ClientToServerEvents,
   type Difficulty,
   type GridSize,
@@ -15,6 +17,7 @@ import {
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
 import { SchedaCatalog, toMeta } from './schede.js';
+import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,12 +48,20 @@ const registry = new RoomRegistry(dictionary);
 // Catalogo schede: caricato una volta all'avvio (base versionate + extra admin).
 const schede = SchedaCatalog.load();
 
+/**
+ * Profili: un file SQLite. In Docker conviene montare un volume su DATA_DIR,
+ * altrimenti i profili spariscono a ogni nuovo deploy.
+ */
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.resolve(__dirname, '../../../data');
+const profiles = new ProfileStore(path.join(DATA_DIR, 'boggle.db'));
+
 // pulizia periodica delle stanze vuote/terminate
 setInterval(() => registry.cleanup(), 60_000).unref();
 
 const app = express();
 app.use(cors({ origin: corsOrigin }));
-app.use(express.json());
+// Limite alto: foto e clip audio viaggiano come base64 nel JSON.
+app.use(express.json({ limit: '4mb' }));
 
 app.get('/health', (_req, res) => {
   const mem = process.memoryUsage();
@@ -82,15 +93,14 @@ app.get('/dictionary/words.txt', (req, res) => {
 });
 
 // In produzione il server puo' servire anche il build statico del frontend
-// (monolite same-origin). Il fallback SPA viene aggiunto in FONDO, dopo tutte le
-// rotte API: altrimenti catturerebbe /preview restituendo index.html.
+// (monolite same-origin). Il mount statico e il fallback SPA vengono aggiunti in
+// FONDO, dopo TUTTE le rotte API: le schede sono anche file statici del web
+// (`dist/schede/`), quindi un mount anticipato catturerebbe `/schede`
+// reindirizzando a `/schede/` e rompendo l'endpoint JSON.
 const WEB_DIST = process.env.WEB_DIST
   ? path.resolve(process.env.WEB_DIST)
   : path.resolve(__dirname, '../../web/dist');
 const servesWeb = existsSync(path.join(WEB_DIST, 'index.html'));
-if (servesWeb) {
-  app.use(express.static(WEB_DIST, { maxAge: '1h', index: false }));
-}
 
 /**
  * Anteprima: pesca una scheda reale dal catalogo con le impostazioni richieste
@@ -165,6 +175,185 @@ app.get('/schede/:id', (req, res) => {
   if (!scheda) return res.status(404).json({ error: 'Scheda non trovata' });
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.json(scheda);
+});
+
+/* ------------------------------------------------------------------ */
+/* Profili                                                             */
+/* ------------------------------------------------------------------ */
+
+function bearerToken(req: express.Request): string | null {
+  const header = req.headers.authorization ?? '';
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  return null;
+}
+
+/** Ritorna il profilo autenticato, o `null` inviando già la risposta 401. */
+function requireProfile(req: express.Request, res: express.Response) {
+  const token = bearerToken(req);
+  const profile = token ? profiles.getByToken(token) : null;
+  if (!profile) {
+    res.status(401).json({ error: 'Autenticazione richiesta' });
+    return null;
+  }
+  return profile;
+}
+
+/** Decodifica un data URL `data:<mime>;base64,<dati>` con controlli sui limiti. */
+function decodeDataUrl(
+  raw: unknown,
+  opts: { maxBytes: number; mimePrefix: string },
+): { data: Buffer; mime: string } | { error: string } {
+  if (typeof raw !== 'string') return { error: 'Formato non valido' };
+  const match = /^data:([^;]+);base64,(.+)$/s.exec(raw);
+  if (!match) return { error: 'Serve un data URL base64' };
+  const mime = match[1]!;
+  if (!mime.startsWith(opts.mimePrefix)) return { error: `Formato non supportato: ${mime}` };
+  const data = Buffer.from(match[2]!, 'base64');
+  if (data.length === 0) return { error: 'File vuoto' };
+  if (data.length > opts.maxBytes) {
+    return { error: `File troppo grande (max ${Math.round(opts.maxBytes / 1024)} KB)` };
+  }
+  return { data, mime };
+}
+
+app.post('/auth/register', async (req, res) => {
+  const nickname = String(req.body?.nickname ?? '').trim();
+  const password = String(req.body?.password ?? '');
+  const avatar = String(req.body?.avatar ?? '🐱');
+  if (nickname.length < 3 || nickname.length > PROFILE_LIMITS.nicknameMaxLength) {
+    return res.status(400).json({ error: `Nickname da 3 a ${PROFILE_LIMITS.nicknameMaxLength} caratteri` });
+  }
+  if (password.length < PROFILE_LIMITS.passwordMinLength) {
+    return res.status(400).json({ error: `Password di almeno ${PROFILE_LIMITS.passwordMinLength} caratteri` });
+  }
+  try {
+    const profile = await profiles.register(nickname, password, avatar);
+    const token = profiles.createSession(profile.id);
+    res.json({ token, profile: profiles.toPrivate(profile) });
+  } catch (err) {
+    if (String(err).includes('NICKNAME_TAKEN')) {
+      return res.status(409).json({ error: 'Nickname già in uso' });
+    }
+    console.error('register fallito:', err);
+    res.status(500).json({ error: 'Registrazione non riuscita' });
+  }
+});
+
+app.post('/auth/login', async (req, res) => {
+  const nickname = String(req.body?.nickname ?? '');
+  const password = String(req.body?.password ?? '');
+  const profile = await profiles.verify(nickname, password);
+  if (!profile) return res.status(401).json({ error: 'Nickname o password errati' });
+  const token = profiles.createSession(profile.id);
+  res.json({ token, profile: profiles.toPrivate(profile) });
+});
+
+app.post('/auth/logout', (req, res) => {
+  const token = bearerToken(req);
+  if (token) profiles.destroySession(token);
+  res.json({ ok: true });
+});
+
+/** Profilo del proprietario (inclusi URL di foto e clip audio). */
+app.get('/me', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(profiles.toPrivate(profile));
+});
+
+app.patch('/me', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const updated = profiles.update(profile.id, {
+    avatar: req.body?.avatar !== undefined ? String(req.body.avatar) : undefined,
+    musicId: req.body?.musicId,
+  });
+  if (!updated) return res.status(404).json({ error: 'Profilo non trovato' });
+  res.json(profiles.toPrivate(updated));
+});
+
+app.get('/me/sfx', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  res.json({ sfx: profiles.listSfx(profile.id) });
+});
+
+/* ---------------- Foto profilo ---------------- */
+
+app.put('/me/photo', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const decoded = decodeDataUrl(req.body?.dataUrl, {
+    maxBytes: PROFILE_LIMITS.photoMaxBytes,
+    mimePrefix: 'image/',
+  });
+  if ('error' in decoded) return res.status(400).json(decoded);
+  const updatedAt = profiles.setPhoto(profile.id, decoded.data, decoded.mime);
+  res.json({ photoUrl: `/profiles/${profile.id}/photo?v=${updatedAt}`, photoUpdatedAt: updatedAt });
+});
+
+app.delete('/me/photo', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  profiles.clearPhoto(profile.id);
+  res.json({ ok: true });
+});
+
+/**
+ * Foto di un profilo. È PUBBLICA: in stanza gli altri vedono l'avatar, e se il
+ * giocatore ha caricato una foto la mostriamo al posto dell'emoji (scelta di
+ * prodotto: la foto è l'"avatar grande"). Le registrazioni audio restano private.
+ */
+app.get('/profiles/:id/photo', (req, res) => {
+  const photo = profiles.getPhoto(String(req.params.id));
+  if (!photo) return res.status(404).end();
+  res.setHeader('Content-Type', photo.mime);
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.send(photo.data);
+});
+
+/* ---------------- Clip audio (private) ---------------- */
+
+app.put('/me/sfx/:slot', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const slot = String(req.params.slot);
+  if (!isSfxSlot(slot)) return res.status(400).json({ error: 'Fascia non valida' });
+  const decoded = decodeDataUrl(req.body?.dataUrl, {
+    maxBytes: PROFILE_LIMITS.sfxMaxBytes,
+    mimePrefix: 'audio/',
+  });
+  if ('error' in decoded) return res.status(400).json(decoded);
+  const durationMs = Math.min(Number(req.body?.durationMs ?? 0) || 0, PROFILE_LIMITS.sfxMaxDurationMs);
+  const sfx = profiles.setSfx(profile.id, slot, decoded.data, decoded.mime, durationMs);
+  res.json(sfx);
+});
+
+app.delete('/me/sfx/:slot', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const slot = String(req.params.slot);
+  if (!isSfxSlot(slot)) return res.status(400).json({ error: 'Fascia non valida' });
+  profiles.deleteSfx(profile.id, slot);
+  res.json({ ok: true });
+});
+
+/**
+ * Clip audio di un profilo. Richiede il token del PROPRIETARIO: le registrazioni
+ * sono private (l'utente sente solo i propri suoni).
+ */
+app.get('/profiles/:id/sfx/:slot', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  if (profile.id !== String(req.params.id)) return res.status(403).json({ error: 'Clip non tua' });
+  const slot = String(req.params.slot);
+  if (!isSfxSlot(slot)) return res.status(400).json({ error: 'Fascia non valida' });
+  const sfx = profiles.getSfx(profile.id, slot);
+  if (!sfx) return res.status(404).end();
+  res.setHeader('Content-Type', sfx.mime);
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.send(sfx.data);
 });
 
 /* ------------------------------------------------------------------ */
@@ -253,10 +442,13 @@ app.post('/admin/schede/genera', async (req, res) => {
   });
 });
 
-// Fallback SPA: tutte le rotte non-API vanno a index.html.
-// Aggiunto DOPO le rotte API (preview, schede, admin, dictionary, health) per non oscurarle.
+// Fallback SPA e asset statici: DOPO tutte le rotte API (schede, preview, admin,
+// auth, profili, dizionario, health) per non oscurarle.
 if (servesWeb) {
-  app.get(/^\/(?!socket\.io|dictionary|health|preview|schede|admin).*/, (_req, res) => {
+  // Gli asset statici (inclusi `/schede/*.json` del bundle offline) si servono
+  // solo se nessuna rotta API ha gia' risposto.
+  app.use(express.static(WEB_DIST, { maxAge: '1h', index: false }));
+  app.get(/^\/(?!socket\.io|dictionary|health|preview|schede|admin|auth|me|profiles).*/, (_req, res) => {
     res.sendFile(path.join(WEB_DIST, 'index.html'));
   });
   console.log(`✓ Frontend statico servito da ${WEB_DIST}`);
@@ -273,6 +465,17 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const socketState = new Map<string, { code: string; playerId: string }>();
 
 const errorPayload = (code: string, message: string): ErrorPayload => ({ code, message });
+
+/** Profilo a partire da un token Socket.IO, o null se assente/non valido. */
+function resolveProfile(token: unknown) {
+  if (typeof token !== 'string' || !token) return null;
+  return profiles.getByToken(token);
+}
+
+/** URL pubblico della foto, se il profilo ne ha una. */
+function photoUrlFor(profile: { id: string; hasPhoto: boolean; photoUpdatedAt: number | null }): string | null {
+  return profile.hasPhoto ? `/profiles/${profile.id}/photo?v=${profile.photoUpdatedAt ?? 0}` : null;
+}
 
 /**
  * Tetto di parole enumerate in una scheda generata dall'admin.
@@ -305,8 +508,16 @@ io.on('connection', (socket) => {
       const difficulty = isValidDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
       const roundDurationMs = clampDuration(payload?.roundDurationMs);
       const room = registry.create(gridSize, rounds, difficulty, roundDurationMs);
+      // Profilo (se loggato): nome, avatar, foto pubblica e musica preferita.
+      const profile = resolveProfile(payload?.token);
+      if (profile) room.setMusic(profile.musicId);
       const playerId = randomUUID();
-      const player = room.addPlayer(playerId, payload?.nickname ?? 'Host', payload?.avatar);
+      const player = room.addPlayer(
+        playerId,
+        profile?.nickname ?? payload?.nickname ?? 'Host',
+        profile?.avatar ?? payload?.avatar,
+        profile ? { id: profile.id, photoUrl: photoUrlFor(profile) } : null,
+      );
       player.socketId = socket.id;
       socket.join(room.code);
       socketState.set(socket.id, { code: room.code, playerId });
@@ -333,8 +544,14 @@ io.on('connection', (socket) => {
     } else {
       if (room.phase !== 'lobby') return ack(errorPayload('GAME_STARTED', 'Partita gia\' iniziata'));
       if (room.isFull) return ack(errorPayload('ROOM_FULL', 'Stanza piena'));
+      const profile = resolveProfile(payload?.token);
       playerId = randomUUID();
-      const player = room.addPlayer(playerId, payload?.nickname ?? 'Giocatore', payload?.avatar);
+      const player = room.addPlayer(
+        playerId,
+        profile?.nickname ?? payload?.nickname ?? 'Giocatore',
+        profile?.avatar ?? payload?.avatar,
+        profile ? { id: profile.id, photoUrl: photoUrlFor(profile) } : null,
+      );
       player.socketId = socket.id;
     }
     socket.join(room.code);
@@ -395,7 +612,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs }) => {
+  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId }) => {
     const st = socketState.get(socket.id);
     const room = registry.get(code);
     if (!room || !st || st.code !== room.code) return;
@@ -405,6 +622,8 @@ io.on('connection', (socket) => {
     if (isValidDifficulty(difficulty)) room.difficulty = difficulty;
     room.rounds = clampRounds(rounds);
     room.roundDurationMs = clampDuration(roundDurationMs);
+    // La musica la scegle l'host e vale per tutti.
+    if (musicId !== undefined) room.setMusic(musicId);
     broadcastState(room);
   });
 

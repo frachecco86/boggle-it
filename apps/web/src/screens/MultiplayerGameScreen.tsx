@@ -174,7 +174,7 @@ export function MultiplayerGameScreen() {
                 <li key={p.id} className={`player-row${p.id === playerId ? ' player-row--you' : ''}`}>
                   <span className="player-row__rank">{i + 1}</span>
                   <span className="player-row__avatar" aria-hidden>
-                    {p.avatar}
+                    {p.photoUrl ? <img src={p.photoUrl} alt="" /> : p.avatar}
                   </span>
                   <span className="player-row__name">
                     {p.nickname}

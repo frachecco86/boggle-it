@@ -1,9 +1,12 @@
-# Boggle-IT
+# Sbooble
 
-Gioco web in italiano ispirato a Boggle. Single player e multiplayer con codice stanza.
+Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
+Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.1** — vedi [`SPEC.md`](./SPEC.md) per la specifica completa.
+> **Stato: v0.5.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> e nella pagina **Novità** dell'app (numero di versione in alto a destra).
+> Specifica completa in [`SPEC.md`](./SPEC.md).
 
 ---
 
@@ -27,6 +30,18 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Catalogo schede in home**: numero totale sempre visibile; **pagina scheda** con la griglia
   e tutte le parole trovabili raggruppate per lunghezza; **pannello admin** con token per
   generarerne di nuove.
+- **Profili persistenti** (opzionali): più profili salvati sul dispositivo con switch rapido,
+  registrazione/acceso con nickname e password (scrypt, SQLite). Il profilo porta con sé
+  avatar, **foto** e **suoni personali**.
+- **Foto profilo con filtri** applicati localmente (canvas): cartoon, fumetto, poster, schizzo,
+  seppia. La foto originale non lascia il dispositivo: si carica solo il risultato 256×256.
+- **Suoni personali delle parole**: registri una clip per 5 fasce di lunghezza (3/4/5/6/7+);
+  le senti tu quando trovi una parola. Se non registri nulla, si usa il suono sintetizzato.
+- **Musica di sottofondo reale** (non generata): 6 tracce **CC0** incluse nel bundle
+  (OpenGameArt). L'host scegle la traccia della stanza; ognuno può sceglere la propria per
+  il single player.
+- **App Android** (Capacitor): single player, foto e audio funzionano **offline** (schede e
+  tracce incluse nell'APK); multiplayer e sincronizzazione profili quando c'è rete.
 - **Single player**: partita multi-round con riepilogo parole trovate e mancate.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
@@ -67,6 +82,27 @@ pnpm dev
 
 Il client **non scarica più il dizionario**: le parole valide arrivano dalle schede
 pre-calcolate (JSON) servite dal server, quindi l'avvio è immediato.
+
+### Icone e versione
+
+```bash
+node tools/gen-icon.mjs     # rigenera icone Android e web (margherita), senza dipendenze
+```
+
+Il numero di versione sta in `apps/web/src/version.ts` insieme alle note di rilascio;
+nell'app compare in alto a destra e apre la pagina **Novità**.
+
+### App Android
+
+```bash
+# URL del server per il multiplayer (una volta sola)
+echo 'VITE_SERVER_URL=https://tuo-server.up.railway.app' > .env
+
+pnpm --filter @boggle/web cap:sync    # builda il web + sincronizza Android
+cd apps/web/android && ./gradlew assembleDebug
+```
+
+Guida completa (requisiti, firma, store gratuiti): [`docs/ANDROID.md`](docs/ANDROID.md).
 
 ### Schede
 
@@ -154,6 +190,8 @@ sempre: un client manomesso non può inventare parole o percorsi.
 |---|---|---|
 | [Morph-it! 0.48](https://docs.sslmit.unibo.it/doku.php?id=resources:morph-it) (UniBO) | forme flesse, coniugazioni verbali | CC BY-SA 2.0 / LGPL |
 | [paroleitaliane](https://github.com/napolux/paroleitaliane) (napolux) | lessico comune | MIT |
+| [OpenGameArt](https://opengameart.org) (MintoDog, HydroGene, Bobjt, Wolfgang_, TinyWorlds) | 6 tracce musicali | CC0 1.0 |
+| [Google Fonts](https://fonts.google.com) (Baloo 2, Fredoka) | font dell'interfaccia | OFL 1.1 |
 | [Wikizionario](https://it.wiktionary.org/wiki/Appendice:Abbreviazioni) | abbreviazioni | CC BY-SA 3.0 |
 
 Pipeline di build (`packages/dictionary/scripts/`):

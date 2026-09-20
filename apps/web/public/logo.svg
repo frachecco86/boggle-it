@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sbooble">
+  <title>Sbooble</title>
+  <!-- Sfondo tondo chiaro -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#fffdf5"/>
+      <stop offset="100%" stop-color="#ffeeba"/>
+    </radialGradient>
+    <linearGradient id="petal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffe2f0"/>
+    </linearGradient>
+    <linearGradient id="petal2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff6fb"/>
+      <stop offset="100%" stop-color="#ffd0e6"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="248" fill="url(#bg)"/>
+
+  <!-- 12 petali, alternati per profondita' -->
+  <g stroke="#ffb3d4" stroke-width="6">
+    <g fill="url(#petal)">
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(0 256 256)"/>
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(60 256 256)"/>
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(120 256 256)"/>
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(180 256 256)"/>
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(240 256 256)"/>
+      <ellipse cx="256" cy="120" rx="52" ry="82" transform="rotate(300 256 256)"/>
+    </g>
+    <g fill="url(#petal2)">
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(30 256 256)"/>
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(90 256 256)"/>
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(150 256 256)"/>
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(210 256 256)"/>
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(270 256 256)"/>
+      <ellipse cx="256" cy="120" rx="46" ry="74" transform="rotate(330 256 256)"/>
+    </g>
+  </g>
+
+  <!-- Centro: faccina sorridente -->
+  <circle cx="256" cy="256" r="92" fill="#ffd23f" stroke="#e8a800" stroke-width="7"/>
+  <g fill="#5a4300">
+    <ellipse cx="224" cy="236" rx="10" ry="13"/>
+    <ellipse cx="288" cy="236" rx="10" ry="13"/>
+  </g>
+  <path d="M214 282 q42 40 84 0" fill="none" stroke="#5a4300" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="205" cy="268" r="14" fill="#ff9ec4" opacity="0.75"/>
+  <circle cx="307" cy="268" r="14" fill="#ff9ec4" opacity="0.75"/>
+</svg>

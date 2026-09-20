@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sbooble</string>
+    <string name="title_activity_main">Sbooble</string>
+    <string name="package_name">it.boggle.app</string>
+    <string name="custom_url_scheme">it.boggle.app</string>
+</resources>
