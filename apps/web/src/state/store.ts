@@ -135,7 +135,13 @@ interface AppState {
   setAvatar: (a: Avatar) => void;
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
   setAudioSettings: (next: Partial<AudioSettings>) => void;
-  createRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => Promise<void>;
+  createRoom: (
+    gridSize: GridSize,
+    difficulty: Difficulty,
+    rounds: number,
+    roundDurationMs: number,
+    maxPlayers?: number,
+  ) => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
   configureRoom: (
@@ -144,6 +150,7 @@ interface AppState {
     rounds: number,
     roundDurationMs: number,
     musicId?: MusicId | 'none',
+    maxPlayers?: number,
   ) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
   leaveRoom: () => void;
@@ -534,14 +541,23 @@ export const useAppStore = create<AppState>()(
         set({ audioSettings: audio.getSettings() });
       },
 
-      createRoom: async (gridSize, difficulty, rounds, roundDurationMs) => {
+      createRoom: async (gridSize, difficulty, rounds, roundDurationMs, maxPlayers) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Host';
         const avatar = get().avatar || avatarFromNickname(nickname);
         await new Promise<void>((resolve, reject) => {
           socket.emit(
             'room:create',
-            { nickname, avatar, gridSize, difficulty, rounds, roundDurationMs, token: activeToken() ?? undefined },
+            {
+              nickname,
+              avatar,
+              gridSize,
+              difficulty,
+              rounds,
+              roundDurationMs,
+              maxPlayers,
+              token: activeToken() ?? undefined,
+            },
             (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
@@ -593,10 +609,19 @@ export const useAppStore = create<AppState>()(
         getSocket().emit('room:start', { code });
       },
 
-      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId) => {
+      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers) => {
         const code = get().roomCode;
         if (!code) return;
-        getSocket().emit('room:config', { code, gridSize, difficulty, rounds, roundDurationMs, musicId });
+        getSocket().emit('room:config', {
+          code,
+          gridSize,
+          difficulty,
+          rounds,
+          roundDurationMs,
+          musicId,
+          // Se non specificato manteniamo quello attuale della stanza.
+          maxPlayers: maxPlayers ?? get().room?.maxPlayers ?? 8,
+        });
       },
 
       submitWord: async (word, path) => {

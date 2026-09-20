@@ -1,15 +1,19 @@
 /**
- * Punteggio Boggle (regola classica, adattata).
+ * Punteggio: 1 punto ogni 3 lettere.
  *
- * Regola ufficiale: 1 punto per una parola di 3 lettere, poi un punto in più per
- * ogni lettera aggiuntiva → punti = lunghezza − 2.
- * Esempi: CAT = 1, CASA = 2, STRADA = 4, ASTRONAUTA = 8.
+ * Formula: ⌊lunghezza / 3⌋
+ *   3-5 lettere  → 1 punto
+ *   6-8 lettere  → 2 punti
+ *   9-11 lettere → 3 punti
+ *   12+ lettere  → 4 punti
  *
- * Le schede sono progettate per contenere parole molto lunghe (fino a 16 lettere),
- * quindi la formula è lineare e non si ferma a 8 lettere.
+ * Prima si usava la regola classica del Boggle (lunghezza − 2), che dava punteggi
+ * crescenti e molto alti per le parole lunghe (una parola da 10 valeva 8 punti).
+ * Con questa formula le parole lunghe restano avvantaggiate in proporzione, ma i
+ * punteggi sono più bassi e leggibili.
  *
  * Nel multiplayer una parola trovata da UN SOLO giocatore vale doppio (vedi
- * `scoreForWord(word, { unique: true })`).
+ * `scoreForRound`).
  */
 export const MIN_WORD_LENGTH = 3;
 export const MAX_WORD_LENGTH = 16;
@@ -18,7 +22,7 @@ export const MAX_WORD_LENGTH = 16;
 export function scoreForWord(word: string): number {
   const len = word.length;
   if (len < MIN_WORD_LENGTH) return 0;
-  return len - 2;
+  return Math.floor(len / 3);
 }
 
 /**

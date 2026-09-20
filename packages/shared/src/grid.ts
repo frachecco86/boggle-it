@@ -37,6 +37,8 @@ export const COMPOSITION: Record<Difficulty, DifficultyComposition> = {
   facile: { vowels: { min: 0.34, max: 0.44 }, rareMax: 0.0625 },
   normale: { vowels: { min: 0.28, max: 0.38 }, rareMax: 0.125 },
   difficile: { vowels: { min: 0.22, max: 0.32 }, rareMax: 0.19 },
+  // Estremo: pochissime vocali, molte consonanti rare. Pensato per parole lunghe.
+  estremo: { vowels: { min: 0.16, max: 0.26 }, rareMax: 0.25 },
 };
 
 /** Lettere rare/straniere che rendono il gioco difficile. */

@@ -34,6 +34,12 @@ export interface SchedaPoolOptions {
    * Non entrano nel lessico comune dei livelli facili.
    */
   protectedWords?: Iterable<string>;
+  /**
+   * Parole funzionali da ESCLUDERE (articoli, preposizioni, congiunzioni).
+   * Vedi `packages/dictionary/data/function-words.txt`: non ha senso "trovare"
+   * un articolo in una griglia.
+   */
+  functionWords?: Iterable<string>;
 }
 
 /** true se la parola termina in consonante nella forma normalizzata. */
@@ -52,8 +58,12 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
     [...(options.allowedConsonantEndings ?? [])].map(normalizeWord).filter(Boolean),
   );
   const protectedSet = new Set([...options.protectedWords ?? []].map(normalizeWord).filter(Boolean));
+  /** Parole grammaticali escluse dalle schede (articoli, preposizioni). */
+  const functionSet = new Set([...options.functionWords ?? []].map(normalizeWord).filter(Boolean));
   /** Filtro: tiene solo le parole che terminano in vocale o sono esplicitamente ammesse. */
   const keep = (w: string): boolean => {
+    // Le parole funzionali sono sempre escluse, anche se terminano in vocale.
+    if (functionSet.has(w)) return false;
     if (!dropTruncated) return true;
     if (!endsInConsonant(w)) return true;
     return allowedEndings.has(w) || protectedSet.has(w);
@@ -67,15 +77,22 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
    * restavano non componibili anche dopo aver corretto il filtro.
    * La lista bianca e' gia' curata (nessun troncamento), quindi non reintroduce rumore.
    */
+  /*
+   * NOTA: `allowedEndings` va filtrato con `keep()` come tutto il resto.
+   * Prima veniva concatenato DOPO il filtro, quindi le parole funzionali presenti
+   * nella lista bianca (`con`, `col`) rientravano comunque nel trie e comparivano
+   * nelle schede nonostante fossero state escluse.
+   */
+  const allowedKept = [...allowedEndings].filter((w) => keep(w));
   const commonList = [
     ...new Set([
       ...[...options.commonWords].map(normalizeWord).filter((w) => w && keep(w)),
-      ...allowedEndings,
+      ...allowedKept,
     ]),
   ];
   const commonSet = new Set(commonList);
   const fullList = [
-    ...new Set([...[...options.fullWords].map(normalizeWord).filter((w) => w && keep(w)), ...allowedEndings]),
+    ...new Set([...[...options.fullWords].map(normalizeWord).filter((w) => w && keep(w)), ...allowedKept]),
   ];
   const tries: SchedaTries = {
     full: buildTrie(fullList, { maxLength }),

@@ -8,7 +8,7 @@
  */
 import type { GridSize } from './types.js';
 
-export type Difficulty = 'molto-facile' | 'facile' | 'normale' | 'difficile';
+export type Difficulty = 'molto-facile' | 'facile' | 'normale' | 'difficile' | 'estremo';
 
 export interface DifficultyMeta {
   id: Difficulty;
@@ -27,7 +27,13 @@ export interface DifficultyMeta {
   };
 }
 
-export const DIFFICULTY_ORDER: Difficulty[] = ['molto-facile', 'facile', 'normale', 'difficile'];
+export const DIFFICULTY_ORDER: Difficulty[] = [
+  'molto-facile',
+  'facile',
+  'normale',
+  'difficile',
+  'estremo',
+];
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
   'molto-facile': {
@@ -74,12 +80,22 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
       accentSoft: '#ef85b2',
     },
   },
+  estremo: {
+    id: 'estremo',
+    label: 'Estremo',
+    description:
+      'Vocabolario più ampio e pochissime vocali: servono parole di 9-10 lettere per fare punti.',
+    theme: {
+      background: 'radial-gradient(1200px 800px at 50% -10%, #f3eefb 0%, #e5dcf5 55%, #d8cbee 100%)',
+      surface: '#ffffff',
+      accent: '#7c3aed',
+      accentSoft: '#a78bfa',
+    },
+  },
 };
 
 export function isDifficulty(value: unknown): value is Difficulty {
-  return (
-    value === 'molto-facile' || value === 'facile' || value === 'normale' || value === 'difficile'
-  );
+  return DIFFICULTY_ORDER.includes(value as Difficulty);
 }
 
 /** Durate di round selezionabili (secondi). */

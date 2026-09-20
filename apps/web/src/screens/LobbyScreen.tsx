@@ -68,7 +68,10 @@ export function LobbyScreen() {
       </button>
 
       <section className="lobby__section">
-        <h3 className="summary__label">Giocatori ({room.players.length})</h3>
+        <h3 className="summary__label">
+          Giocatori ({room.players.length}/{room.maxPlayers})
+          {room.players.length >= room.maxPlayers && ' — stanza piena'}
+        </h3>
         <ul className="player-list">
           {room.players.map((p) => (
             <li key={p.id} className={`player-row${p.connected ? '' : ' player-row--off'}`}>
@@ -147,6 +150,28 @@ export function LobbyScreen() {
               ))}
             </div>
 
+            <span className="field__label">Numero massimo di giocatori</span>
+            <div className="rounds-options">
+              {[2, 4, 8].map((n) => (
+                <button
+                  key={n}
+                  className={`pill${room.maxPlayers === n ? ' pill--active' : ''}`}
+                  onClick={() =>
+                    configureRoom(
+                      room.gridSize,
+                      room.difficulty,
+                      room.rounds,
+                      room.roundDurationMs,
+                      room.musicId,
+                      n,
+                    )
+                  }
+                >
+                  {n === 2 ? '2 (sfida)' : n}
+                </button>
+              ))}
+            </div>
+
             <span className="field__label">Round</span>
             <div className="rounds-options">
               {[1, 3, 5].map((r) => (
@@ -177,7 +202,7 @@ export function LobbyScreen() {
           <div className="settings-readonly">
             <span>
               {activeDifficulty.label} · {room.gridSize}×{room.gridSize} · {room.roundDurationMs / 1000}s ·{' '}
-              {room.rounds} round
+              {room.rounds} round · max {room.maxPlayers} giocatori
             </span>
           </div>
         )}

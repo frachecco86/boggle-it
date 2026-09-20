@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '0.9.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,44 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.9.0',
+    date: '2026-09-20',
+    title: 'Estremo, 5 livelli, punteggio rinnovato e sfida a 2',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          'Nuovo livello **Estremo**: pochissime vocali e molte consonanti rare, per chi vuole il massimo. Cinque livelli in tutto: molto facile, facile, normale, difficile, estremo.',
+          '**Sfida a 2**: in lobby l\'host sceglie il numero massimo di giocatori (2, 4 o 8). Con 2 il terzo giocatore viene rifiutato con "stanza piena".',
+          'Ogni scheda ora contiene **una parola per ogni lunghezza**: 4×4 → 5-7 lettere, 5×5 → 5-9, 6×6 → 5-10. Le schede 6×6 arrivano a 12 lettere.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Punteggio**: 1 punto ogni 3 lettere (prima era lunghezza − 2). 3-5 lettere = 1 punto, 6-8 = 2, 9-11 = 3, 12+ = 4.',
+          'Le schede usano il **dizionario completo** (387k forme) invece del lessico comune: parole comunissime come `vota`, `votare`, `cliccare`, `condividere` non erano componibili perché mancavano dal lessico ridotto.',
+          'Escluse le **parole funzionali** (articoli, preposizioni, congiunzioni): non ha senso trovare `il` o `nel` in una griglia.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          'Corretto un bug per cui il livello **Estremo** veniva rifiutato e la partita partiva come "normale": il server aveva una copia locale della validazione con l\'elenco hardcoded, che non era stata aggiornata. Ora usa la funzione condivisa.',
+          'Corretto un bug per cui le parole funzionali nella lista bianca (`con`, `col`) entravano comunque nelle schede: la lista veniva aggiunta dopo il filtro.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Schede: 360 totali (24 per ognuna delle 15 combinazioni dimensione × difficoltà).',
+          'Filtro dei troncamenti verificato: 0 parole funzionali residue su 73.000 parole, 0 schede fuori dai requisiti di lunghezza.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.8.0',
     date: '2026-09-20',

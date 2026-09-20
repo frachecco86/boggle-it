@@ -1,0 +1,14 @@
+import { io } from 'socket.io-client';
+const URL='http://localhost:3001';
+const once=(s,e)=>new Promise(r=>s.once(e,r));
+const ack=(s,e,p)=>new Promise(r=>s.emit(e,p,r));
+const a=io(URL,{transports:['websocket']}); await once(a,'connect');
+const c=await ack(a,'room:create',{nickname:'A',avatar:'🐱',gridSize:4,difficulty:'estremo',rounds:1,roundDurationMs:90000,maxPlayers:2});
+console.log('creata: maxPlayers =', c.state.maxPlayers, '| difficolta =', c.state.difficulty);
+const b=io(URL,{transports:['websocket']}); await once(b,'connect');
+const jb=await ack(b,'room:join',{code:c.roomCode,nickname:'B',avatar:'🐶'});
+console.log('secondo entrato:', jb.ok, '| giocatori:', jb.state.players.length, '/', jb.state.maxPlayers);
+const d=io(URL,{transports:['websocket']}); await once(d,'connect');
+const jd=await ack(d,'room:join',{code:c.roomCode,nickname:'C',avatar:'🦊'});
+console.log('terzo tentativo:', jd.ok ? 'ENTRATO (errore!)' : jd.message);
+a.close(); b.close(); d.close(); process.exit(0);

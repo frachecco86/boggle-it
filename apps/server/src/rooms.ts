@@ -71,6 +71,8 @@ export class Room {
   difficulty: Difficulty;
   rounds: number;
   roundDurationMs: number;
+  /** Numero massimo di giocatori: 2 (sfida), 4 o 8 (partita allargata). */
+  maxPlayers: number;
   currentRound = 0;
   phase: RoomState['phase'] = 'lobby';
   grid: Grid | null = null;
@@ -100,6 +102,7 @@ export class Room {
     rounds = 3,
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+    maxPlayers: number = 8,
   ) {
     this.code = code;
     this.hostId = '';
@@ -107,6 +110,7 @@ export class Room {
     this.rounds = rounds;
     this.difficulty = difficulty;
     this.roundDurationMs = roundDurationMs;
+    this.maxPlayers = maxPlayers;
     this.dictionary = dictionary;
   }
 
@@ -116,8 +120,17 @@ export class Room {
     rounds: number,
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+    maxPlayers: number = 8,
   ): Room {
-    return new Room(generateRoomCode(), dictionary, gridSize, rounds, difficulty, roundDurationMs);
+    return new Room(
+      generateRoomCode(),
+      dictionary,
+      gridSize,
+      rounds,
+      difficulty,
+      roundDurationMs,
+      maxPlayers,
+    );
   }
 
   addPlayer(
@@ -145,7 +158,7 @@ export class Room {
   }
 
   get isFull(): boolean {
-    return this.players.size >= 8;
+    return this.players.size >= this.maxPlayers;
   }
 
   publicState(): RoomState {
@@ -156,6 +169,7 @@ export class Room {
       difficulty: this.difficulty,
       rounds: this.rounds,
       roundDurationMs: this.roundDurationMs,
+      maxPlayers: this.maxPlayers,
       currentRound: this.currentRound,
       phase: this.phase,
       players: this.publicPlayers(),
@@ -332,11 +346,12 @@ export class RoomRegistry {
     rounds = 3,
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+    maxPlayers: number = 8,
   ): Room {
     let room: Room;
     let attempts = 0;
     do {
-      room = Room.create(this.dictionary, gridSize, rounds, difficulty, roundDurationMs);
+      room = Room.create(this.dictionary, gridSize, rounds, difficulty, roundDurationMs, maxPlayers);
       attempts++;
     } while (this.rooms.has(room.code) && attempts < 200);
     this.rooms.set(room.code, room);

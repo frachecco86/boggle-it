@@ -18,14 +18,16 @@ function pool() {
 }
 
 describe('generatore schede', () => {
-  it('TUTTI i livelli risolvono contro il lessico comune', () => {
-    // Scelta di prodotto: la difficoltà viene dalla griglia (meno vocali, più
-    // consonanti rare), non da parole astruse. Prima `normale` e `difficile`
-    // usavano il dizionario completo e solo il 46% delle parole era di uso comune.
-    expect(solvingTrieFor('molto-facile')).toBe('common');
-    expect(solvingTrieFor('facile')).toBe('common');
-    expect(solvingTrieFor('normale')).toBe('common');
-    expect(solvingTrieFor('difficile')).toBe('common');
+  it('TUTTI i livelli risolvono contro il dizionario completo', () => {
+    // Scelta di prodotto: il lessico comune (60k) aveva lacune sui verbi —
+    // 'vota', 'votare', 'cliccare', 'condividere' mancavano del tutto, quindi
+    // parole comunissime non erano componibili. Ora si usa il dizionario completo
+    // (387k forme) filtrato per troncamenti e parole funzionali.
+    expect(solvingTrieFor('molto-facile')).toBe('full');
+    expect(solvingTrieFor('facile')).toBe('full');
+    expect(solvingTrieFor('normale')).toBe('full');
+    expect(solvingTrieFor('difficile')).toBe('full');
+    expect(solvingTrieFor('estremo')).toBe('full');
   });
 
   it('genera una scheda coerente con la sua griglia', () => {
@@ -87,9 +89,11 @@ describe('generatore schede', () => {
     expect(wordFromPath(grid, [0, 1])).toBe('qua');
   });
 
-  it('scoreForWord resta lineare anche oltre le 8 lettere', () => {
-    expect(scoreForWord('cassaforte')).toBe(8);
-    expect(scoreForWord('x'.repeat(16))).toBe(14);
+  it('scoreForWord cresce ogni 3 lettere anche oltre le 8', () => {
+    // 'cassaforte' = 10 lettere → 3 punti.
+    expect(scoreForWord('cassaforte')).toBe(3);
+    // 16 lettere → 5 punti.
+    expect(scoreForWord('x'.repeat(16))).toBe(5);
   });
 });
 

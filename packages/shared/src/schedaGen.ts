@@ -64,31 +64,48 @@ const QUALITY: Record<GridSize, {
   minWords: number;
   /** Numero minimo di parole per ogni soglia di lunghezza. */
   minByLength: { length: number; count: number }[];
+  /**
+   * Lunghezze che DEVONO essere presenti almeno una volta ciascuna.
+   *
+   * Perché: si vuole che ogni scheda contenga una scala completa di lunghezze
+   * diverse, così il giocatore trova sempre parole di taglie diverse.
+   * I valori sono tarati misurando la fattibilità su 2000 griglie: con "scala
+   * completa + soglie alte" si ottiene una scheda valida in ~4-13 tentativi.
+   *
+   * I limiti sono geometrici: su 4x4 servono 11 celle adiacenti in sequenza per
+   * una parola da 11 lettere, impossibile su 16 celle. Su 4x4 la più lunga
+   * raggiungibile in pratica è 8.
+   */
+  oneEachOf: number[];
 }> = {
   4: {
     minWords: 12,
-    // 9+ impossibile su 16 celle.
     minByLength: [
+      { length: 6, count: 3 },
       { length: 7, count: 2 },
       { length: 8, count: 1 },
     ],
+    // 9+ impossibile su 16 celle.
+    oneEachOf: [5, 6, 7],
   },
   5: {
     minWords: 25,
     minByLength: [
-      { length: 7, count: 5 },
-      { length: 8, count: 2 },
-      { length: 9, count: 1 },
+      { length: 7, count: 6 },
+      { length: 8, count: 3 },
+      { length: 9, count: 2 },
     ],
+    oneEachOf: [5, 6, 7, 8, 9],
   },
   6: {
     minWords: 45,
     minByLength: [
-      { length: 7, count: 10 },
-      { length: 8, count: 5 },
-      { length: 9, count: 3 },
-      { length: 10, count: 1 },
+      { length: 7, count: 12 },
+      { length: 8, count: 7 },
+      { length: 9, count: 4 },
+      { length: 10, count: 2 },
     ],
+    oneEachOf: [5, 6, 7, 8, 9, 10],
   },
 };
 
@@ -103,7 +120,7 @@ const QUALITY: Record<GridSize, {
  * Il dizionario completo resta disponibile per usi futuri (es. una modalità "esperto").
  */
 export function solvingTrieFor(_difficulty: Difficulty): 'common' | 'full' {
-  return 'common';
+  return 'full';
 }
 
 /**
@@ -134,10 +151,19 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
       if (w.length > longest) longest = w.length;
     }
 
-    // Ogni soglia richiesta deve essere soddisfatta: "almeno N parole di almeno L lettere".
+    // 1. Scala completa: ogni lunghezza richiesta deve essere presente.
+    let ok = true;
+    for (const len of rules.oneEachOf) {
+      if (!byLength.has(len)) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+
+    // 2. Soglie per fascia: "almeno N parole di almeno L lettere".
     // Uso "almeno L" e non "esattamente L", così una parola da 10 conta anche per la
     // soglia delle 9: è ciò che il giocatore percepisce ("ho trovato parole lunghe").
-    let ok = true;
     for (const rule of rules.minByLength) {
       let count = 0;
       for (const [len, n] of byLength) {

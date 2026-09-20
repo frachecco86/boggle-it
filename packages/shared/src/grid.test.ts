@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { COMPOSITION, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
+import { DIFFICULTY_ORDER, isDifficulty } from './difficulty.js';
 import { normalizeWord, scoreForWord, scoreForRound, generateRoomCode } from './scoring.js';
 import type { Tile } from './types.js';
 
@@ -8,22 +9,32 @@ const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
 });
 
 describe('scoring', () => {
-  it('applica la regola classica: lunghezza − 2', () => {
+  it('assegna 1 punto ogni 3 lettere', () => {
     expect(scoreForWord('ab')).toBe(0);
+    // 3-5 lettere → 1 punto
     expect(scoreForWord('abc')).toBe(1);
-    expect(scoreForWord('abcd')).toBe(2);
-    expect(scoreForWord('abcde')).toBe(3);
-    expect(scoreForWord('abcdef')).toBe(4);
-    expect(scoreForWord('abcdefg')).toBe(5);
-    expect(scoreForWord('abcdefgh')).toBe(6);
-    expect(scoreForWord('abcdefghi')).toBe(7);
-    expect(scoreForWord('abcdefghijklmnop')).toBe(14);
+    expect(scoreForWord('abcd')).toBe(1);
+    expect(scoreForWord('abcde')).toBe(1);
+    // 6-8 → 2 punti
+    expect(scoreForWord('abcdef')).toBe(2);
+    expect(scoreForWord('abcdefg')).toBe(2);
+    expect(scoreForWord('abcdefgh')).toBe(2);
+    // 9-11 → 3 punti
+    expect(scoreForWord('abcdefghi')).toBe(3);
+    expect(scoreForWord('abcdefghij')).toBe(3);
+    expect(scoreForWord('abcdefghijk')).toBe(3);
+    // 12+ → 4 punti
+    expect(scoreForWord('abcdefghijkl')).toBe(4);
+    expect(scoreForWord('abcdefghijklmnop')).toBe(5);
   });
 
   it('raddoppia i punti per una parola trovata da un solo giocatore', () => {
-    expect(scoreForRound('casa')).toBe(2);
-    expect(scoreForRound('casa', { unique: true })).toBe(4);
-    expect(scoreForRound('strada', { unique: true })).toBe(8);
+    // 'casa' = 4 lettere → 1 punto, doppio = 2.
+    expect(scoreForRound('casa')).toBe(1);
+    expect(scoreForRound('casa', { unique: true })).toBe(2);
+    // 'strada' = 6 lettere → 2 punti, doppio = 4.
+    expect(scoreForRound('strada')).toBe(2);
+    expect(scoreForRound('strada', { unique: true })).toBe(4);
   });
   it('normalizza accenti e simboli', () => {
     expect(normalizeWord('Perché')).toBe('perche');
@@ -120,5 +131,55 @@ describe('Difficoltà: composizione controllata', () => {
     expect(a).toBeGreaterThan(b);
     expect(b).toBeGreaterThan(c);
     expect(c).toBeGreaterThan(d);
+  });
+});
+
+describe('Difficoltà: validazione condivisa', () => {
+  it('accetta tutti i 5 livelli, incluso Estremo', () => {
+    // Regressione: il server aveva una copia locale della validazione con i
+    // confronti hardcoded. Aggiungendo 'estremo' non era stata aggiornata e il
+    // livello veniva rifiutato silenziosamente, ricadendo su 'normale'.
+    expect(isDifficulty('molto-facile')).toBe(true);
+    expect(isDifficulty('facile')).toBe(true);
+    expect(isDifficulty('normale')).toBe(true);
+    expect(isDifficulty('difficile')).toBe(true);
+    expect(isDifficulty('estremo')).toBe(true);
+  });
+
+  it('rifiuta valori non validi', () => {
+    expect(isDifficulty('inventata')).toBe(false);
+    expect(isDifficulty('')).toBe(false);
+    expect(isDifficulty(undefined)).toBe(false);
+    expect(isDifficulty(null)).toBe(false);
+    expect(isDifficulty(4)).toBe(false);
+  });
+
+  it('DIFFICULTY_ORDER contiene esattamente i livelli validi', () => {
+    expect(DIFFICULTY_ORDER).toHaveLength(5);
+    for (const d of DIFFICULTY_ORDER) expect(isDifficulty(d)).toBe(true);
+    expect(DIFFICULTY_ORDER[DIFFICULTY_ORDER.length - 1]).toBe('estremo');
+  });
+
+  it('ogni livello ha una composizione definita', () => {
+    for (const d of DIFFICULTY_ORDER) {
+      const comp = COMPOSITION[d];
+      expect(comp, `manca COMPOSITION per ${d}`).toBeDefined();
+      expect(comp!.vowels.min).toBeLessThan(comp!.vowels.max);
+    }
+    // Estremo ha meno vocali e più rare di Difficile.
+    expect(COMPOSITION.estremo.vowels.max).toBeLessThan(COMPOSITION.difficile.vowels.max);
+    expect(COMPOSITION.estremo.rareMax).toBeGreaterThan(COMPOSITION.difficile.rareMax);
+  });
+
+  it('genera griglie valide per Estremo', () => {
+    for (const size of [4, 5, 6] as const) {
+      for (let i = 0; i < 15; i++) {
+        const g = generateGrid(size, Math.random, 'estremo');
+        expect(g.tiles).toHaveLength(size * size);
+        const vowels = g.tiles.filter((t) => 'aeiou'.includes(t.letter)).length;
+        // Estremo: 16-26% di vocali.
+        expect(vowels / (size * size)).toBeLessThanOrEqual(0.3);
+      }
+    }
   });
 });

@@ -2,7 +2,7 @@
  * Genera le schede pre-calcolate e le scrive in `packages/shared/schede/`.
  *
  * Uso:
- *   pnpm gen:schede                      # tutte le combinazioni, 25 schede ciascuna (300 totali)
+ *   pnpm gen:schede                      # tutte le combinazioni, 24 schede ciascuna (360 totali: 5 livelli x 3 dimensioni)
  *   pnpm gen:schede -- --size 4 --difficolta normale --n 60
  *   pnpm gen:schede -- --size 4 --difficolta facile --n 40 --append
  *
@@ -18,6 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   createSchedaPool,
+  DIFFICULTY_ORDER,
   normalizeWord,
   schedaFileName,
   SCHEDA_FORMAT_VERSION,
@@ -33,7 +34,7 @@ const DICT_DIR = path.join(ROOT, 'packages/dictionary/data');
 const OUT_DIR = path.join(ROOT, 'packages/shared/schede');
 
 const ALL_SIZES: GridSize[] = [4, 5, 6];
-const ALL_DIFFICULTIES: Difficulty[] = ['molto-facile', 'facile', 'normale', 'difficile'];
+const ALL_DIFFICULTIES: Difficulty[] = DIFFICULTY_ORDER;
 
 function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -86,7 +87,7 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 function main(): void {
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : ALL_DIFFICULTIES;
-  const count = Number(arg('n', '25'));
+  const count = Number(arg('n', '24'));
   const append = hasFlag('append');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
@@ -108,7 +109,9 @@ function main(): void {
   console.log(`  lessico comune:      ${commonWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  finali in consonante ammessi: ${allowedConsonantEndings.length}`);
 
-  const pool = createSchedaPool({ fullWords, commonWords, allowedConsonantEndings });
+  const functionWords = readCuratedList('function-words.txt');
+  console.log(`  parole funzionali escluse: ${functionWords.length}`);
+  const pool = createSchedaPool({ fullWords, commonWords, allowedConsonantEndings, functionWords });
   mkdirSync(OUT_DIR, { recursive: true });
 
   for (const size of sizes) {

@@ -63,6 +63,8 @@ export interface RoomState {
   rounds: number;
   /** Durata di un round in millisecondi. */
   roundDurationMs: number;
+  /** Numero massimo di giocatori ammessi (2, 4 o 8). */
+  maxPlayers: number;
   currentRound: number;
   phase: GamePhase;
   players: PlayerPublic[];
@@ -88,6 +90,8 @@ export interface RoomCreatePayload {
   difficulty: Difficulty;
   rounds: number;
   roundDurationMs: number;
+  /** Numero massimo di giocatori (2, 4 o 8). Se assente, 8. */
+  maxPlayers?: number;
   /** Token del profilo, se il giocatore è loggato (per foto e avatar). */
   token?: string;
 }
@@ -122,6 +126,8 @@ export interface RoomConfigPayload {
   roundDurationMs: number;
   /** Musica di sottofondo per tutta la stanza (solo host). */
   musicId?: MusicId | 'none';
+  /** Numero massimo di giocatori (2, 4 o 8). */
+  maxPlayers?: number;
 }
 
 export interface SubmitWordPayload {

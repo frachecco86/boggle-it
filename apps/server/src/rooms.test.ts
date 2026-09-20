@@ -36,9 +36,9 @@ describe('Room.submitWord', () => {
     const res = room.submitWord('p1', 'casa', [0, 1, 2, 3]);
     expect(res.accepted).toBe(true);
     expect(res.word).toBe('casa');
-    // lunghezza − 2 = 2 punti base
-    expect(res.points).toBe(2);
-    expect(room.players.get('p1')!.totalScore).toBe(2);
+    // 1 punto ogni 3 lettere: 'casa' (4) → 1 punto base
+    expect(res.points).toBe(1);
+    expect(room.players.get('p1')!.totalScore).toBe(1);
   });
 
   it('rifiuta un percorso non adiacente', () => {
@@ -77,8 +77,8 @@ describe('Room.submitWord', () => {
     expect(room.submitWord('p1', 'casa', [0, 1, 2, 3]).accepted).toBe(true);
     expect(room.submitWord('p2', 'casa', [0, 1, 2, 3]).accepted).toBe(true);
     // I punti base vengono accreditati subito; il raddoppio si applica a fine round.
-    expect(room.players.get('p1')!.totalScore).toBe(2);
-    expect(room.players.get('p2')!.totalScore).toBe(2);
+    expect(room.players.get('p1')!.totalScore).toBe(1);
+    expect(room.players.get('p2')!.totalScore).toBe(1);
   });
 
   it('raddoppia i punti se la parola è trovata da un solo giocatore', () => {
@@ -87,9 +87,9 @@ describe('Room.submitWord', () => {
     room.submitWord('p1', 'casa', [0, 1, 2, 3]); // trovata solo da p1
     const results = room.endRound();
     const p1 = results.find((r) => r.playerId === 'p1')!;
-    // base 2 (4−2), raddoppiata a 4 perché nessun altro l'ha trovata
-    expect(p1.roundScore).toBe(4);
-    expect(p1.totalScore).toBe(4);
+    // 'casa' = 1 punto base, raddoppiato a 2 perché nessun altro l'ha trovata
+    expect(p1.roundScore).toBe(2);
+    expect(p1.totalScore).toBe(2);
     expect(p1.uniqueWords).toContain('casa');
   });
 
@@ -100,7 +100,7 @@ describe('Room.submitWord', () => {
     room.submitWord('p2', 'casa', [0, 1, 2, 3]);
     const results = room.endRound();
     for (const r of results) {
-      expect(r.roundScore).toBe(2); // base, senza raddoppio
+      expect(r.roundScore).toBe(1); // base, senza raddoppio
       expect(r.uniqueWords ?? []).not.toContain('casa');
     }
   });
@@ -119,8 +119,8 @@ describe('Room.submitWord', () => {
     const res = room.submitWord('p1', 'quad', [0, 1, 2]);
     expect(res.accepted).toBe(true);
     expect(res.word).toBe('quad');
-    // lunghezza 4 → 2 punti base
-    expect(res.points).toBe(2);
+    // 'quad' = 4 lettere → 1 punto base
+    expect(res.points).toBe(1);
   });
 });
 
@@ -131,7 +131,7 @@ describe('Room lifecycle', () => {
     room.submitWord('p1', 'casa', [0, 1, 2, 3]);
     const results = room.endRound();
     expect(results[0]!.nickname).toBe('Alice');
-    expect(results[0]!.roundScore).toBe(4); // base 2 raddoppiata (unica)
+    expect(results[0]!.roundScore).toBe(2); // base 1 raddoppiata (unica)
     expect(room.phase).toBe('roundEnd');
   });
 
@@ -200,5 +200,43 @@ describe('Difficoltà e durata round', () => {
     expect(clampDuration(1_000)).toBe(180_000);
     expect(clampDuration(60 * 60_000)).toBe(180_000);
     expect(clampDuration('boh')).toBe(180_000);
+  });
+});
+
+describe('Numero massimo di giocatori', () => {
+  it('la stanza parte con 8 posti di default', () => {
+    const room = new Room('MP01', DICT, 4, 3, 'normale', 180_000);
+    expect(room.maxPlayers).toBe(8);
+    expect(room.publicState().maxPlayers).toBe(8);
+    expect(room.isFull).toBe(false);
+  });
+
+  it('rispetta il limite di 2 giocatori (sfida a 2)', () => {
+    const room = new Room('MP02', DICT, 4, 3, 'normale', 180_000, 2);
+    expect(room.maxPlayers).toBe(2);
+    room.addPlayer('p1', 'Anna');
+    expect(room.isFull).toBe(false);
+    room.addPlayer('p2', 'Bruno');
+    expect(room.isFull).toBe(true);
+  });
+
+  it('rispetta il limite di 4', () => {
+    const room = new Room('MP03', DICT, 4, 3, 'normale', 180_000, 4);
+    for (let i = 0; i < 4; i++) room.addPlayer(`p${i}`, `G${i}`);
+    expect(room.isFull).toBe(true);
+    expect(room.players.size).toBe(4);
+  });
+
+  it('il limite si può cambiare e vale per i NUOVI ingressi', () => {
+    const room = new Room('MP04', DICT, 4, 3, 'normale', 180_000, 8);
+    room.addPlayer('p1', 'Anna');
+    room.addPlayer('p2', 'Bruno');
+    room.addPlayer('p3', 'Carla');
+    // L'host stringe il limite a 2: i presenti NON vengono espulsi.
+    room.maxPlayers = 2;
+    expect(room.players.size).toBe(3);
+    expect(room.isFull).toBe(true);
+    // Un nuovo ingresso non è possibile.
+    expect(room.isFull).toBe(true);
   });
 });

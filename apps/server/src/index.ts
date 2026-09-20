@@ -7,6 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import {
+  isDifficulty,
   isSfxSlot,
   isSubmitGamePayload,
   LEADERBOARD_KINDS,
@@ -126,7 +127,7 @@ app.get('/preview', (req, res) => {
   const gridSizeRaw = Number(req.query.gridSize);
   const gridSize: GridSize = gridSizeRaw === 5 || gridSizeRaw === 6 ? gridSizeRaw : 4;
   const difficultyRaw = String(req.query.difficulty ?? 'normale');
-  const difficulty: Difficulty = isValidDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
+  const difficulty: Difficulty = isDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
 
   res.setHeader('Cache-Control', 'no-store');
   const scheda = schede.random(gridSize, difficulty);
@@ -198,7 +199,7 @@ app.get('/words', (req, res) => {
   const sizeRaw = num(req.query.gridSize);
   const gridSize = sizeRaw === 4 || sizeRaw === 5 || sizeRaw === 6 ? (sizeRaw as GridSize) : undefined;
   const diffRaw = String(req.query.difficulty ?? '');
-  const difficulty = isValidDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
+  const difficulty = isDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
 
   const sortRaw = String(req.query.sort ?? 'occurrences');
   const sort: WordCatalogQuery['sort'] =
@@ -392,7 +393,7 @@ app.get('/leaderboard', (req, res) => {
   const gridSize = sizeRaw === 4 || sizeRaw === 5 || sizeRaw === 6 ? (sizeRaw as GridSize) : undefined;
 
   const diffRaw = String(req.query.difficulty ?? '');
-  const difficulty = isValidDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
+  const difficulty = isDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
 
   const { entries, gamesConsidered } = profiles.leaderboard({ kind, period, gridSize, difficulty });
 
@@ -535,7 +536,7 @@ app.get('/admin/schede', (req, res) => {
   const difficulty = String(req.query.difficulty ?? '');
   const filtered = schede.list(
     size === 4 || size === 5 || size === 6 ? size : undefined,
-    isValidDifficulty(difficulty) ? difficulty : undefined,
+    isDifficulty(difficulty) ? difficulty : undefined,
   );
   res.json({
     total: schede.size,
@@ -562,7 +563,7 @@ app.post('/admin/schede/genera', async (req, res) => {
   if (size !== 4 && size !== 5 && size !== 6) {
     return res.status(400).json({ error: 'size deve essere 4, 5 o 6' });
   }
-  if (!isValidDifficulty(difficulty)) {
+  if (!isDifficulty(difficulty)) {
     return res.status(400).json({ error: 'difficulty non valida' });
   }
 
@@ -660,18 +661,29 @@ function clampRounds(n: unknown): number {
   return Math.min(10, Math.max(1, Math.round(v)));
 }
 
-function isValidDifficulty(v: unknown): v is Difficulty {
-  return v === 'molto-facile' || v === 'facile' || v === 'normale' || v === 'difficile';
+/** Numero massimo di giocatori ammessi: 2 (sfida), 4 o 8. */
+function clampMaxPlayers(v: unknown): number {
+  const n = Number(v);
+  if (n === 2 || n === 4 || n === 8) return n;
+  return 8;
 }
+
+/*
+ * NOTA: la validazione delle difficoltà usa `isDifficulty` dal pacchetto condiviso.
+ * Prima c'era una funzione locale con i confronti hardcoded: aggiungendo un livello
+ * ('estremo') restava indietro e lo rifiutava silenziosamente, ricadendo su 'normale'.
+ * Usare la funzione condivisa evita che i due elenchi si disallineino.
+ */
 
 io.on('connection', (socket) => {
   socket.on('room:create', (payload, ack) => {
     try {
       const gridSize = isValidGridSize(payload?.gridSize) ? payload.gridSize : 4;
       const rounds = clampRounds(payload?.rounds);
-      const difficulty = isValidDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
+      const difficulty = isDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
       const roundDurationMs = clampDuration(payload?.roundDurationMs);
-      const room = registry.create(gridSize, rounds, difficulty, roundDurationMs);
+      const maxPlayers = clampMaxPlayers(payload?.maxPlayers);
+      const room = registry.create(gridSize, rounds, difficulty, roundDurationMs, maxPlayers);
       // Profilo (se loggato): nome, avatar, foto pubblica e musica preferita.
       const profile = resolveProfile(payload?.token);
       if (profile) room.setMusic(profile.musicId);
@@ -783,7 +795,7 @@ io.on('connection', (socket) => {
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby') return;
     if (isValidGridSize(gridSize)) room.gridSize = gridSize;
-    if (isValidDifficulty(difficulty)) room.difficulty = difficulty;
+    if (isDifficulty(difficulty)) room.difficulty = difficulty;
     room.rounds = clampRounds(rounds);
     room.roundDurationMs = clampDuration(roundDurationMs);
     // La musica la scegle l'host e vale per tutti.
