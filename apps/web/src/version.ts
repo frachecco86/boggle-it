@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.11.0';
+export const APP_VERSION = '0.12.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,27 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.12.0',
+    date: '2026-09-20',
+    title: 'Punteggio salvato correttamente, elenco completo delle parole, tema scuro',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Il punteggio ora entra in classifica e nel profilo**: prima non ci arrivava per tre difetti combinati. Il **totale contava due volte l\'ultimo round** (con 2 round da 50 e 30 punti dava 110 invece di 80), il punteggio dell\'ultimo round **non veniva salvato** quando la partita finiva, e la registrazione poteva partire con i dati **ancora incompleti**.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          'A fine round e a fine partita vedi **tutte le parole della scheda**: quelle trovate con una spunta verde, quelle mancate in tono attenuato. Puoi filtrare per lunghezza (con il conteggio "trovate su totali") e nascondere le mancate. Vedi anche la percentuale di completamento.',
+          '**Tema scuro**, attivabile dall\'interruttore in alto a sinistra (🌙/☀️). La scelta viene ricordata; al primo avvio si segue la preferenza del sistema operativo.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.11.0',
     date: '2026-09-20',

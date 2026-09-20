@@ -10,6 +10,7 @@ import { ChangelogScreen } from './screens/ChangelogScreen.js';
 import { LeaderboardScreen } from './screens/LeaderboardScreen.js';
 import { WordsScreen } from './screens/WordsScreen.js';
 import { VersionBar } from './components/VersionBar.js';
+import { ThemeToggle } from './components/ThemeToggle.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
@@ -68,6 +69,7 @@ export function App() {
 
   return (
     <div className="app">
+      <ThemeToggle />
       <VersionBar />
       {screen === 'home' && <HomeScreen />}
       {screen === 'solo-setup' && <SoloSetupScreen onStart={() => setScreen('solo-game')} />}

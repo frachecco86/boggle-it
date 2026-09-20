@@ -199,15 +199,39 @@ export function useSoloGame(options: UseSoloGameOptions) {
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
   }, []);
 
+  /**
+   * Passa al round successivo, oppure chiude la partita.
+   *
+   * Prima di chiudere aggiunge il punteggio dell'ultimo round a `roundScores`:
+   * senza questo, il totale inviato alla classifica NON includeva l'ultimo round.
+   */
   const nextRound = useCallback(() => {
     if (round >= rounds) {
+      // Ultimo round: consolida il punteggio prima di chiudere.
+      savedRef.current = false;
+      setRoundScores((prev) => [...prev, score]);
+      // A fine partita mostriamo TUTTE le parole dell'ultima scheda non trovate.
+      const trovate = new Set(foundRef.current.map((f) => f.word));
+      setMissedWords((schedaRef.current?.words ?? []).filter((w) => !trovate.has(w)));
       setPhase('gameEnd');
       return;
     }
+    savedRef.current = false;
     void startRound(round + 1);
-  }, [round, rounds, startRound]);
+  }, [round, rounds, score, startRound]);
 
-  const totalScore = useMemo(() => roundScores.reduce((a, b) => a + b, 0) + score, [roundScores, score]);
+  /**
+   * Punteggio totale della partita.
+   *
+   * ATTENZIONE al doppio conteggio: a fine round il punteggio viene aggiunto a
+   * `roundScores`. Sommare anche `score` lo contava due volte (con 2 round da 50
+   * e 30 il totale dava 110 invece di 80). `score` è il parziale del round IN
+   * CORSO, quindi va aggiunto solo mentre si gioca.
+   */
+  const totalScore = useMemo(
+    () => roundScores.reduce((a, b) => a + b, 0) + (phase === 'playing' ? score : 0),
+    [roundScores, score, phase],
+  );
 
   /**
    * Registra la partita conclusa per la classifica.
@@ -227,6 +251,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     const longest = words.reduce((best, w) => (w.length > best.length ? w : best), '');
     void submitGame(
       {
+        // `totalScore` ora è corretto: `roundScores` contiene già l'ultimo round.
         score: totalScore,
         words: words.length,
         wordCount: schedaRef.current?.words.length ?? 0,
@@ -238,7 +263,9 @@ export function useSoloGame(options: UseSoloGameOptions) {
       },
       token,
     );
-  }, [phase, totalScore, difficulty, gridSize]);
+    // `roundScores` fra le dipendenze: al momento di `gameEnd` l'ultimo round
+    // potrebbe non essere ancora stato consolidato.
+  }, [phase, totalScore, difficulty, gridSize, roundScores]);
 
   return {
     state: {

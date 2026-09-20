@@ -1,21 +1,65 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface RoundSummaryProps {
   round: number;
   rounds: number;
   score: number;
   totalScore: number;
+  /** Parole trovate (in tutta la partita, a fine partita). */
   words: string[];
+  /** Parole della scheda che NON sono state trovate. */
   missedWords: string[];
   isGameOver: boolean;
+  /** Tutte le parole della scheda, per mostrare anche quelle fuori lista. */
+  allWords?: string[];
   onNext: () => void;
   onExit: () => void;
 }
 
-/** Riepilogo di fine round (o di fine partita) con confetti leggeri. */
+/**
+ * Riepilogo di fine round o di fine partita.
+ *
+ * Mostra TUTTE le parole della scheda: quelle trovate in evidenza e quelle
+ * mancate in tono attenuato. A cosa serve: sapere cosa era possibile trovare è
+ * la parte più utile per migliorare, e vedere quante parole sfuggite dà il senso
+ * di quanto c'era ancora da scoprire.
+ */
 export function RoundSummary(props: RoundSummaryProps) {
-  const { round, rounds, score, totalScore, words, missedWords, isGameOver, onNext, onExit } = props;
+  const { round, rounds, score, totalScore, words, missedWords, isGameOver, allWords, onNext, onExit } =
+    props;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [filterLength, setFilterLength] = useState<number | 'all'>('all');
+  /** Mostra/nasconde le parole mancate (l'elenco completo può essere lungo). */
+  const [showMissed, setShowMissed] = useState(true);
+
+  const foundSet = useMemo(() => new Set(words), [words]);
+
+  /**
+   * Elenco completo delle parole: se il chiamante passa `allWords` usiamo quello
+   * (comprende anche eventuali parole non in `words` né in `missedWords`),
+   * altrimenti uniamo trovate e mancate.
+   */
+  const everyWord = useMemo(() => {
+    const base = allWords && allWords.length > 0 ? allWords : [...words, ...missedWords];
+    return [...new Set(base)].sort((a, b) => a.length - b.length || a.localeCompare(b, 'it'));
+  }, [allWords, words, missedWords]);
+
+  /** Distribuzione per lunghezza, per i pulsanti di filtro. */
+  const lengths = useMemo(() => {
+    const m = new Map<number, { total: number; found: number }>();
+    for (const w of everyWord) {
+      const e = m.get(w.length) ?? { total: 0, found: 0 };
+      e.total++;
+      if (foundSet.has(w)) e.found++;
+      m.set(w.length, e);
+    }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([length, v]) => ({ length, ...v }));
+  }, [everyWord, foundSet]);
+
+  const visible = useMemo(() => {
+    const byLen = filterLength === 'all' ? everyWord : everyWord.filter((w) => w.length === filterLength);
+    return showMissed ? byLen : byLen.filter((w) => foundSet.has(w));
+  }, [everyWord, filterLength, showMissed, foundSet]);
 
   // Burst di particelle con canvas 2D + rAF (nessuna dipendenza).
   useEffect(() => {
@@ -73,6 +117,9 @@ export function RoundSummary(props: RoundSummaryProps) {
     };
   }, []);
 
+  const foundCount = words.length;
+  const totalCount = everyWord.length;
+
   return (
     <div className="screen summary">
       <canvas ref={canvasRef} className="summary__confetti" aria-hidden />
@@ -89,30 +136,65 @@ export function RoundSummary(props: RoundSummaryProps) {
         Totale: <strong>{totalScore}</strong>
       </p>
 
+      {/* Riassunto: quante trovate su quante possibili. */}
+      <p className="summary__ratio">
+        Hai trovato <strong>{foundCount}</strong> parole su <strong>{totalCount}</strong> (
+        {totalCount > 0 ? Math.round((foundCount / totalCount) * 100) : 0}%)
+      </p>
+
       <section className="summary__section">
-        <h3 className="summary__label">Le tue parole ({words.length})</h3>
-        <div className="chip-list">
-          {words.length === 0 && <span className="summary__empty">Nessuna parola trovata</span>}
-          {words.map((w) => (
-            <span key={w} className="chip">
-              {w.toUpperCase()}
-            </span>
+        <div className="summary__controls">
+          <h3 className="summary__label">Tutte le parole</h3>
+          <label className="summary__toggle">
+            <input
+              type="checkbox"
+              checked={showMissed}
+              onChange={(e) => setShowMissed(e.target.checked)}
+            />
+            <span>Mostra anche le mancate</span>
+          </label>
+        </div>
+
+        {/* Filtri per lunghezza, con quante ne hai trovate su quante. */}
+        <div className="summary__lengths">
+          <button
+            className={`pill${filterLength === 'all' ? ' pill--active' : ''}`}
+            onClick={() => setFilterLength('all')}
+          >
+            Tutte {totalCount}
+          </button>
+          {lengths.map((l) => (
+            <button
+              key={l.length}
+              className={`pill${filterLength === l.length ? ' pill--active' : ''}`}
+              onClick={() => setFilterLength(filterLength === l.length ? 'all' : l.length)}
+            >
+              {l.length} lettere {l.found}/{l.total}
+            </button>
           ))}
         </div>
-      </section>
 
-      {missedWords.length > 0 && (
-        <section className="summary__section">
-          <h3 className="summary__label">Parole che esistevano</h3>
-          <div className="chip-list chip-list--muted">
-            {missedWords.map((w) => (
-              <span key={w} className="chip chip--muted">
+        <div className="chip-list">
+          {visible.length === 0 && (
+            <span className="summary__empty">
+              {showMissed ? 'Nessuna parola con questo filtro' : 'Nessuna parola trovata'}
+            </span>
+          )}
+          {visible.map((w) => {
+            const trovata = foundSet.has(w);
+            return (
+              <span
+                key={w}
+                className={`chip${trovata ? ' chip--found' : ' chip--muted'}`}
+                title={trovata ? 'Trovata' : 'Non trovata'}
+              >
+                {trovata && <span className="chip__check">✓</span>}
                 {w.toUpperCase()}
               </span>
-            ))}
-          </div>
-        </section>
-      )}
+            );
+          })}
+        </div>
+      </section>
 
       <div className="summary__actions">
         {!isGameOver ? (

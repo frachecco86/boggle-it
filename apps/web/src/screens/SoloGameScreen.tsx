@@ -6,6 +6,7 @@ import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 import { SchedaPreview } from '../components/SchedaPreview.js';
 import { CountdownOverlay } from '../components/CountdownOverlay.js';
+import { RoundSummary } from './RoundSummary.js';
 
 /** Partita single player completa (schede pre-calcolate dal server). */
 export function SoloGameScreen() {
@@ -79,44 +80,18 @@ export function SoloGameScreen() {
 
   if (state.phase === 'roundEnd' || state.phase === 'gameEnd') {
     return (
-      <div className="screen summary">
-        <h2 className="screen__title">
-          {state.phase === 'gameEnd' ? 'Partita finita' : `Fine round ${state.round} di ${soloRounds}`}
-        </h2>
-        <p className="summary__round-score">
-          Punti del round: <strong>{state.score}</strong>
-        </p>
-        <p className="summary__total">
-          Totale: <strong>{game.totalScore}</strong>
-        </p>
-
-        <section className="summary__section">
-          <h3 className="summary__label">Le tue parole ({state.found.length})</h3>
-          <div className="chip-list">
-            {state.found.length === 0 && <span className="summary__empty">Nessuna parola trovata</span>}
-            {state.found.map((f) => (
-              <span key={f.word} className="chip">
-                {f.word.toUpperCase()}
-              </span>
-            ))}
-          </div>
-        </section>
-
-        <div className="summary__actions">
-          {state.phase === 'gameEnd' ? (
-            <button className="btn btn--primary btn--big" onClick={() => setScreen('solo-setup')}>
-              Rigioca
-            </button>
-          ) : (
-            <button className="btn btn--primary btn--big" onClick={game.nextRound}>
-              Prossimo round
-            </button>
-          )}
-          <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-            Torna alla home
-          </button>
-        </div>
-      </div>
+      <RoundSummary
+        round={state.round}
+        rounds={soloRounds}
+        score={state.score}
+        totalScore={game.totalScore}
+        words={state.found.map((f) => f.word)}
+        missedWords={state.missedWords}
+        allWords={state.scheda?.words}
+        isGameOver={state.phase === 'gameEnd'}
+        onNext={game.nextRound}
+        onExit={() => setScreen(state.phase === 'gameEnd' ? 'solo-setup' : 'home')}
+      />
     );
   }
 

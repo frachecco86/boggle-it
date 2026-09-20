@@ -1,6 +1,7 @@
 :root {
   /* Tema CHIARO e positivo: superfici bianche su sfondo pastello.
-     I colori di sfondo e accento vengono poi ridefiniti dalla difficoltà scelta. */
+     I colori di sfondo e accento vengono poi ridefiniti dalla difficoltà scelta.
+     Il tema scuro è in fondo al file, sotto [data-theme='dark']. */
   --bg: #f6f8fd;
   --bg-soft: #eef2fb;
   --surface: #ffffff;
@@ -3236,4 +3237,160 @@ body {
   .countdown__ring-fill {
     transition: none;
   }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Tema scuro                                                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Il tema si applica con `data-theme` sull'elemento radice (vedi ThemeToggle).
+ * Qui ridefiniamo le stesse variabili del tema chiaro: tutti i componenti si
+ * adattano da soli, senza modifiche puntuali.
+ *
+ * Nota: gli sfondi per difficoltà arrivano da `difficulty.ts` e vengono applicati
+ * inline da App.tsx come `--difficulty-bg`. Per il tema scuro usiamo una
+ * sovrapposizione scura (vedi `.app` sotto) invece di riscrivere ogni gradiente.
+ */
+[data-theme='dark'] {
+  --bg: #12131c;
+  --bg-soft: #191b27;
+  --surface: #1e2030;
+  --surface-2: #262940;
+  --border: #333755;
+  --text: #eceefb;
+  --text-dim: #9aa1c4;
+  --primary: #9b86f0;
+  --primary-soft: #b9a8ff;
+  --success: #35d07f;
+  --warning: #f0b03c;
+  --danger: #ff6b6b;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* I gradienti pastello per difficoltà sono pensati per il chiaro: in scuro li
+   scuriamo con una sovrapposizione, mantenendo la tinta della difficoltà. */
+[data-theme='dark'] .app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    rgba(10, 11, 18, 0.86),
+    rgba(10, 11, 18, 0.94)
+  );
+  pointer-events: none;
+}
+
+[data-theme='dark'] body {
+  background: var(--bg);
+}
+
+/* Le celle della griglia: in scuro serve un bordo piu' marcato per staccarle. */
+[data-theme='dark'] .tile {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* Il velo del countdown in scuro. */
+[data-theme='dark'] .countdown-overlay {
+  background: color-mix(in srgb, #0a0b12 82%, transparent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Switch del tema (alto a sinistra)                                   */
+/* ------------------------------------------------------------------ */
+
+.theme-toggle {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 10px;
+  z-index: 51;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: border-color 0.15s, transform 0.12s, background 0.2s;
+}
+
+.theme-toggle:hover {
+  border-color: var(--primary-soft);
+  transform: translateY(-1px) rotate(12deg);
+}
+
+.theme-toggle:active {
+  transform: scale(0.94);
+}
+
+.theme-toggle__icon {
+  transition: transform 0.3s ease;
+}
+
+/* ------------------------------------------------------------------ */
+/* Riepilogo: elenco completo delle parole                             */
+/* ------------------------------------------------------------------ */
+
+.summary__ratio {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+.summary__ratio strong {
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.summary__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.summary__toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.summary__lengths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+/* Parola trovata: bordo pieno e spunta. Non trovata: attenuata. */
+.chip--found {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, var(--surface));
+}
+
+.chip__check {
+  color: var(--success);
+  font-weight: 900;
+  margin-right: 4px;
+}
+
+.chip--muted {
+  opacity: 0.6;
 }
