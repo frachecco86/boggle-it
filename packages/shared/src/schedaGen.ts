@@ -44,35 +44,66 @@ export interface GenerateSchedaOptions {
  * Derivati dalle misure: le griglie comuni raggiungono 7/8/9 lettere nel 35-45%
  * dei casi, quindi il filtro non è proibitivo.
  */
-const QUALITY: Record<Difficulty, { minWords: Record<GridSize, number>; minLongest: Record<GridSize, number>; minLongWords: Record<GridSize, number> }> = {
-  'molto-facile': {
-    minWords: { 4: 6, 5: 15, 6: 25 },
-    minLongest: { 4: 7, 5: 8, 6: 9 },
-    minLongWords: { 4: 1, 5: 2, 6: 3 },
+/**
+ * Requisiti di qualità per una scheda: quante parole per OGNI fascia di lunghezza.
+ *
+ * Perché per fasce e non un solo conteggio: prima si richiedeva "almeno 1 parola
+ * lunga" e bastava, quindi quasi ogni scheda aveva UNA parola da 7 e nulla di più.
+ * Ora ogni scheda deve avere PIÙ parole lunghe, distribuite sulle varie lunghezze.
+ *
+ * Le soglie sono state tarate misurando la fattibilità con il LESSICO COMUNE
+ * (non col dizionario intero): tutte le configurazioni si ottengono in ~5-25
+ * tentativi, quindi la generazione resta veloce.
+ *
+ * Nota sulla dimensione: su 4×4 le parole da 9+ sono di fatto impossibili
+ * (la parola più lunga in media è 6,4 lettere: servono 9 celle adiacenti in
+ * sequenza su 16 disponibili). Su 5×5 si arriva a 9, su 6×6 a 10 e oltre.
+ */
+const QUALITY: Record<GridSize, {
+  /** Parole minime in totale (evita schede con pochissime parole). */
+  minWords: number;
+  /** Numero minimo di parole per ogni soglia di lunghezza. */
+  minByLength: { length: number; count: number }[];
+}> = {
+  4: {
+    minWords: 12,
+    // 9+ impossibile su 16 celle.
+    minByLength: [
+      { length: 7, count: 2 },
+      { length: 8, count: 1 },
+    ],
   },
-  facile: {
-    minWords: { 4: 6, 5: 15, 6: 25 },
-    minLongest: { 4: 7, 5: 8, 6: 9 },
-    minLongWords: { 4: 1, 5: 2, 6: 3 },
+  5: {
+    minWords: 25,
+    minByLength: [
+      { length: 7, count: 5 },
+      { length: 8, count: 2 },
+      { length: 9, count: 1 },
+    ],
   },
-  normale: {
-    minWords: { 4: 12, 5: 25, 6: 40 },
-    minLongest: { 4: 7, 5: 8, 6: 9 },
-    minLongWords: { 4: 1, 5: 3, 6: 5 },
-  },
-  difficile: {
-    minWords: { 4: 12, 5: 25, 6: 40 },
-    minLongest: { 4: 7, 5: 8, 6: 9 },
-    minLongWords: { 4: 1, 5: 3, 6: 5 },
+  6: {
+    minWords: 45,
+    minByLength: [
+      { length: 7, count: 10 },
+      { length: 8, count: 5 },
+      { length: 9, count: 3 },
+      { length: 10, count: 1 },
+    ],
   },
 };
 
-/** Lunghezza oltre la quale una parola conta come "lunga". */
-const LONG_WORD = 7;
-
-/** I livelli facili usano il lessico comune; gli altri il dizionario completo. */
-export function solvingTrieFor(difficulty: Difficulty): 'common' | 'full' {
-  return difficulty === 'molto-facile' || difficulty === 'facile' ? 'common' : 'full';
+/**
+ * Dizionario usato per risolvere la griglia.
+ *
+ * TUTTI i livelli usano il LESSICO COMUNE. Prima `normale` e `difficile` usavano il
+ * dizionario completo (387k forme) e solo il 46% delle parole era di uso comune:
+ * uscivano termini astrusi come `contumace` o `sbrecciare`. Ora la difficoltà è data
+ * dalla GRIGLIA (meno vocali, più consonanti rare), non da parole oscure.
+ *
+ * Il dizionario completo resta disponibile per usi futuri (es. una modalità "esperto").
+ */
+export function solvingTrieFor(_difficulty: Difficulty): 'common' | 'full' {
+  return 'common';
 }
 
 /**
@@ -86,21 +117,40 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
   const rng = options.rng ?? Math.random;
   const maxAttempts = options.maxAttempts ?? 400;
   const trie = solvingTrieFor(difficulty) === 'common' ? tries.common : tries.full;
-  const quality = QUALITY[difficulty];
+
+  const rules = QUALITY[size];
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const grid = generateGrid(size, rng, difficulty);
-    const words = solveGrid(grid, trie, { limit: 4000, minLength: 3 });
-    const longest = words.reduce((m, w) => Math.max(m, w.length), 0);
-    const longWords = words.filter((w) => w.length >= LONG_WORD).length;
+    const words = solveGrid(grid, trie, { limit: 8000, minLength: 3 });
 
-    if (words.length < quality.minWords[size]) continue;
-    if (longest < quality.minLongest[size]) continue;
-    if (longWords < quality.minLongWords[size]) continue;
+    if (words.length < rules.minWords) continue;
 
-    const entries = [...words].sort(
-      (a, b) => b.length - a.length || a.localeCompare(b),
-    );
+    // Conteggio per lunghezza: una sola passata.
+    const byLength = new Map<number, number>();
+    let longest = 0;
+    for (const w of words) {
+      byLength.set(w.length, (byLength.get(w.length) ?? 0) + 1);
+      if (w.length > longest) longest = w.length;
+    }
+
+    // Ogni soglia richiesta deve essere soddisfatta: "almeno N parole di almeno L lettere".
+    // Uso "almeno L" e non "esattamente L", così una parola da 10 conta anche per la
+    // soglia delle 9: è ciò che il giocatore percepisce ("ho trovato parole lunghe").
+    let ok = true;
+    for (const rule of rules.minByLength) {
+      let count = 0;
+      for (const [len, n] of byLength) {
+        if (len >= rule.length) count += n;
+      }
+      if (count < rule.count) {
+        ok = false;
+        break;
+      }
+    }
+    if (!ok) continue;
+
+    const entries = [...words].sort((a, b) => b.length - a.length || a.localeCompare(b));
 
     return {
       id: options.id ?? '',

@@ -2,14 +2,14 @@
  * Genera le schede pre-calcolate e le scrive in `packages/shared/schede/`.
  *
  * Uso:
- *   pnpm gen:schede                      # tutte le combinazioni, 40 schede ciascuna
+ *   pnpm gen:schede                      # tutte le combinazioni, 100 schede ciascuna
  *   pnpm gen:schede -- --size 4 --difficolta normale --n 60
  *   pnpm gen:schede -- --size 4 --difficolta facile --n 40 --append
  *
  * Opzioni:
  *   --size 4|5|6          dimensione della griglia (default: tutte)
  *   --difficolta <nome>   molto-facile|facile|normale|difficile (default: tutte)
- *   --n <numero>          schede da generare per combinazione (default 40)
+ *   --n <numero>          schede da generare per combinazione (default 100)
  *   --append              aggiunge alle schede esistenti invece di sovrascrivere
  *   --seed <numero>       seme del generatore (per risultati riproducibili)
  */
@@ -86,7 +86,7 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 function main(): void {
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : ALL_DIFFICULTIES;
-  const count = Number(arg('n', '40'));
+  const count = Number(arg('n', '100'));
   const append = hasFlag('append');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;

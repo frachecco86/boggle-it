@@ -18,11 +18,14 @@ function pool() {
 }
 
 describe('generatore schede', () => {
-  it('i livelli facili risolvono contro il lessico comune', () => {
+  it('TUTTI i livelli risolvono contro il lessico comune', () => {
+    // Scelta di prodotto: la difficoltà viene dalla griglia (meno vocali, più
+    // consonanti rare), non da parole astruse. Prima `normale` e `difficile`
+    // usavano il dizionario completo e solo il 46% delle parole era di uso comune.
     expect(solvingTrieFor('molto-facile')).toBe('common');
     expect(solvingTrieFor('facile')).toBe('common');
-    expect(solvingTrieFor('normale')).toBe('full');
-    expect(solvingTrieFor('difficile')).toBe('full');
+    expect(solvingTrieFor('normale')).toBe('common');
+    expect(solvingTrieFor('difficile')).toBe('common');
   });
 
   it('genera una scheda coerente con la sua griglia', () => {
