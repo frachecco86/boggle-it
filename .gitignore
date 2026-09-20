@@ -42,6 +42,13 @@ apps/web/public/bundled-schede/
 # Dati persistenti del server in sviluppo: DB profili + schede admin
 /data/
 
-# Output della build APK (artefatti, non sorgenti)
-dist-android/
+# Output della build APK: gli APK pubblicati sono versionati in dist-android/
+# (vedi dist-android/README.md). La cartella di build grezza di Gradle resta fuori.
+apps/web/android/app/build/
 apps/web/android/local.properties
+
+# Nella cartella degli APK versionati si committano solo APK, AAB e la guida.
+dist-android/*
+!dist-android/README.md
+!dist-android/*.apk
+!dist-android/*.aab

@@ -27,6 +27,11 @@ function dropOrtWasm(): Plugin {
 
 export default defineConfig({
   plugins: [react(), dropOrtWasm()],
+  // Il `.env` sta nella ROOT del monorepo (vedi docs/ANDROID.md e
+  // .env.android.example), non in `apps/web/`. Senza questo Vite leggerebbe solo
+  // `apps/web/.env` e `VITE_SERVER_URL` verrebbe silenziosamente ignorato,
+  // producendo un APK senza server (multiplayer rotto).
+  envDir: path.resolve(__dirname, '../..'),
   // onnxruntime-web carica i suoi .wasm a runtime: non vanno pre-bundlati da
   // Vite (romperebbe i percorsi) e devono restare file separati, scaricati solo
   // quando l'utente usa uno stile AI.
