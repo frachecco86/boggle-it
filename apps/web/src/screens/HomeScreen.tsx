@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
@@ -7,6 +7,7 @@ import {
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { SERVER_BASE } from '../net/socket.js';
 import { AudioSettings } from '../components/AudioSettings.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { GridPreview } from '../components/GridPreview.js';
@@ -32,6 +33,17 @@ export function HomeScreen() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [showHostOptions, setShowHostOptions] = useState(false);
+  /** Numero totale di schede disponibili nel catalogo (mostrato in home). */
+  const [schedeTotal, setSchedeTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${SERVER_BASE}/schede`)
+      .then(async (res) => (res.ok ? ((await res.json()) as { total: number }) : null))
+      .then((data) => {
+        if (data) setSchedeTotal(data.total);
+      })
+      .catch(() => setSchedeTotal(null));
+  }, []);
 
   // Impostazioni usate come default quando si crea una stanza.
   const [hostGridSize, setHostGridSize] = useState<GridSize>(soloGridSize);
@@ -71,6 +83,11 @@ export function HomeScreen() {
           <span className="title__it">IT</span>
         </h1>
         <p className="home__tagline">Trova più parole degli altri. Scorri il dito sulle lettere.</p>
+        {schedeTotal !== null && (
+          <p className="home__schede">
+            <strong>{schedeTotal}</strong> schede disponibili nel catalogo
+          </p>
+        )}
       </header>
 
       <section className="profile-card">
@@ -180,6 +197,18 @@ export function HomeScreen() {
       </div>
 
       <AudioSettings />
+
+      <div className="home__links">
+        <button
+          className="btn btn--ghost"
+          onClick={() => setScreen('scheda')}
+        >
+          Sfoglia le schede
+        </button>
+        <button className="btn btn--ghost" onClick={() => setScreen('admin')}>
+          Admin
+        </button>
+      </div>
 
       <footer className="home__footer">
         Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni Wikizionario.

@@ -40,6 +40,11 @@ export interface FoundWord {
   word: string;
   points: number;
   at: number;
+  /**
+   * true se NESSUN ALTRO giocatore ha trovato la parola (solo multiplayer):
+   * i punti sono già raddoppiati. In single player resta `undefined`.
+   */
+  unique?: boolean;
 }
 
 export interface RoomState {
@@ -56,6 +61,8 @@ export interface RoomState {
   players: PlayerPublic[];
   /** Timestamp server (ms) di fine round corrente, se in playing. */
   endsAt?: number;
+  /** Id della scheda giocata nel round corrente (vedi `Scheda`). */
+  schedaId?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -109,6 +116,8 @@ export interface SubmitWordAck {
   reason?: string;
   word?: string;
   points?: number;
+  /** true se è la prima volta che la parola viene trovata nel round (raddoppio). */
+  unique?: boolean;
 }
 
 export interface RoundStartPayload {
@@ -116,6 +125,8 @@ export interface RoundStartPayload {
   grid: Grid;
   endsAt: number;
   durationMs: number;
+  /** Id della scheda giocata (per la pagina scheda e la cronologia). */
+  schedaId?: string;
 }
 
 export interface PlayerWordPayload {
@@ -130,6 +141,8 @@ export interface PlayerWordPayload {
   score: number;
   /** true se la parola e' del giocatore che riceve l'evento. */
   self: boolean;
+  /** true se la parola è stata trovata da un solo giocatore (punti già raddoppiati). */
+  unique?: boolean;
 }
 
 export interface RoundResultEntry {
@@ -138,6 +151,8 @@ export interface RoundResultEntry {
   roundScore: number;
   totalScore: number;
   words: string[];
+  /** Parole trovate da un solo giocatore (punteggio raddoppiato). */
+  uniqueWords?: string[];
 }
 
 export interface RoundEndPayload {

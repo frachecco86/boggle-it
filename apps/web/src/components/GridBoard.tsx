@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Grid as GridModel } from '@boggle/shared';
-import { SwipeController, type SwipePoint } from '../game/swipe.js';
+import { SwipeController, gridAreAdjacent, type Layout } from '../game/swipe.js';
 import { audio } from '../audio/AudioEngine.js';
 
 interface GridBoardProps {
@@ -13,8 +13,11 @@ interface GridBoardProps {
 }
 
 /**
- * Griglia con swipe. Il percorso e' renderizzato come trailer SVG luminoso
+ * Griglia con swipe. Il percorso è renderizzato come trailer SVG luminoso
  * che collega i centri delle celle selezionate.
+ *
+ * Il riconoscimento delle celle è delegato a `SwipeController`
+ * (settori angolari + deadzone + isteresi): vedi `game/cellTracker.ts`.
  */
 export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError }: GridBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,7 +25,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
   const [centers, setCenters] = useState<{ x: number; y: number }[]>([]);
 
   // Callback e griglia via ref: lo SwipeController si crea UNA volta sola e non
-  // viene distrutto a meta' gesture quando il parent re-renderizza.
+  // viene distrutto a metà gesture quando il parent re-renderizza.
   const gridRef = useRef(grid);
   gridRef.current = grid;
   const onPathChangeRef = useRef(onPathChange);
@@ -33,76 +36,29 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
   const lastPathLenRef = useRef(0);
 
   /**
-   * Hit-test: sceglie la cella col CENTRO più vicino al punto, non semplicemente
-   * il rettangolo che lo contiene. Questo elimina le zone morte dei gap e degli
-   * angoli arrotondati, e rende le diagonali molto più facili.
-   *
-   * `preferDiagonalFrom` aggiunge un bonus alle celle DIAGONALI adiacenti all'ultima
-   * selezionata: muovendosi in diagonale il dito devia verso le celle laterali, e
-   * senza questo bonus si accendono le lettere attorno invece di quella voluta.
+   * Layout fresco al momento della chiamata: i centri delle celle sono in
+   * coordinate locali al container. Rileggere il DOM ad ogni punto (invece di
+   * salvare i centri in stato) evita misure stale durante scroll/resize.
    */
-  const hitTestRef = useRef(
-    (
-      p: SwipePoint,
-      opts?: { preferDiagonalFrom?: number; toleranceScale?: number },
-    ): number | null => {
-      const container = containerRef.current;
-      if (!container) return null;
-      const cRect = container.getBoundingClientRect();
-      const x = p.x + cRect.left;
-      const y = p.y + cRect.top;
+  const buildLayout = useCallback((): Layout => {
+    const size = gridRef.current.size;
+    const centers: ({ x: number; y: number } | null)[] = new Array(size * size).fill(null);
+    const container = containerRef.current;
+    if (!container) return { size, centers };
+    const cRect = container.getBoundingClientRect();
+    for (let i = 0; i < centers.length; i++) {
+      const el = cellRefs.current[i];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      centers[i] = {
+        x: r.left - cRect.left + r.width / 2,
+        y: r.top - cRect.top + r.height / 2,
+      };
+    }
+    return { size, centers };
+  }, []);
 
-      const grid = gridRef.current;
-      const fromIdx = opts?.preferDiagonalFrom;
-      const from = fromIdx !== undefined ? grid.tiles[fromIdx] : undefined;
-      // Il bonus diagonale vale solo per celle ADIACENTI all'ultima: così non
-      // "salta" mai a celle lontane, aiuta solo a disambiguare le 8 vicine.
-      const DIAGONAL_BONUS = 0.28;
-
-      let best: number | null = null;
-      let bestScore = Number.POSITIVE_INFINITY;
-      let bestSize = 0;
-
-      for (let i = 0; i < cellRefs.current.length; i++) {
-        const el = cellRefs.current[i];
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const dist = Math.hypot(x - cx, y - cy);
-
-        let score = dist;
-        // Bonus diagonale: riduce la distanza effettiva della cella diagonale,
-        // facendola vincere quando il dito è fra la laterale e la diagonale.
-        if (from) {
-          const tile = grid.tiles[i];
-          if (tile) {
-            const chebyshev = Math.max(
-              Math.abs(tile.row - from.row),
-              Math.abs(tile.col - from.col),
-            );
-            const isDiagonal =
-              chebyshev === 1 &&
-              Math.abs(tile.row - from.row) === 1 &&
-              Math.abs(tile.col - from.col) === 1;
-            if (isDiagonal) score -= r.width * DIAGONAL_BONUS;
-          }
-        }
-
-        if (score < bestScore) {
-          bestScore = score;
-          best = i;
-          bestSize = Math.max(r.width, r.height);
-        }
-      }
-
-      if (best === null) return null;
-      // Tolleranza: si accetta una cella se il punto è entro un raggio generoso
-      // dal suo centro (metà diagonale della cella × scala).
-      const tolerance = bestSize * 0.75 * (opts?.toleranceScale ?? 1);
-      return bestScore <= tolerance ? best : null;
-    },
-  );
+  const areAdjacent = useRef(gridAreAdjacent(() => gridRef.current)).current;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -111,7 +67,8 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       el,
       () => gridRef.current,
       {
-        hitTest: (p, opts) => hitTestRef.current(p, opts),
+        getLayout: buildLayout,
+        areAdjacent,
         onPathChange: (path) => {
           if (path.length > lastPathLenRef.current) audio.play('tap');
           lastPathLenRef.current = path.length;
@@ -122,30 +79,16 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
           onCommitRef.current(path);
         },
       },
-      {
-        // Dimensione cella per l'interpolazione degli swipe veloci.
-        getCellSize: () => {
-          const first = cellRefs.current.find(Boolean);
-          return first ? first.getBoundingClientRect().width : 48;
-        },
-      },
+      { startToleranceScale: 1.3 },
     );
     return () => controller.destroy();
-  }, []);
-
-
+  }, [areAdjacent, buildLayout]);
   // Aggiorna i centri delle celle per il trail SVG (su resize e nuovo layout).
   useLayoutEffect(() => {
     const update = () => {
-      const container = containerRef.current;
-      if (!container) return;
-      const cRect = container.getBoundingClientRect();
+      const layout = buildLayout();
       setCenters(
-        cellRefs.current.map((el) => {
-          if (!el) return { x: 0, y: 0 };
-          const r = el.getBoundingClientRect();
-          return { x: r.left - cRect.left + r.width / 2, y: r.top - cRect.top + r.height / 2 };
-        }),
+        layout.centers.map((c) => c ?? { x: 0, y: 0 }),
       );
     };
     update();
@@ -156,7 +99,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       window.removeEventListener('resize', update);
       ro.disconnect();
     };
-  }, [grid]);
+  }, [grid, buildLayout]);
 
   const points = selectedPath
     .map((i) => centers[i])

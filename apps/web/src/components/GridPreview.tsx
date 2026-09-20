@@ -81,7 +81,7 @@ export function GridPreview({ gridSize, difficulty, enabled = true }: GridPrevie
       <p className="grid-preview__note">
         {loading && data
           ? 'Aggiornando…'
-          : 'Griglia di esempio generata dal server. Ogni partita ne genera una nuova.'}
+          : 'Scheda di esempio dal catalogo. Ogni partita ne pesca una diversa.'}
       </p>
     </section>
   );

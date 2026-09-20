@@ -1,13 +1,12 @@
 import { useCallback } from 'react';
-import type { Dictionary } from '@boggle/dictionary';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { WordList } from '../components/WordList.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 
-/** Partita single player completa. */
-export function SoloGameScreen({ dictionary }: { dictionary: Dictionary }) {
+/** Partita single player completa (schede pre-calcolate dal server). */
+export function SoloGameScreen() {
   const {
     soloGridSize,
     soloDifficulty,
@@ -16,7 +15,6 @@ export function SoloGameScreen({ dictionary }: { dictionary: Dictionary }) {
     setScreen,
   } = useAppStore();
   const game = useSoloGame({
-    dictionary,
     gridSize: soloGridSize,
     difficulty: soloDifficulty,
     rounds: soloRounds,
@@ -25,6 +23,27 @@ export function SoloGameScreen({ dictionary }: { dictionary: Dictionary }) {
   const { state } = game;
 
   const handlePathChange = useCallback((path: number[]) => game.setSelectedPath(path), [game]);
+
+  if (state.loading) {
+    return (
+      <div className="loading">
+        <div className="loading__spinner" />
+        <p>Preparo la scheda…</p>
+      </div>
+    );
+  }
+
+  if (game.loadError) {
+    return (
+      <div className="screen">
+        <h2 className="screen__title">Scheda non disponibile</h2>
+        <p className="screen__hint">{game.loadError}</p>
+        <button className="btn btn--ghost" onClick={() => setScreen('home')}>
+          Torna alla home
+        </button>
+      </div>
+    );
+  }
 
   if (state.phase === 'idle') {
     return (

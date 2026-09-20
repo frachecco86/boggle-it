@@ -157,6 +157,24 @@ body {
   margin: 12px 0 0;
 }
 
+.home__schede {
+  margin: 8px 0 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.home__schede strong {
+  color: var(--primary);
+}
+
+.home__links {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
 .home__actions {
   display: flex;
   flex-direction: column;
@@ -273,6 +291,13 @@ body {
   background: rgba(255, 92, 92, 0.14);
   border: 1px solid rgba(255, 92, 92, 0.4);
   color: #ffb3b3;
+}
+
+.banner--ok {
+  background: rgba(31, 169, 122, 0.14);
+  border: 1px solid rgba(31, 169, 122, 0.4);
+  color: #0f6b4d;
+  margin: 10px 0;
 }
 
 /* ---------- Setup ---------- */
@@ -1582,4 +1607,172 @@ body {
   font-size: 0.72rem;
   color: var(--text-dim);
   opacity: 0.85;
+}
+
+/* ---------- Pagina scheda ---------- */
+
+.scheda__topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.scheda__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 200px;
+}
+
+.scheda__head {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.scheda__meta {
+  color: var(--text-dim);
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+}
+
+.scheda__loading {
+  text-align: center;
+  color: var(--text-dim);
+}
+
+/* La griglia della scheda: stessa resa delle tile di gioco, non interattiva. */
+.scheda__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-size, 4), 1fr);
+  gap: 8px;
+  width: min(420px, 92vw);
+  margin: 0 auto 24px;
+}
+
+.scheda__cell {
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-weight: 900;
+  font-size: calc(min(64vw, 420px) / var(--grid-size, 4) * 0.5);
+  color: var(--text);
+  box-shadow: 0 2px 6px rgba(45, 60, 110, 0.07);
+}
+
+.scheda__words {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.scheda__group {
+  margin-bottom: 16px;
+}
+
+.scheda__group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.scheda__points,
+.scheda__count {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.scheda__count {
+  margin-left: auto;
+}
+
+/* ---------- Admin ---------- */
+
+.admin__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin__section {
+  margin-bottom: 26px;
+}
+
+.admin__form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.field--inline {
+  min-width: 140px;
+}
+
+.admin__counts {
+  margin: 12px 0 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.admin__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.admin__card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+.admin__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(45, 60, 110, 0.12);
+}
+
+.admin__card-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-size, 4), 1fr);
+  gap: 3px;
+}
+
+.admin__card-cell {
+  aspect-ratio: 1;
+  display: grid;
+  place-content: center;
+  background: var(--difficulty-bg, #f3f1ff);
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.7rem;
+  color: var(--text);
+}
+
+.admin__card-meta {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.chip--unique {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border-color: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
 }

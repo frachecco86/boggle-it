@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  generateGrid,
   isValidPath,
   pathMatchesWord,
+  rowsToGrid,
   scoreForWord,
   wordFromPath,
   type Difficulty,
   type FoundWord,
   type Grid,
   type GridSize,
-  type Tile,
+  type Scheda,
 } from '@boggle/shared';
-import { SwipeController, type SwipePoint } from './swipe.js';
-import type { Dictionary } from '@boggle/dictionary';
+import { SERVER_BASE } from '../net/socket.js';
 import { audio } from '../audio/AudioEngine.js';
 
 export type WordFeedback =
@@ -22,7 +21,6 @@ export type WordFeedback =
   | { kind: 'duplicate'; word: string; reason: string };
 
 interface UseSoloGameOptions {
-  dictionary: Dictionary;
   gridSize: GridSize;
   difficulty: Difficulty;
   rounds: number;
@@ -33,6 +31,8 @@ export interface SoloGameState {
   phase: 'idle' | 'playing' | 'roundEnd' | 'gameEnd';
   round: number;
   grid: Grid | null;
+  /** Scheda giocata nel round corrente (griglia + tutte le parole trovabili). */
+  scheda: Scheda | null;
   found: FoundWord[];
   score: number;
   selectedPath: number[];
@@ -40,16 +40,49 @@ export interface SoloGameState {
   timeLeftMs: number;
   feedback: WordFeedback | null;
   roundScores: number[];
+  /** Parole trovate in questo round (per il riepilogo). */
   missedWords: string[];
+  /** true mentre si carica la scheda dal server. */
+  loading: boolean;
 }
 
-/** Logica completa del single player: round, timer, validazione, punteggio. */
+/** Scarica una scheda casuale dal catalogo del server. */
+async function fetchScheda(
+  gridSize: GridSize,
+  difficulty: Difficulty,
+  signal?: AbortSignal,
+): Promise<Scheda | null> {
+  const url = `${SERVER_BASE}/preview?gridSize=${gridSize}&difficulty=${encodeURIComponent(difficulty)}`;
+  const preview = await fetch(url, { signal }).then(async (res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as { schedaId: string | null };
+  });
+  if (!preview.schedaId) return null;
+  const scheda = await fetch(`${SERVER_BASE}/schede/${encodeURIComponent(preview.schedaId)}`, {
+    signal,
+  }).then(async (res) => {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as Scheda;
+  });
+  return scheda;
+}
+
+/**
+ * Logica completa del single player: round, timer, validazione, punteggio.
+ *
+ * Le griglie non sono generate al volo: ogni round pesca una SCHEDA dal catalogo
+ * del server. Così la partita è riproducibile e le parole valide arrivano
+ * pre-calcolate (niente solver nel client).
+ *
+ * Punteggio: `lunghezza − 2`. In single player NON c'è raddoppio (non esistono
+ * avversari con cui essere "unici").
+ */
 export function useSoloGame(options: UseSoloGameOptions) {
-  const { dictionary, gridSize, difficulty, rounds, roundDurationMs } = options;
+  const { gridSize, difficulty, rounds, roundDurationMs } = options;
 
   const [phase, setPhase] = useState<SoloGameState['phase']>('idle');
   const [round, setRound] = useState(0);
-  const [grid, setGrid] = useState<Grid | null>(null);
+  const [scheda, setScheda] = useState<Scheda | null>(null);
   const [found, setFound] = useState<FoundWord[]>([]);
   const [roundScores, setRoundScores] = useState<number[]>([]);
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
@@ -57,9 +90,14 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const [deadline, setDeadline] = useState(0);
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
   const [missedWords, setMissedWords] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
+  const grid = useMemo(() => (scheda ? rowsToGrid(scheda.grid) : null), [scheda]);
   const gridRef = useRef<Grid | null>(null);
   gridRef.current = grid;
+  const schedaRef = useRef<Scheda | null>(null);
+  schedaRef.current = scheda;
   const foundRef = useRef<FoundWord[]>([]);
   foundRef.current = found;
 
@@ -70,30 +108,39 @@ export function useSoloGame(options: UseSoloGameOptions) {
   );
 
   const startRound = useCallback(
-    (roundNumber: number) => {
-      const g = generateGrid(gridSize, Math.random, difficulty);
-      setGrid(g);
-      setRound(roundNumber);
-      setFound([]);
+    async (roundNumber: number) => {
+      setLoading(true);
+      setLoadError(null);
+      setPhase('playing');
       setSelectedPath([]);
       setFeedback(null);
       setMissedWords([]);
-      setPhase('playing');
-      const end = Date.now() + roundDurationMs;
-      setDeadline(end);
-      setTimeLeftMs(roundDurationMs);
+      try {
+        const next = await fetchScheda(gridSize, difficulty);
+        if (!next) throw new Error('Nessuna scheda disponibile');
+        setScheda(next);
+        setFound([]);
+        setRound(roundNumber);
+        const end = Date.now() + roundDurationMs;
+        setDeadline(end);
+        setTimeLeftMs(roundDurationMs);
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
     },
     [gridSize, difficulty, roundDurationMs],
   );
 
   const start = useCallback(() => {
     setRoundScores([]);
-    startRound(1);
+    void startRound(1);
   }, [startRound]);
 
   // Timer
   useEffect(() => {
-    if (phase !== 'playing') return;
+    if (phase !== 'playing' || loading) return;
     let raf = 0;
     const tick = () => {
       const left = Math.max(0, deadline - Date.now());
@@ -107,47 +154,47 @@ export function useSoloGame(options: UseSoloGameOptions) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [phase, deadline, score]);
+  }, [phase, deadline, score, loading]);
 
-  const commitPath = useCallback(
-    (path: number[]) => {
-      const g = gridRef.current;
-      if (!g || path.length === 0) return;
-      const word = wordFromPath(g, path);
-      if (!isValidPath(g, path)) return;
-      if (word.length < 3) {
-        audio.play('invalid');
-        setFeedback({ kind: 'invalid', word, reason: 'Minimo 3 lettere' });
-        return;
-      }
-      if (!pathMatchesWord(g, path, word)) return;
-      if (foundRef.current.some((f) => f.word === word)) {
-        // Parola corretta ma ripetuta: suono e colore distinti dall'errore.
-        audio.play('already-found');
-        setFeedback({ kind: 'duplicate', word, reason: 'Già trovata' });
-        return;
-      }
-      if (!dictionary.has(word)) {
-        audio.play('invalid');
-        setFeedback({ kind: 'invalid', word, reason: 'Non nel dizionario' });
-        return;
-      }
-      const points = scoreForWord(word);
-      setFound((prev) => [...prev, { word, points, at: Date.now() }]);
-      // Motivo musicale crescente in base alla lunghezza della parola.
-      audio.playWordFound(word.length);
-      setFeedback({ kind: 'valid', word, points });
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
-    },
-    [dictionary],
-  );
+  const commitPath = useCallback((path: number[]) => {
+    const g = gridRef.current;
+    if (!g || path.length === 0) return;
+    const word = wordFromPath(g, path);
+    if (!isValidPath(g, path)) return;
+    if (word.length < 3) {
+      audio.play('invalid');
+      setFeedback({ kind: 'invalid', word, reason: 'Minimo 3 lettere' });
+      return;
+    }
+    if (!pathMatchesWord(g, path, word)) return;
+    if (foundRef.current.some((f) => f.word === word)) {
+      // Parola corretta ma ripetuta: suono e colore distinti dall'errore.
+      audio.play('already-found');
+      setFeedback({ kind: 'duplicate', word, reason: 'Già trovata' });
+      return;
+    }
+    // Validazione contro le parole della SCHEDA, non contro il dizionario intero:
+    // la scheda dice esattamente cosa è componibile e valido.
+    const inScheda = schedaRef.current?.words.includes(word) ?? false;
+    if (!inScheda) {
+      audio.play('invalid');
+      setFeedback({ kind: 'invalid', word, reason: 'Non una parola valida' });
+      return;
+    }
+    const points = scoreForWord(word);
+    setFound((prev) => [...prev, { word, points, at: Date.now() }]);
+    // Motivo musicale crescente in base alla lunghezza della parola.
+    audio.playWordFound(word.length);
+    setFeedback({ kind: 'valid', word, points });
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
+  }, []);
 
   const nextRound = useCallback(() => {
     if (round >= rounds) {
       setPhase('gameEnd');
       return;
     }
-    startRound(round + 1);
+    void startRound(round + 1);
   }, [round, rounds, startRound]);
 
   const totalScore = useMemo(() => roundScores.reduce((a, b) => a + b, 0) + score, [roundScores, score]);
@@ -157,6 +204,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       phase,
       round,
       grid,
+      scheda,
       found,
       score,
       selectedPath,
@@ -165,7 +213,9 @@ export function useSoloGame(options: UseSoloGameOptions) {
       feedback,
       roundScores,
       missedWords,
+      loading,
     } satisfies SoloGameState,
+    loadError,
     totalScore,
     start,
     commitPath,
@@ -175,5 +225,6 @@ export function useSoloGame(options: UseSoloGameOptions) {
   };
 }
 
-export { SwipeController };
-export type { SwipePoint, Tile };
+export { SwipeController } from './swipe.js';
+export type { SwipePoint } from './swipe.js';
+export type { Tile } from '@boggle/shared';

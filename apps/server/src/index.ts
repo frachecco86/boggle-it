@@ -7,17 +7,14 @@ import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
 import {
-  generateGrid,
-  MIN_WORD_LENGTH,
-  solveGrid,
-  type Grid,
   type ClientToServerEvents,
   type Difficulty,
   type GridSize,
   type ErrorPayload,
   type ServerToClientEvents,
 } from '@boggle/shared';
-import { loadServerDictionary, getDictionaryTrie } from './dictionary.js';
+import { loadServerDictionary, getSchedaPool } from './dictionary.js';
+import { SchedaCatalog, toMeta } from './schede.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +42,8 @@ const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
 // Il dizionario (Set) e' sempre in memoria; il trie del solver e' lazy.
 const dictionary = await loadServerDictionary();
 const registry = new RoomRegistry(dictionary);
+// Catalogo schede: caricato una volta all'avvio (base versionate + extra admin).
+const schede = SchedaCatalog.load();
 
 // pulizia periodica delle stanze vuote/terminate
 setInterval(() => registry.cleanup(), 60_000).unref();
@@ -94,60 +93,170 @@ if (servesWeb) {
 }
 
 /**
- * Anteprima: genera una griglia reale con le impostazioni richieste e la risolve
- * col trie, per mostrare quante parole si possono trovare.
+ * Anteprima: pesca una scheda reale dal catalogo con le impostazioni richieste
+ * e ne mostra griglia, numero di parole e qualche esempio lungo.
  *
  * GET /preview?gridSize=4&difficulty=normale
- * -> { gridSize, difficulty, grid: string[], wordCount, sampleWords, truncated }
+ * -> { gridSize, difficulty, schedaId, grid: string[], wordCount, sampleWords, truncated }
  *
- * Il solver è limitato: per il conteggio esatto usiamo un tetto alto, ma su griglie
- * 6x6 il numero può superare il tetto. In quel caso `truncated: true` e il client
- * mostra "oltre N".
+ * Non si risolve nulla a runtime: le parole arrivano dalla scheda pre-calcolata.
  */
-app.get('/preview', async (req, res) => {
+app.get('/preview', (req, res) => {
   const gridSizeRaw = Number(req.query.gridSize);
   const gridSize: GridSize = gridSizeRaw === 5 || gridSizeRaw === 6 ? gridSizeRaw : 4;
   const difficultyRaw = String(req.query.difficulty ?? 'normale');
   const difficulty: Difficulty = isValidDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
 
-  const grid = generateGrid(gridSize, Math.random, difficulty);
-
-  let wordCount = 0;
-  let truncated = false;
-  let sampleWords: string[] = [];
-  try {
-    const trie = await getDictionaryTrie();
-    const found = solveGrid(grid, trie, { limit: PREVIEW_SOLVE_LIMIT, minLength: MIN_WORD_LENGTH });
-    wordCount = found.length;
-    truncated = found.length >= PREVIEW_SOLVE_LIMIT;
-    sampleWords = [...found].sort((a, b) => b.length - a.length).slice(0, 8);
-  } catch {
-    // Se il solver non è disponibile mostriamo comunque la griglia.
-    return res.json({ gridSize, difficulty, grid: gridToLetters(grid), wordCount: null, sampleWords: [], truncated: false });
+  res.setHeader('Cache-Control', 'no-store');
+  const scheda = schede.random(gridSize, difficulty);
+  if (!scheda) {
+    return res.json({
+      gridSize,
+      difficulty,
+      schedaId: null,
+      grid: [],
+      wordCount: null,
+      sampleWords: [],
+      truncated: false,
+    });
   }
 
-  res.setHeader('Cache-Control', 'no-store');
-  res.json({ gridSize, difficulty, grid: gridToLetters(grid), wordCount, sampleWords, truncated });
+  const sampleWords = [...scheda.words].sort((a, b) => b.length - a.length).slice(0, 8);
+  res.json({
+    gridSize,
+    difficulty,
+    schedaId: scheda.id,
+    grid: scheda.grid.split('\n').map((row) => row.toUpperCase()),
+    wordCount: scheda.words.length,
+    sampleWords,
+    truncated: false,
+  });
 });
 
-/** Riga di lettere per la griglia (usata dall'anteprima). */
-function gridToLetters(grid: Grid): string[] {
-  const rows: string[] = [];
-  for (let r = 0; r < grid.size; r++) {
-    rows.push(
-      grid.tiles
-        .filter((t) => t.row === r)
-        .map((t) => t.display)
-        .join(''),
-    );
+/**
+ * Catalogo schede: elenco dei gruppi disponibili e conteggi.
+ *
+ * GET /schede            -> { total, byKey, bySize }
+ * GET /schede/:id        -> scheda completa (griglia + tutte le parole)
+ *
+ * Le soluzioni sono pubbliche per scelta di prodotto: la pagina scheda serve
+ * anche a studiare le griglie. Vedi SPEC §3.5.
+ */
+app.get('/schede', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const byKey = schede.countByKey();
+  const bySize: Record<string, number> = {};
+  /** Id raggruppati per chiave: permette al client di costruire il selettore. */
+  const ids: Record<string, string[]> = {};
+  for (const scheda of schede.list()) {
+    const key = `${scheda.size}-${scheda.difficulty}`;
+    (ids[key] ??= []).push(scheda.id);
   }
-  return rows;
+  for (const list of Object.values(ids)) list.sort();
+  for (const [key, count] of Object.entries(byKey)) {
+    const size = key.split('-')[0]!;
+    bySize[size] = (bySize[size] ?? 0) + count;
+  }
+  res.json({ total: schede.size, byKey, bySize, ids });
+});
+
+app.get('/schede/:id', (req, res) => {
+  const scheda = schede.get(String(req.params.id));
+  if (!scheda) return res.status(404).json({ error: 'Scheda non trovata' });
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.json(scheda);
+});
+
+/* ------------------------------------------------------------------ */
+/* Admin schede                                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Token admin da `ADMIN_TOKEN`. Se non impostato, le rotte admin rispondono 503:
+ * meglio un admin disabilitato che un admin aperto a tutti per dimenticanza.
+ */
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';
+
+function requireAdmin(req: express.Request, res: express.Response): boolean {
+  if (!ADMIN_TOKEN) {
+    res.status(503).json({ error: 'Admin non configurato: imposta ADMIN_TOKEN' });
+    return false;
+  }
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : String(req.query.token ?? '');
+  if (token !== ADMIN_TOKEN) {
+    res.status(401).json({ error: 'Token non valido' });
+    return false;
+  }
+  return true;
 }
 
+/** Verifica il token (usata dalla pagina /admin per il login). */
+app.get('/admin/verify', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.json({ ok: true, total: schede.size });
+});
+
+/** Elenco schede (metadati, senza le soluzioni) con filtri opzionali. */
+app.get('/admin/schede', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const size = Number(req.query.size);
+  const difficulty = String(req.query.difficulty ?? '');
+  const filtered = schede.list(
+    size === 4 || size === 5 || size === 6 ? size : undefined,
+    isValidDifficulty(difficulty) ? difficulty : undefined,
+  );
+  res.json({
+    total: schede.size,
+    count: filtered.length,
+    byKey: schede.countByKey(),
+    schede: filtered.map(toMeta),
+  });
+});
+
+/**
+ * Genera e salva nuove schede.
+ *
+ * POST /admin/schede/genera  { size, difficulty, count }
+ * -> { created: SchedaMeta[], total }
+ *
+ * Le schede vengono scritte in `SCHEDE_EXTRA_DIR` (default `schede-extra/`) e
+ * aggiunte subito al catalogo in memoria.
+ */
+app.post('/admin/schede/genera', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const size = Number(req.body?.size);
+  const difficulty = String(req.body?.difficulty ?? '');
+  const count = Math.max(1, Math.min(100, Number(req.body?.count ?? 10)));
+  if (size !== 4 && size !== 5 && size !== 6) {
+    return res.status(400).json({ error: 'size deve essere 4, 5 o 6' });
+  }
+  if (!isValidDifficulty(difficulty)) {
+    return res.status(400).json({ error: 'difficulty non valida' });
+  }
+
+  const startedAt = Date.now();
+  const pool = await getSchedaPool();
+  const startIndex = schede.list(size, difficulty).length + 1;
+  const created = pool.generate(size, difficulty, count, { startIndex });
+  for (const scheda of created) {
+    schede.add(scheda);
+    schede.persist(scheda);
+  }
+  console.log(
+    `✓ Admin: generate ${created.length} schede ${size}x${size} ${difficulty} in ${Date.now() - startedAt}ms`,
+  );
+  res.json({
+    created: created.map(toMeta),
+    total: schede.size,
+    byKey: schede.countByKey(),
+  });
+});
+
 // Fallback SPA: tutte le rotte non-API vanno a index.html.
-// Aggiunto DOPO le rotte API (preview, dictionary, health) per non oscurarle.
+// Aggiunto DOPO le rotte API (preview, schede, admin, dictionary, health) per non oscurarle.
 if (servesWeb) {
-  app.get(/^\/(?!socket\.io|dictionary|health|preview).*/, (_req, res) => {
+  app.get(/^\/(?!socket\.io|dictionary|health|preview|schede|admin).*/, (_req, res) => {
     res.sendFile(path.join(WEB_DIST, 'index.html'));
   });
   console.log(`✓ Frontend statico servito da ${WEB_DIST}`);
@@ -166,10 +275,10 @@ const socketState = new Map<string, { code: string; playerId: string }>();
 const errorPayload = (code: string, message: string): ErrorPayload => ({ code, message });
 
 /**
- * Tetto di parole enumerate dall'anteprima. Su griglie grandi il numero reale può
- * superarlo: in quel caso il client mostra "oltre N" invece di un valore sbagliato.
+ * Tetto di parole enumerate in una scheda generata dall'admin.
+ * Le schede normali ne hanno molte meno; il tetto difende da griglie patologiche.
  */
-const PREVIEW_SOLVE_LIMIT = 600;
+const MAX_SCHEDA_WORDS = 6000;
 
 function broadcastState(room: Room): void {
   io.to(room.code).emit('room:update', room.publicState());
@@ -255,12 +364,15 @@ io.on('connection', (socket) => {
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
 
     const startRound = () => {
-      const { grid, endsAt } = room.startRound();
+      // Ogni round pesca una scheda dal catalogo: griglia e soluzione già pronte.
+      const scheda = schede.random(room.gridSize, room.difficulty);
+      const { grid, endsAt } = room.startRound(scheda);
       io.to(room.code).emit('game:roundStart', {
         round: room.currentRound,
         grid,
         endsAt,
         durationMs: room.roundDurationMs,
+        schedaId: room.schedaId ?? undefined,
       });
       broadcastState(room);
       scheduleRoundEnd(room);
@@ -377,8 +489,7 @@ function scheduleRoundEnd(room: Room): void {
   setTimeout(async () => {
     if (room.phase !== 'playing') return;
     const results = room.endRound();
-    // Il trie e' lazy: viene costruito qui, solo quando serve davvero.
-    const missed = await computeMissedWords(room);
+    const missed = computeMissedWords(room);
     io.to(room.code).emit('game:roundEnd', {
       round: room.currentRound,
       results,
@@ -398,21 +509,22 @@ function scheduleRoundEnd(room: Room): void {
 }
 
 /**
- * Parole valide presenti nella griglia che nessuno ha trovato.
- * Usa il solver con trie (packages/shared) e filtra le parole piu' interessanti
- * (>= 5 lettere, max 20).
+ * Parole valide presenti nella scheda che nessuno ha trovato.
+ * Nessun solver: le parole arrivano pre-calcolate con la scheda.
+ * Si mostrano le più lunghe (>= 5 lettere, max 20).
  */
-async function computeMissedWords(room: Room): Promise<string[]> {
-  if (!room.grid) return [];
-  const trie = await getDictionaryTrie();
-  const all = solveGrid(room.grid, trie, { limit: 400, minLength: MIN_WORD_LENGTH });
-  return all.filter((w) => w.length >= 5 && !room.roundFoundWords.has(w)).slice(0, 20);
+function computeMissedWords(room: Room): string[] {
+  return [...room.roundValidWords]
+    .filter((w) => w.length >= 5 && !room.roundFoundWords.has(w))
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+    .slice(0, 20);
 }
 
 httpServer.listen(PORT, () => {
   console.log(`✓ Boggle-IT server su http://localhost:${PORT}`);
   console.log(`  origini client consentite: ${CLIENT_ORIGINS.join(', ')}`);
   console.log(`  parole in dizionario: ${dictionary.size.toLocaleString('it-IT')}`);
+  console.log(`  schede disponibili: ${schede.size.toLocaleString('it-IT')}`);
   const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
-  console.log(`  RSS all'avvio: ${mem} MB (trie del solver non ancora costruito)`);
+  console.log(`  RSS all'avvio: ${mem} MB (nessun trie del solver: parole dalle schede)`);
 });

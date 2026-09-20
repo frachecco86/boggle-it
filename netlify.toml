@@ -2,11 +2,8 @@
   command = "pnpm install --frozen-lockfile && node tools/check-context.mjs && pnpm --filter @boggle/dictionary build && pnpm --filter @boggle/web build"
   publish = "apps/web/dist"
 
-# Il dizionario e' immutabile: cache aggressiva + Brotli servito direttamente da Netlify.
-[[headers]]
-  for = "/dictionary/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+# Il client non scarica il dizionario: le parole arrivano dalle schede del server.
+# Le schede sono JSON versionati in packages/shared/schede/ e servite dal server.
 
 # Asset con hash: cache lunga.
 [[headers]]

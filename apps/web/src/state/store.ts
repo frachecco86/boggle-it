@@ -5,7 +5,7 @@ import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket } from '../net/socket.js';
 
-export type Screen = 'home' | 'solo-setup' | 'solo-game' | 'lobby' | 'mp-game' | 'summary';
+export type Screen = 'home' | 'solo-setup' | 'solo-game' | 'lobby' | 'mp-game' | 'summary' | 'scheda' | 'admin';
 
 /**
  * Notifica di una parola trovata da un avversario.
@@ -39,6 +39,8 @@ interface AppState {
   playerIds: Record<string, string>;
   room: RoomState | null;
   grid: Grid | null;
+  /** Id della scheda del round corrente in multiplayer. */
+  currentSchedaId: string | null;
   roundEndsAt: number;
   roundDurationMs: number;
   countdown: number | null;
@@ -55,6 +57,12 @@ interface AppState {
   errorMessage: string | null;
 
   setScreen: (s: Screen) => void;
+  /** Scheda da mostrare nella pagina scheda (id dal catalogo). */
+  schedaId: string | null;
+  setSchedaId: (id: string | null) => void;
+  /** Token admin, persistito in localStorage. */
+  adminToken: string;
+  setAdminToken: (t: string) => void;
   setNickname: (n: string) => void;
   setAvatar: (a: Avatar) => void;
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
@@ -63,7 +71,7 @@ interface AppState {
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
   configureRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
-  submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string }>;
+  submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
   leaveRoom: () => void;
   clearError: () => void;
 }
@@ -84,6 +92,7 @@ export const useAppStore = create<AppState>()(
       playerIds: {},
       room: null,
       grid: null,
+      currentSchedaId: null,
       roundEndsAt: 0,
       roundDurationMs: 180_000,
       countdown: null,
@@ -93,8 +102,12 @@ export const useAppStore = create<AppState>()(
       missedWords: [],
       finalScores: null,
       errorMessage: null,
+      schedaId: null,
+      adminToken: '',
 
       setScreen: (screen) => set({ screen }),
+      setSchedaId: (schedaId) => set({ schedaId }),
+      setAdminToken: (adminToken) => set({ adminToken }),
       setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),
       setAvatar: (avatar) => set({ avatar }),
       setSoloSetup: (gridSize, difficulty, rounds, roundDurationMs) =>
@@ -179,7 +192,12 @@ export const useAppStore = create<AppState>()(
         const socket = getSocket();
         return new Promise((resolve) => {
           socket.emit('game:submitWord', { word, path }, (res) => {
-            resolve({ accepted: res.accepted, reason: res.reason });
+            resolve({
+              accepted: res.accepted,
+              reason: res.reason,
+              points: res.points,
+              unique: res.unique,
+            });
           });
         });
       },
@@ -212,6 +230,7 @@ export const useAppStore = create<AppState>()(
         soloRoundDurationMs: s.soloRoundDurationMs,
         audioSettings: s.audioSettings,
         playerIds: s.playerIds,
+        adminToken: s.adminToken,
       }),
     },
   ),
@@ -223,9 +242,10 @@ export function bindSocketEvents(): () => void {
   const set = useAppStore.setState;
 
   const onRoomUpdate = (room: RoomState) => set({ room });
-  const onRoundStart = (p: { grid: Grid; endsAt: number; durationMs: number }) =>
+  const onRoundStart = (p: { grid: Grid; endsAt: number; durationMs: number; schedaId?: string }) =>
     set({
       grid: p.grid,
+      currentSchedaId: p.schedaId ?? null,
       roundEndsAt: p.endsAt,
       roundDurationMs: p.durationMs,
       roundResults: null,

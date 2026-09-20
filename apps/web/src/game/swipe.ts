@@ -1,74 +1,51 @@
 import type { Grid } from '@boggle/shared';
+import { CellPathTracker, gridAreAdjacent, type Layout, type Point, type TrackerTuning } from './cellTracker.js';
 
-export interface SwipePoint {
-  x: number;
-  y: number;
-}
-
-/** Opzioni di hit-test: permettono di favorire una cella diagonale. */
-export interface HitTestOptions {
-  /**
-   * Indice dell'ultima cella selezionata. Se presente, l'hit-test prova a
-   * preferire una cella DIAGONALE adiacente a questa: rende le diagonali
-   * molto più facili da tracciare senza "accendere" le celle laterali.
-   */
-  preferDiagonalFrom?: number;
-  /** Moltiplicatore del raggio di tolleranza (default 1). */
-  toleranceScale?: number;
-}
+export type SwipePoint = Point;
 
 export interface SwipeCallbacks {
-  /** Cella col centro più vicino al punto, o null se fuori tolleranza. */
-  hitTest: (p: SwipePoint, options?: HitTestOptions) => number | null;
-  /** Chiamato quando il percorso cambia (aggiunta/undo). */
+  /** Layout corrente della griglia (centri + size). */
+  getLayout: () => Layout;
+  /** true se due indici sono adiacenti. */
+  areAdjacent: (a: number, b: number) => boolean;
+  /** Chiamato quando il percorso cambia (aggiunta/undo), anche a percorso vuoto. */
   onPathChange: (path: number[]) => void;
-  /** Chiamato al rilascio: il percorso e' definitivo. */
+  /** Chiamato al rilascio: il percorso è definitivo. */
   onCommit: (path: number[]) => void;
 }
 
 export interface SwipeOptions {
-  /** Dimensione tipica di una cella in px: usata per interpolare i movimenti veloci. */
-  getCellSize?: () => number;
+  /** Tolleranza iniziale sul primo tocco (1 = mezza cella). */
+  startToleranceScale?: number;
+  /** Parametri di riconoscimento (deadzone, diagonali, isteresi). */
+  tuning?: TrackerTuning;
+  /** true se il pointer ha origine su un elemento interattivo da ignorare (bottoni). */
+  shouldIgnoreTarget?: (target: EventTarget | null) => boolean;
 }
 
 /**
- * Gestione dello swipe sulla griglia con Pointer Events (mouse + touch + pen).
+ * Gesto di swipe indipendente dal DOM: riceve punti in coordinate locali
+ * all'elemento e delega il riconoscimento delle celle a `CellPathTracker`.
  *
- * Perché è più preciso di un semplice "trova la cella sotto il dito":
- *  1. **Centro più vicino**: il punto non deve cadere dentro la cella (i gap tra le
- *     celle e gli angoli arrotondati creano zone morte). Basta avvicinarsi al centro.
- *  2. **Bias diagonale**: muovendosi in diagonale, il dito devia naturalmente verso
- *     le celle laterali. Se la cella diagonale è plausibile la preferiamo, così non
- *     si "accendono" le lettere attorno.
- *  3. **Interpolazione**: su swipe veloci il pointer salta da una cella a una lontana.
- *     Interpoliamo tra i due punti per non perdere le celle intermedie.
+ * Il gesto è NO-OP se il percorso è vuoto (nessun punto di partenza valido),
+ * così un tocco fuori griglia non muove nulla.
  */
-export class SwipeController {
-  private path: number[] = [];
+export class SwipeGesture {
+  private readonly tracker: CellPathTracker;
   private active = false;
-  private lastHit: number | null = null;
-  private lastPoint: SwipePoint | null = null;
-  private pointerId: number | null = null;
 
   constructor(
-    private readonly element: HTMLElement,
-    private readonly getGrid: () => Grid,
     private readonly callbacks: SwipeCallbacks,
     private readonly options: SwipeOptions = {},
   ) {
-    element.addEventListener('pointerdown', this.onPointerDown);
-    element.addEventListener('pointermove', this.onPointerMove);
-    element.addEventListener('pointerup', this.onPointerUp);
-    element.addEventListener('pointercancel', this.onPointerUp);
-    element.addEventListener('pointerleave', this.onPointerUp);
-  }
-
-  destroy(): void {
-    this.element.removeEventListener('pointerdown', this.onPointerDown);
-    this.element.removeEventListener('pointermove', this.onPointerMove);
-    this.element.removeEventListener('pointerup', this.onPointerUp);
-    this.element.removeEventListener('pointercancel', this.onPointerUp);
-    this.element.removeEventListener('pointerleave', this.onPointerUp);
+    this.tracker = new CellPathTracker(
+      {
+        getLayout: callbacks.getLayout,
+        areAdjacent: callbacks.areAdjacent,
+        onPathChange: callbacks.onPathChange,
+      },
+      options.tuning,
+    );
   }
 
   get isActive(): boolean {
@@ -76,17 +53,90 @@ export class SwipeController {
   }
 
   get currentPath(): readonly number[] {
-    return this.path;
+    return this.tracker.currentPath;
   }
 
-  /** Reset esterno (es. nuovo round). */
-  reset(): void {
+  pointerDown(point: SwipePoint): boolean {
+    if (this.active) return false;
+    const started = this.tracker.begin(point, this.options.startToleranceScale ?? 1.3);
+    if (started) this.active = true;
+    return started;
+  }
+
+  pointerMove(point: SwipePoint): boolean {
+    if (!this.active) return false;
+    return this.tracker.move(point);
+  }
+
+  /** Rilascia: ritorna il percorso finale (o [] se il gesto non era attivo). */
+  pointerUp(): number[] {
+    if (!this.active) return [];
     this.active = false;
-    this.path = [];
-    this.lastHit = null;
-    this.lastPoint = null;
-    this.pointerId = null;
-    this.callbacks.onPathChange([]);
+    const path = this.tracker.end();
+    if (path.length > 0) this.callbacks.onCommit(path);
+    return path;
+  }
+
+  /** Annulla senza committare (pointercancel, layout change, nuovo round). */
+  cancel(): void {
+    this.active = false;
+    this.tracker.reset();
+  }
+
+  reset(): void {
+    this.cancel();
+  }
+}
+
+/**
+ * Swipe su una griglia con Pointer Events (mouse + touch + pen).
+ *
+ * Riconoscimento: vedi `CellPathTracker` — settori angolari + deadzone +
+ * isteresi al posto del "centro più vicino", che sulle diagonali selezionava
+ * le celle ortogonali.
+ */
+export class SwipeController {
+  private pointerId: number | null = null;
+  private readonly gesture: SwipeGesture;
+
+  constructor(
+    private readonly element: HTMLElement,
+    getGrid: () => Grid,
+    callbacks: SwipeCallbacks,
+    private readonly options: SwipeOptions = {},
+  ) {
+    this.gesture = new SwipeGesture(callbacks, options);
+    // `getGrid` è accettato per compatibilità: l'adiacenza arriva dai callbacks.
+    void getGrid;
+
+    // Listener sul WINDOW: il capture può interrompersi (cambio schermata,
+    // re-render, gesto di sistema) e in quel caso pointerup/pointercancel non
+    // arriverebbero più sull'elemento, lasciandolo "agganciato" per sempre.
+    window.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerCancel);
+    window.addEventListener('blur', this.onWindowBlur);
+  }
+
+  destroy(): void {
+    window.removeEventListener('pointerdown', this.onPointerDown);
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerCancel);
+    window.removeEventListener('blur', this.onWindowBlur);
+  }
+
+  get isActive(): boolean {
+    return this.gesture.isActive;
+  }
+
+  get currentPath(): readonly number[] {
+    return this.gesture.currentPath;
+  }
+
+  reset(): void {
+    this.abort();
   }
 
   private localPoint(e: PointerEvent): SwipePoint {
@@ -95,107 +145,80 @@ export class SwipeController {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    // Ignora click con tasto destro / secondari
-    if (e.button !== 0 && e.pointerType === 'mouse') return;
-    const p = this.localPoint(e);
-    // Tolleranza ampia sul primo tocco: è più facile iniziare la parola.
-    const idx = this.callbacks.hitTest(p, { toleranceScale: 1.3 });
-    if (idx === null) return;
-    this.active = true;
+    // Ignora tasto destro / secondari.
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (!this.element.contains(e.target as Node)) return;
+    if (this.options.shouldIgnoreTarget?.(e.target)) return;
+    // Self-healing: un pointerup perso (browser mobile, gesture interrotta) non
+    // deve bloccare per sempre lo swipe. Un nuovo tocco su un NUOVO pointer
+    // riparte azzerando lo stato sporco.
+    if (this.pointerId !== null && this.pointerId !== e.pointerId) this.abort();
+    if (this.pointerId !== null) return;
+
+    const started = this.gesture.pointerDown(this.localPoint(e));
+    if (!started) return;
+
     this.pointerId = e.pointerId;
-    this.path = [idx];
-    this.lastHit = idx;
-    this.lastPoint = p;
     try {
       this.element.setPointerCapture?.(e.pointerId);
     } catch {
-      /* pointer non attivo (es. eventi sintetici) */
+      /* pointer non attivo (es. eventi sintetici nei test) */
     }
+    // Evita selezione testo / gesti di compatibilità durante il drag.
     e.preventDefault();
-    this.callbacks.onPathChange([...this.path]);
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.active) return;
+    if (!this.gesture.isActive) return;
+    // Movimento di un altro dito: ignorato senza toccare il percorso corrente.
     if (this.pointerId !== null && e.pointerId !== this.pointerId) return;
-    const p = this.localPoint(e);
-    const from = this.lastPoint ?? p;
-
-    // Interpolazione: se il dito si è mosso molto dall'ultimo evento, campioniamo
-    // alcuni punti intermedi, così non perdiamo le celle attraversate.
-    const cellSize = this.options.getCellSize?.() ?? 48;
-    const dx = p.x - from.x;
-    const dy = p.y - from.y;
-    const distance = Math.hypot(dx, dy);
-    const steps = Math.max(1, Math.min(8, Math.ceil(distance / (cellSize * 0.4))));
-
-    let changed = false;
-    for (let s = 1; s <= steps; s++) {
-      const t = s / steps;
-      const sample: SwipePoint = { x: from.x + dx * t, y: from.y + dy * t };
-      if (this.applyPoint(sample)) changed = true;
-    }
-    this.lastPoint = p;
-    if (changed) {
-      e.preventDefault();
-      this.callbacks.onPathChange([...this.path]);
-    }
+    if (this.gesture.pointerMove(this.localPoint(e))) e.preventDefault();
   };
 
-  /**
-   * Prova ad estendere/accorciare il percorso con un punto campionato.
-   * Ritorna true se il percorso è cambiato.
-   */
-  private applyPoint(p: SwipePoint): boolean {
-    const last = this.path[this.path.length - 1];
-    const idx = this.callbacks.hitTest(p, {
-      preferDiagonalFrom: last,
-      toleranceScale: 1,
-    });
-    if (idx === null) return false;
-    if (idx === this.lastHit) return false;
+  private onPointerUp = (e: PointerEvent): void => {
+    if (!this.gesture.isActive) return;
+    if (this.pointerId !== null && e.pointerId !== this.pointerId) return;
+    // SwipeGesture.pointerUp() ha già chiamato onCommit con il percorso finale.
+    this.gesture.pointerUp();
+    // Il pointerup arriva mentre il capture è ancora attivo: rilascia subito.
+    // `onPointerCancel` (via lostpointercapture) è ora un no-op se lo stato è pulito,
+    // quindi non azzera un gesto nuovo iniziato nel frattempo.
+    this.release(e.pointerId);
+  };
 
-    // Undo: tornando sulla penultima cella si annulla l'ultimo passo.
-    const penultimo = this.path[this.path.length - 2];
-    if (idx === penultimo) {
-      this.path.pop();
-      this.lastHit = idx;
-      return true;
+  /** Riporta il controller a riposo, scartando il gesto in corso. */
+  private abort(): void {
+    const pointerId = this.pointerId;
+    this.pointerId = null;
+    this.gesture.cancel();
+    if (pointerId !== null) {
+      try {
+        this.element.releasePointerCapture?.(pointerId);
+      } catch {
+        /* pointer non attivo */
+      }
     }
-    if (this.path.includes(idx)) return false; // niente celle ripetute
-
-    const grid = this.getGrid();
-    if (last !== undefined && !areAdjacentByIndex(grid, last, idx)) return false;
-
-    this.path.push(idx);
-    this.lastHit = idx;
-    return true;
   }
 
-  private onPointerUp = (e: PointerEvent): void => {
-    if (!this.active) return;
+  private onPointerCancel = (e: PointerEvent): void => {
     if (this.pointerId !== null && e.pointerId !== this.pointerId) return;
-    const path = [...this.path];
-    this.active = false;
-    this.path = [];
-    this.lastHit = null;
-    this.lastPoint = null;
+    this.abort();
+  };
+
+  /** Blur/visibility change (es. app in background): chiude il gesto in corso. */
+  private onWindowBlur = (): void => {
+    this.abort();
+  };
+
+  private release(pointerId: number): void {
     this.pointerId = null;
     try {
-      this.element.releasePointerCapture?.(e.pointerId);
+      this.element.releasePointerCapture?.(pointerId);
     } catch {
       /* pointer non attivo */
     }
-    this.callbacks.onPathChange([]);
-    if (path.length > 0) this.callbacks.onCommit(path);
-  };
+  }
 }
 
-function areAdjacentByIndex(grid: Grid, a: number, b: number): boolean {
-  const ta = grid.tiles[a];
-  const tb = grid.tiles[b];
-  if (!ta || !tb) return false;
-  const dr = Math.abs(ta.row - tb.row);
-  const dc = Math.abs(ta.col - tb.col);
-  return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
-}
+export { CellPathTracker, gridAreAdjacent };
+export type { Layout, Point, TrackerTuning };

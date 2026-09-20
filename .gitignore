@@ -12,9 +12,10 @@ dist/
 
 # Dati dizionario: fonti grezze e output non compresso (words.br E' versionato:
 # e' il dizionario compresso, 616 KB, e rende i deploy riproducibili).
+# 60000_parole_italiane.txt È versionato (MIT, ~556 KB): serve al generatore schede
+# per i livelli facili e rende il build Docker riproducibile offline.
 packages/dictionary/data/morph-it_048.txt
 packages/dictionary/data/current_version/
-packages/dictionary/data/60000_parole_italiane.txt
 packages/dictionary/data/words.txt
 packages/dictionary/data/.sources.json
 
@@ -25,3 +26,6 @@ tsconfig.tsbuildinfo
 # Dizionario copiato per la CDN (rigenerato dal build)
 apps/web/public/dictionary/
 apps/web/tsconfig.tsbuildinfo
+
+# Schede generate dall'admin (arte runtime, non versionate)
+packages/shared/schede-extra/

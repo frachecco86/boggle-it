@@ -2,11 +2,13 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildTrie, type TrieNode } from '@boggle/shared';
+import { buildTrie, createSchedaPool, type SchedaPool, type TrieNode } from '@boggle/shared';
 import { createDictionaryFromText, type Dictionary } from '@boggle/dictionary';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA = path.resolve(__dirname, '../../../packages/dictionary/data/words.txt');
+const COMMON_WORDS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/60000_parole_italiane.txt');
+const CONSONANT_ENDINGS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/consonant-endings.txt');
 
 /**
  * Lunghezza massima delle parole caricate nel trie per il solver ("parole mancate").
@@ -72,6 +74,43 @@ export async function getDictionaryTrie(): Promise<TrieNode> {
 /** Rilascia il trie (utile per test o per liberare memoria su richiesta). */
 export function releaseTrie(): void {
   cachedTrie = null;
+}
+
+/**
+ * Pool di generazione schede (dizionario completo + lessico comune).
+ * Usato dall'endpoint admin `POST /admin/schede/genera`.
+ *
+ * Diversamente dal trie del solver, qui la lunghezza massima è 14: le schede
+ * possono contenere parole lunghe e l'admin accetta di allocare più memoria.
+ */
+let cachedPool: SchedaPool | null = null;
+let poolBuilding: Promise<SchedaPool> | null = null;
+const SCHEDA_MAX_WORD_LENGTH = Number(process.env.SCHEDA_MAX_WORD_LENGTH ?? 14);
+
+export async function getSchedaPool(): Promise<SchedaPool> {
+  if (cachedPool) return cachedPool;
+  if (!poolBuilding) {
+    poolBuilding = (async () => {
+      if (!cachedWords) await loadServerDictionary();
+      const startedAt = Date.now();
+      const [commonText, endingsText] = await Promise.all([
+        existsSync(COMMON_WORDS_PATH) ? readFile(COMMON_WORDS_PATH, 'utf8') : Promise.resolve(''),
+        existsSync(CONSONANT_ENDINGS_PATH) ? readFile(CONSONANT_ENDINGS_PATH, 'utf8') : Promise.resolve(''),
+      ]);
+      cachedPool = createSchedaPool({
+        fullWords: cachedWords ?? [],
+        commonWords: commonText.split('\n'),
+        allowedConsonantEndings: endingsText.split('\n'),
+        maxWordLength: SCHEDA_MAX_WORD_LENGTH,
+      });
+      const mem = (process.memoryUsage().heapUsed / 1048576).toFixed(0);
+      console.log(`✓ Pool schede pronto (max ${SCHEDA_MAX_WORD_LENGTH} lettere) in ${Date.now() - startedAt}ms — heap ${mem} MB`);
+      return cachedPool;
+    })().finally(() => {
+      poolBuilding = null;
+    });
+  }
+  return poolBuilding;
 }
 
 export type { Dictionary };

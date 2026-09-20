@@ -15,7 +15,7 @@ nessuna persistenza su database, nessuna PWA.
 - Apro il sito → posso giocare subito in single player (3 round).
 - Posso creare una stanza, ricevere un codice a 6 caratteri, e un amico può entrarci.
 - Entrambi vediamo la **stessa griglia** e lo **stesso timer**, e vediamo la classifica live.
-- Compongo parole con swipe, valide solo se presenti nel dizionario e non già trovate.
+- Compongo parole con swipe, valide solo se presenti nella scheda e non già trovate.
 - A fine partita vedo punteggio e riepilogo delle parole mancate.
 
 ---
@@ -27,17 +27,17 @@ nessuna persistenza su database, nessuna PWA.
 | Frontend | **React 18 + Vite + TypeScript** |
 | Animazioni | **CSS + Web Animations API** (nessuna libreria) |
 | Multiplayer | **Node + Socket.IO**, stanza con codice 6 caratteri |
-| Dizionario | **Bundle client + validazione server** |
+| Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer |
 | Struttura | **Monorepo pnpm workspaces** |
 | Sorgente dizionario | **Morph-it! (UniBO) + abbreviazioni Wikizionario** |
-| Griglie | **4×4, 5×5, 6×6** selezionabili |
-| Parole duplicate | **Punteggio pieno a tutti** (ogni giocatore prende i punti delle parole che trova) |
+| Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 480 schede** |
+| Punteggio | **lunghezza − 2**; in multiplayer **raddoppio** se trovata da un solo giocatore |
 
 ---
 
 ## 3. Regole di gioco
 
-### 3.1 Generazione griglia
+### 3.1 Scheda (griglia pre-generata)
 - N×N (`N ∈ {4,5,6}`) con **composizione controllata** per difficoltà:
   un numero esatto di vocali, un limite di lettere rare (z k w x y j), il resto consonanti comuni.
 - La faccia `q` rappresenta il digramma **"Qu"** (Q+U inseparabili, come nel Boggle ufficiale).
@@ -47,6 +47,22 @@ nessuna persistenza su database, nessuna PWA.
   vocali lasciava i livelli indistinguibili (mediane 64/62/61 su 4×4); controllando entrambe
   le mediane diventano 86 / 74 / 52 / 49.
 
+**Le griglie non sono più generate a runtime per giocare**: si pescano da un **catalogo di
+schede pre-calcolate** (`packages/shared/schede/`). Ogni scheda contiene la griglia e **tutte**
+le parole trovabili. Vantaggi: partite riproducibili, soluzioni verificate, nessun solver a
+runtime, e la possibilità di **filtrare la qualità** delle schede (parole lunghe, parole comuni).
+
+Requisiti di qualità (imposti in generazione, con rigenerazione finché non è soddisfatto):
+- parole di **varia lunghezza**, con almeno una parola lunga (≥ 7; su 6×6 tipicamente 9-12);
+- un numero minimo di parole per dimensione;
+- nei livelli `molto-facile` e `facile` la griglia è risolta contro il **lessico comune**
+  (~60k parole non astruse): tutte le parole trovabili sono comuni;
+- nei livelli `normale` e `difficile` si usa il dizionario completo, accettando solo schede
+  con almeno una parola lunga.
+
+Catalogo di base: **480 schede** (40 per ognuna delle 12 combinazioni dimensione × difficoltà),
+rigenerabili con `pnpm gen:schede` e ampliabili dal pannello admin.
+
 ### 3.2 Selezione parola (swipe)
 - Il giocatore preme su una cella e trascina verso celle **adiacenti** (8 direzioni).
 - Ogni cella può essere usata **una sola volta** per parola.
@@ -54,24 +70,40 @@ nessuna persistenza su database, nessuna PWA.
 - Rilasciare il dito → la parola viene confermata e validata.
 - Una parola deve avere **≥ 3 lettere**.
 - Le celle non possono essere riutilizzate nella stessa parola (percorso semplice).
+- **Riconoscimento** (`apps/web/src/game/cellTracker.ts`): dalla cella corrente la
+  direzione del vettore dito→centro viene classificata in 8 settori angolari; le diagonali
+  hanno settori più larghi, così un dito che "striscia" verso la laterale sceglie comunque
+  la cella diagonale voluta. Si richiedono una distanza minima dal centro (deadzone) e un
+  allineamento minimo, più severo al cambio di direzione (isteresi): niente sfarfallio sul
+  bordo e percorsi a zig-zag incrociati stabili. I movimenti veloci sono interpolati, quindi
+  non si perdono le celle intermedie.
 
 ### 3.3 Validità
 Una parola è valida se **tutte** queste condizioni sono vere:
 1. Lunghezza ≥ 3.
-2. Presente nel dizionario italiano (forma esatta, vedi §4).
+2. **Presente fra le parole della scheda** (multiplayer: presente nel dizionario italiano).
 3. Non già trovata in questo round dal giocatore.
 4. Percorso legale nella griglia (adiacenza + nessuna cella ripetuta) — validato client e server.
 
 ### 3.4 Punteggio
+**Regola classica adattata**: 1 punto per una parola di 3 lettere, **un punto in più per ogni
+lettera aggiuntiva** → `punti = lunghezza − 2`.
+
 | Lunghezza | Punti |
 |---|---|
-| 3–4 | 1 |
-| 5 | 2 |
-| 6 | 3 |
-| 7 | 4 |
-| 8+ | 5 |
+| 3 | 1 |
+| 4 | 2 |
+| 5 | 3 |
+| 6 | 4 |
+| 10 | 8 |
+| 16 | 14 |
 
-Nessun bonus in v0.1 (rimandato a v0.2). **Parole duplicate: punteggio pieno a tutti.**
+La formula è **lineare e senza tetto** (non si ferma a 8 lettere): le schede contengono parole
+lunghe, che devono valere di più.
+
+**Raddoppio (solo multiplayer)**: una parola trovata da **un solo giocatore** vale doppio.
+In single player non esiste il concetto di "unico", quindi niente raddoppio.
+In caso di parola trovata da più giocatori, ognuno prende i punti base.
 
 ### 3.5 Struttura partita
 - Round da **180 secondi** (3 min) con countdown visibile.
@@ -100,23 +132,68 @@ Nessun bonus in v0.1 (rimandato a v0.2). **Parole duplicate: punteggio pieno a t
 
 ### 4.3 Formato distribuito
 - `packages/dictionary/data/words.txt` — lista ordinata, una parola per riga.
-- Build: genera `words.json` / array compresso per il client (~390k parole, ordinate
-  per consentire binary search) + `.br` precompressa servita dal server.
-- Client: `Set` in memoria + ricerca binaria sui dati compressi; lookup O(1)/O(log n).
-- Server: stessa lista come **fonte di verità** per la validazione in multiplayer.
+- **Il client non scarica più il dizionario**: le parole valide per il single player
+  arrivano dalle **schede** (`packages/shared/schede/*.json`), che il server serve via HTTP.
+- Il server tiene il dizionario in memoria (`Set`) come **fonte di verità** per la validazione
+  in multiplayer e per la generazione di nuove schede dall'admin.
+- Le schede sono servite dal catalogo in RAM: `/schede`, `/schede/:id`, `/preview`.
 
 ### 4.4 Validazione
-- **Client**: validazione istantanea per feedback UI (shake/accettata).
-- **Server**: in multiplayer ricalcola e valida ogni parola ricevuta. Il client non può
-  inventare parole o percorsi.
+- **Client (single player)**: validazione istantanea contro l'elenco parole della scheda.
+- **Server (multiplayer)**: ricalcola e valida ogni parola ricevuta (dizionario + percorso).
+  Il client non può inventare parole o percorsi.
+- **Schede**: generate offline o dall'admin, mai dal giocatore: le parole sono già filtrate
+  per qualità.
+
+---
+
+## 4-bis. Catalogo schede e admin
+
+### 4-bis.1 Formato scheda
+```json
+{
+  "id": "4-normale-017",
+  "size": 4,
+  "difficulty": "normale",
+  "grid": "casa\\nsola\\ntino\\nevia",
+  "words": ["cassaforte", "..."],
+  "longest": 10
+}
+```
+I punti non sono salvati: si derivano (`lunghezza − 2`). I file sono partizionati per
+`size-difficulty` (`schede-4-normale.json`, ...) con un wrapper `{ version, generatedAt, schede }`.
+
+### 4-bis.2 Endpoint
+| Metodo | Rotta | Auth | Descrizione |
+|---|---|---|---|
+| GET | `/schede` | no | Totali e conteggi per gruppo |
+| GET | `/schede/:id` | no | Scheda completa (griglia + tutte le parole) |
+| GET | `/preview?gridSize=&difficulty=` | no | Una scheda di esempio + conteggio |
+| GET | `/admin/verify` | Bearer | Verifica token |
+| GET | `/admin/schede?size=&difficulty=` | Bearer | Elenco metadati schede |
+| POST | `/admin/schede/genera` | Bearer | Genera e salva nuove schede |
+
+Il token admin sta in `ADMIN_TOKEN`. Se non impostato, le rotte admin rispondono **503**
+(admin disabilitato di default: più sicuro di un pannello aperto per dimenticanza).
+Le schede generate dall'admin sono salvate in `SCHEDE_EXTRA_DIR` (default `schede-extra/`),
+separate da quelle versionate, e aggiunte subito al catalogo in memoria.
+
+### 4-bis.3 Interfaccia
+- **Home**: numero totale di schede disponibili, sempre visibile.
+- **Pagina scheda** (`/` → schermata `scheda`): griglia e **tutte** le parole trovabili,
+  raggruppate per lunghezza con i punti. Le soluzioni sono pubbliche per scelta di prodotto.
+- **Pannello admin** (schermata `admin`): token, elenco con anteprima delle griglie,
+  filtri e generazione di nuove schede; dalla card si apre la pagina scheda.
 
 ---
 
 ## 5. Modalità
 
 ### 5.1 Single player
-- Selezione formato griglia (4×4 / 5×5 / 6×6) e numero round.
+- Selezione formato griglia (4×4 / 5×5 / 6×6), difficoltà e numero round.
+- Ogni round pesca una **scheda** casuale dal catalogo del server.
 - Timer, griglia, punteggio, lista parole trovate.
+- Validazione contro le parole della scheda (nessun dizionario nel client).
 - A fine round: riepilogo con le parole che esistevano e non sono state trovate
   (limitato alle più "interessanti": lunghe ≥ 5, max ~20).
 
@@ -137,12 +214,14 @@ Nessun bonus in v0.1 (rimandato a v0.2). **Parole duplicate: punteggio pieno a t
 ## 6. Interfaccia e flusso
 
 ### 6.1 Schermate
-1. **Home** — titolo, bottoni "Gioca da solo" / "Crea partita" / "Entra con codice", credits dizionario.
-2. **Setup single player** — griglia N, numero round, "Inizia".
+1. **Home** — titolo, numero di schede disponibili, bottoni "Gioca da solo" / "Crea partita" / "Entra con codice", link a "Sfoglia le schede" e "Admin", credits dizionario.
+2. **Setup single player** — griglia N, difficoltà, durata, numero round, "Inizia".
 3. **Lobby multiplayer** — codice stanza grande e copiabile, lista giocatori, impostazioni host, "Avvia".
 4. **Gioco** — griglia centrale, timer, punteggio, input parola corrente, lista parole trovate, classifica (MP).
-5. **Riepilogo round** — punteggi del round, parole per giocatore, "Prossimo round".
+5. **Riepilogo round** — punteggi del round, parole per giocatore (badge ×2 sulle uniche), "Prossimo round".
 6. **Riepilogo finale** — classifica, statistiche, "Rigioca" / "Torna alla home".
+7. **Scheda** — griglia della scheda e tutte le parole trovabili, per lunghezza.
+8. **Admin** — token, elenco schede con anteprima, filtri, generazione.
 
 Mobile-first: layout verticale, griglia a tutta larghezza, area di swipe con `touch-action: none`.
 
@@ -171,22 +250,26 @@ boggle-it/
 ├── apps/
 │   ├── web/                    # React + Vite + TS
 │   │   ├── src/
-│   │   │   ├── components/     # Grid, Tile, Timer, ScoreList, Lobby, ...
-│   │   │   ├── screens/        # Home, SoloSetup, Lobby, Game, RoundSummary, FinalSummary
-│   │   │   ├── game/           # path logic, swipe handler, animations
-│   │   │   ├── net/            # socket client, room client
-│   │   │   └── state/          # store (zustand o reducer)
-│   └── server/                 # Node + Socket.IO
+│   │   │   ├── components/     # GridBoard, Timer, WordList, GridPreview, ...
+│   │   │   ├── screens/        # Home, SoloSetup, SoloGame, Lobby, MP, Summary,
+│   │   │   │                   #   Scheda (soluzioni), Admin
+│   │   │   ├── game/           # cellTracker (swipe), useSoloGame, useGridPreview
+│   │   │   ├── net/            # socket client
+│   │   │   └── state/          # store (zustand)
+│   └── server/                 # Node + Express + Socket.IO
+│       ├── scripts/
+│       │   └── gen-schede.ts   # generatore schede (CLI)
 │       └── src/
-│           ├── rooms.ts        # stanza, codice, stato
-│           ├── game.ts         # round loop, timer autorevole
-│           ├── validate.ts     # validazione parole/percorsi
-│           └── index.ts
+│           ├── rooms.ts        # stanza, round, punteggio (raddoppio)
+│           ├── schede.ts       # catalogo schede (carica/serve/persisti)
+│           ├── dictionary.ts   # dizionario + pool di generazione (lazy)
+│           └── index.ts        # HTTP + Socket.IO + admin
 ├── packages/
-│   ├── shared/                 # tipi, dadi, logica griglia, scoring (usato da web+server)
+│   ├── shared/                 # tipi, griglia, scoring, solver, schede (web+server)
+│   │   └── schede/             # 480 schede pre-calcolate (JSON versionati)
 │   └── dictionary/             # lista parole + script di build
 ├── tools/
-│   └── gen-dice.mjs            # generatore dadi deterministico
+│   └── check-context.mjs       # controllo contesto di build
 ├── SPEC.md
 └── README.md
 ```
@@ -199,17 +282,17 @@ boggle-it/
 ## 8. Protocollo Socket.IO (v0.1)
 
 **Client → Server**
-- `room:create` `{ nickname, gridSize, rounds }` → `{ roomCode, playerId, state }`
+- `room:create` `{ nickname, avatar, gridSize, difficulty, rounds, roundDurationMs }` → `{ roomCode, playerId, state }`
 - `room:join` `{ roomCode, nickname, playerId? }` → `{ state }`
 - `room:start` `{ roomCode }` (solo host)
-- `game:submitWord` `{ roomCode, word, path }` → `{ accepted, reason?, points? }`
+- `game:submitWord` `{ word, path }` → `{ accepted, reason?, word?, points? }`
 - `room:leave` `{ roomCode }`
 
 **Server → Client**
 - `room:update` `{ players, hostId, gridSize, rounds, phase }`
-- `game:roundStart` `{ round, grid, endsAt, durationMs }`
-- `game:playerWord` `{ playerId, word, points }` (broadcast per classifica live)
-- `game:roundEnd` `{ results, perPlayerWords, nextRoundInMs }`
+- `game:roundStart` `{ round, grid, endsAt, durationMs, schedaId? }`
+- `game:playerWord` `{ playerId, avatar, word, points, score, self }` (broadcast per classifica live)
+- `game:roundEnd` `{ round, results, missedWords, nextRoundInMs }`
 - `game:gameEnd` `{ finalScores }`
 - `error` `{ code, message }`
 

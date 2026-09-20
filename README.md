@@ -14,23 +14,35 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
 - **Dizionario italiano ampio**: ~387.000 forme, incluse **tutte le coniugazioni verbali**
   e le abbreviazioni da dizionario.
-- **Punteggio classico**: 3-4 lettere = 1 pt, 5 = 2, 6 = 3, 7 = 4, 8+ = 5.
-  Parole trovate da più giocatori danno **punteggio pieno a tutti**.
+- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (480 schede di base,
+  40 per ognuna delle 12 combinazioni dimensione × difficoltà). Ogni scheda contiene la griglia
+  e **tutte** le parole trovabili, con parole di varia lunghezza (fino a 10-12 lettere su 6×6).
+  Niente più griglie improvvisate: partite riproducibili e soluzioni verificate.
+- **Parole comuni nei livelli facili**: le schede `molto-facile` e `facile` sono risolte contro
+  il **lessico comune** (~60k parole non astruse); `normale` e `difficile` contro il dizionario
+  completo, ma solo se contengono almeno una parola lunga.
+- **Punteggio Boggle adattato**: **1 punto per una parola di 3 lettere, poi un punto in più per
+  ogni lettera** (lunghezza − 2; una parola da 10 lettere vale 8 punti). In multiplayer una
+  parola trovata da **un solo giocatore vale doppio**.
+- **Catalogo schede in home**: numero totale sempre visibile; **pagina scheda** con la griglia
+  e tutte le parole trovabili raggruppate per lunghezza; **pannello admin** con token per
+  generarerne di nuove.
 - **Single player**: partita multi-round con riepilogo parole trovate e mancate.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto.
 - **4 difficoltà** (molto facile / facile / normale / difficile) con tema visivo dedicato.
   La difficoltà controlla la composizione della griglia; la dimensione è una scelta separata.
-- **Anteprima reale**: il server genera una griglia di esempio con le impostazioni scelte e
-  mostra quante parole si possono trovare (risolta col dizionario, non stimata).
+- **Anteprima reale**: il server pesca una scheda di esempio dal catalogo con le impostazioni
+  scelte e mostra quante parole si possono trovare (conteggio esatto, non stimato).
 - **Avatar**: 32 emoji selezionabili, visibili in classifica e nelle notifiche.
 - **Durata del round** selezionabile: 90, 120 o 180 secondi.
 - **Audio**: effetti sintetizzati con Web Audio (nessun asset da scaricare), motivi musicali
   crescenti in base alla lunghezza della parola, e musica di sottofondo CC0.
   Tutto disattivabile con volumi separati.
-- **Swipe preciso**: hit-test sul centro più vicino + bias diagonale + interpolazione
-  dei movimenti veloci. Le diagonali non richiedono più precisione millimetrica.
+- **Swipe preciso**: riconoscimento a settori angolari + deadzone + isteresi
+  (`game/cellTracker.ts`), con interpolazione dei movimenti veloci: le diagonali — anche
+  incrociate — non richiedono precisione millimetrica e non "sfarfallano" sul bordo.
 - **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
   flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
   Tutte rispettano `prefers-reduced-motion`.
@@ -43,7 +55,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 # 1. Dipendenze
 pnpm install
 
-# 2. Genera il dizionario (scarica Morph-it! + lessico comune, ~5 MB, una volta sola)
+# 2. Genera il dizionario (una volta sola; le schede base sono già versionate)
 pnpm build:dict
 
 # 3. Avvia client + server in parallelo
@@ -53,8 +65,22 @@ pnpm dev
 - Client: http://localhost:5173
 - Server: http://localhost:3001
 
-Il client carica il dizionario dal server (compressione Brotli trasparente, ~616 KB).
-Se il dizionario non è stato generato, il server usa una mini-lista di fallback per lo sviluppo.
+Il client **non scarica più il dizionario**: le parole valide arrivano dalle schede
+pre-calcolate (JSON) servite dal server, quindi l'avvio è immediato.
+
+### Schede
+
+Le schede di base sono versionate in `packages/shared/schede/` (480 schede, ~1.4 MB).
+Per rigenerarle o aggiungerne:
+
+```bash
+pnpm gen:schede                                  # tutte le combinazioni, 40 schede ciascuna
+pnpm gen:schede -- --size 4 --difficolta facile --n 60
+pnpm gen:schede -- --size 4 --difficolta normale --n 40 --append
+```
+
+L'admin può generarne altre a runtime dal pannello `/admin` (richiede `ADMIN_TOKEN`).
+Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata).
 
 ---
 
@@ -127,7 +153,7 @@ sempre: un client manomesso non può inventare parole o percorsi.
 | Fonte | Contributo | Licenza |
 |---|---|---|
 | [Morph-it! 0.48](https://docs.sslmit.unibo.it/doku.php?id=resources:morph-it) (UniBO) | forme flesse, coniugazioni verbali | CC BY-SA 2.0 / LGPL |
-| [paroleitaliane](https://github.com/napolux/paroleitaliane) (napolux) | lessico comune | vedi repo |
+| [paroleitaliane](https://github.com/napolux/paroleitaliane) (napolux) | lessico comune | MIT |
 | [Wikizionario](https://it.wiktionary.org/wiki/Appendice:Abbreviazioni) | abbreviazioni | CC BY-SA 3.0 |
 
 Pipeline di build (`packages/dictionary/scripts/`):
@@ -154,11 +180,12 @@ Guida completa in [`docs/DEPLOY.md`](docs/DEPLOY.md). Due opzioni:
 
 | Stato | RSS |
 |---|---|
-| Avvio (dizionario in memoria) | 168 MB |
-| Dopo il primo fine round (trie lazy) | 211 MB |
+| Avvio (dizionario + catalogo schede in memoria) | ~180 MB |
+| Generazione schede dall'admin (trie completo) | picco ~350 MB |
 
-Il trie del solver è **lazy** e limitato con `TRIE_MAX_WORD_LENGTH` (default 10, ~66 MB;
-8 → ~24 MB; senza limite → ~142 MB). Costruito in ~150 ms alla prima fine round.
+Il trie del **solver non esiste più a runtime**: le parole valide arrivano dalle schede,
+quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione viene
+allocato **solo se** l'admin genera nuove schede.
 
 I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quindi
 `pnpm --filter @boggle/dictionary build` rigenera `words.txt` senza rete.
@@ -171,10 +198,15 @@ I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quin
   come nel Boggle ufficiale. Il solver e la validazione ne tengono conto.
 - **Timer autorevole**: il server emette `endsAt` come timestamp; il client calcola il
   countdown locale e il server chiude il round indipendentemente dal client.
-- **Swipe**: `Pointer Events` con `touch-action: none`; hit-test sui `getBoundingClientRect`
-  delle celle. Il controller è istanziato una sola volta e legge griglia/callback via ref,
-  così non si interrompe a metà gesture durante i re-render.
-- **Parole duplicate**: punteggio pieno a tutti (scelta esplicita v0.1).
+- **Swipe**: `Pointer Events` con `touch-action: none`. Il riconoscimento
+  (`game/cellTracker.ts`) parte dall'ultima cella selezionata: guarda la direzione del
+  vettore dito→centro, la classifica in 8 settori angolari (diagonali favorite), esige
+  una deadzone dal centro e un allineamento minimo, più severo quando cambia direzione
+  (isteresi). Ogni passo produce una cella adiacente, quindi il percorso è sempre valido.
+  I listener sono sul `window` con `setPointerCapture`: un eventi interrotto non lascia
+  il controller "agganciato".
+- **Parole duplicate**: il punteggio base va a tutti; il raddoppio spetta a chi trova una
+  parola che **nessun altro** ha trovato.
 
 ---
 

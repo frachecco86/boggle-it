@@ -3,6 +3,7 @@ import {
   generateRoomCode,
   isValidPath,
   pathMatchesWord,
+  rowsToGrid,
   scoreForWord,
   normalizeWord,
   type Difficulty,
@@ -11,6 +12,7 @@ import {
   type GridSize,
   type PlayerPublic,
   type RoomState,
+  type Scheda,
 } from '@boggle/shared';
 import type { Dictionary } from './dictionary.js';
 
@@ -65,10 +67,17 @@ export class Room {
   currentRound = 0;
   phase: RoomState['phase'] = 'lobby';
   grid: Grid | null = null;
+  /** Id della scheda in gioco nel round corrente. */
+  schedaId: string | null = null;
   roundEndsAt = 0;
   players = new Map<string, Player>();
   /** Tutte le parole valide trovate nel round corrente (per il riepilogo mancate). */
   roundFoundWords = new Set<string>();
+  /**
+   * Tutte le parole trovabili sulla scheda del round corrente.
+   * Arrivano pre-calcolate dalla scheda: nessun solver a runtime.
+   */
+  roundValidWords: Set<string> = new Set();
 
   private readonly dictionary: Dictionary;
 
@@ -132,6 +141,7 @@ export class Room {
       phase: this.phase,
       players: this.publicPlayers(),
       endsAt: this.phase === 'playing' ? this.roundEndsAt : undefined,
+      schedaId: this.schedaId ?? undefined,
     };
   }
 
@@ -146,11 +156,17 @@ export class Room {
     }));
   }
 
-  /** Avvia un nuovo round: genera griglia e azzera i punteggi di round. */
-  startRound(): { grid: Grid; endsAt: number } {
+  /**
+   * Avvia un nuovo round. Con una `scheda` la griglia e le parole valide arrivano
+   * pre-calcolate (percorso normale in produzione); senza, la griglia è generata
+   * al volo (usato solo dai test e come fallback se il catalogo è vuoto).
+   */
+  startRound(scheda?: Scheda): { grid: Grid; endsAt: number } {
     this.currentRound++;
     this.phase = 'playing';
-    this.grid = generateGrid(this.gridSize, Math.random, this.difficulty);
+    this.grid = scheda ? rowsToGrid(scheda.grid) : generateGrid(this.gridSize, Math.random, this.difficulty);
+    this.schedaId = scheda?.id ?? null;
+    this.roundValidWords = new Set(scheda?.words ?? []);
     this.roundFoundWords = new Set();
     for (const p of this.players.values()) {
       p.roundScore = 0;
@@ -184,7 +200,20 @@ export class Room {
       return { accepted: false, reason: 'Parola non corrispondente al percorso' };
     }
     if (normalized.length < 3) return { accepted: false, reason: 'Parola troppo corta' };
-    if (!this.dictionary.has(normalized)) return { accepted: false, reason: 'Parola non nel dizionario' };
+    // Validazione contro le parole della SCHEDA (quando disponibile): è la stessa
+    // fonte usata dal client, quindi non ci sono divergenze né parole "strane"
+    // che il dizionario accetterebbe ma la scheda no. Fallback al dizionario per
+    // le stanze avviate senza scheda (test o catalogo vuoto).
+    const validOnScheda =
+      this.roundValidWords.size > 0
+        ? this.roundValidWords.has(normalized)
+        : this.dictionary.has(normalized);
+    if (!validOnScheda) {
+      return {
+        accepted: false,
+        reason: this.roundValidWords.size > 0 ? 'Non una parola di questa scheda' : 'Parola non nel dizionario',
+      };
+    }
     if (player.roundWords.has(normalized)) return { accepted: false, reason: 'Parola gia\' trovata' };
 
     const points = scoreForWord(normalized);
@@ -194,12 +223,44 @@ export class Room {
     player.words.push({ word: normalized, points, at: Date.now() });
     this.roundFoundWords.add(normalized);
 
+    // La parola potrebbe valere doppio (trovata da soli), ma l'unicità si sa solo
+    // a fine round: il bonus viene versato in `endRound`.
     return { accepted: true, word: normalized, points };
   }
 
-  /** Chiude il round e produce i risultati ordinati per punteggio. */
+  /**
+   * Chiude il round e produce i risultati ordinati per punteggio.
+   *
+   * Qui si applica il raddoppio: se NESSUN altro giocatore ha trovato una parola,
+   * il giocatore che l'ha trovata riceve un bonus pari ai punti base (→ doppio).
+   */
   endRound() {
     this.phase = 'roundEnd';
+
+    // Conteggio per parola: quante volte è stata trovata nella stanza.
+    const wordCounts = new Map<string, number>();
+    for (const p of this.players.values()) {
+      for (const w of p.roundWords) wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
+    }
+
+    const uniquePerPlayer = new Map<string, string[]>();
+    for (const p of this.players.values()) {
+      const unique: string[] = [];
+      for (const w of p.roundWords) {
+        if (wordCounts.get(w) !== 1) continue;
+        const bonus = scoreForWord(w);
+        p.roundScore += bonus;
+        p.totalScore += bonus;
+        const entry = p.words.find((x) => x.word === w);
+        if (entry) {
+          entry.points += bonus;
+          entry.unique = true;
+        }
+        unique.push(w);
+      }
+      if (unique.length > 0) uniquePerPlayer.set(p.id, unique.sort());
+    }
+
     return [...this.players.values()]
       .map((p) => ({
         playerId: p.id,
@@ -207,6 +268,7 @@ export class Room {
         roundScore: p.roundScore,
         totalScore: p.totalScore,
         words: [...p.roundWords].sort(),
+        uniqueWords: uniquePerPlayer.get(p.id) ?? [],
       }))
       .sort((a, b) => b.roundScore - a.roundScore || a.nickname.localeCompare(b.nickname));
   }
@@ -226,7 +288,6 @@ export class Room {
       }))
       .sort((a, b) => b.totalScore - a.totalScore || a.nickname.localeCompare(b.nickname));
   }
-
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
     if (this.hostId === playerId) {

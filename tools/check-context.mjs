@@ -17,6 +17,8 @@ const REQUIRED = [
   // words.txt è generato, words.br è la fonte versionata: ne basta una.
   { name: 'words.txt o words.br', anyOf: ['words.txt', 'words.br'] },
   { name: 'abbreviations.txt', anyOf: ['abbreviations.txt'] },
+  // Lessico comune: usato dal generatore schede per i livelli facili.
+  { name: '60000_parole_italiane.txt', anyOf: ['60000_parole_italiane.txt'] },
 ];
 
 const MIN_WORDS_BR_BYTES = 100 * 1024; // il file reale è ~616 KB

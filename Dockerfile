@@ -53,9 +53,16 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 # Frontend statico (opzionale: serve per il monolite same-origin)
 COPY --from=builder /app/apps/web/dist ./apps/web/dist
 
-# Dizionario per l'endpoint /dictionary
+# Catalogo schede: le base versionate. (Le schede aggiunte dall'admin vivono in
+# SCHEDE_EXTRA_DIR, montata come volume: non fanno parte dell'immagine.)
+COPY --from=builder /app/packages/shared/schede ./packages/shared/schede
+
+# Dizionario (serve ancora al server per validare in multiplayer e per generare
+# schede dall'admin). Il client non lo scarica più.
 COPY --from=builder /app/packages/dictionary/data/words.txt ./packages/dictionary/data/words.txt
 COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary/data/words.br
+COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
+COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 
 ENV PORT=3001
 # Il picco misurato è ~211 MB: 448 MB lascia margine ampio senza rischiare l'OOM.

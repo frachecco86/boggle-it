@@ -97,7 +97,7 @@ export function MultiplayerGameScreen() {
       }
       const res = await submitWord(word, path);
       if (res.accepted) {
-        const points = scoreForWord(word);
+        const points = res.points ?? scoreForWord(word);
         setMyWords((prev) => [...prev, { word, points, at: Date.now() }]);
         audio.playWordFound(word.length);
         flash('valid', `${word.toUpperCase()} +${points}`);

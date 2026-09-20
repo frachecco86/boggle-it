@@ -10,15 +10,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '@boggle/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
-      '@boggle/dictionary': path.resolve(__dirname, '../../packages/dictionary/src/index.ts'),
     },
   },
   server: {
     port: 5173,
     proxy: {
       '/socket.io': { target: 'http://localhost:3001', ws: true },
-      '/dictionary': { target: 'http://localhost:3001' },
       '/health': { target: 'http://localhost:3001' },
+      '/schede': { target: 'http://localhost:3001' },
+      '/preview': { target: 'http://localhost:3001' },
+      '/admin': { target: 'http://localhost:3001' },
     },
   },
 });

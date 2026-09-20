@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { COMPOSITION, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
-import { normalizeWord, scoreForWord, generateRoomCode } from './scoring.js';
+import { normalizeWord, scoreForWord, scoreForRound, generateRoomCode } from './scoring.js';
 import type { Tile } from './types.js';
 
 const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
@@ -8,14 +8,22 @@ const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
 });
 
 describe('scoring', () => {
-  it('applica la tabella classica', () => {
+  it('applica la regola classica: lunghezza − 2', () => {
+    expect(scoreForWord('ab')).toBe(0);
     expect(scoreForWord('abc')).toBe(1);
-    expect(scoreForWord('abcd')).toBe(1);
-    expect(scoreForWord('abcde')).toBe(2);
-    expect(scoreForWord('abcdef')).toBe(3);
-    expect(scoreForWord('abcdefg')).toBe(4);
-    expect(scoreForWord('abcdefgh')).toBe(5);
-    expect(scoreForWord('abcdefghi')).toBe(5);
+    expect(scoreForWord('abcd')).toBe(2);
+    expect(scoreForWord('abcde')).toBe(3);
+    expect(scoreForWord('abcdef')).toBe(4);
+    expect(scoreForWord('abcdefg')).toBe(5);
+    expect(scoreForWord('abcdefgh')).toBe(6);
+    expect(scoreForWord('abcdefghi')).toBe(7);
+    expect(scoreForWord('abcdefghijklmnop')).toBe(14);
+  });
+
+  it('raddoppia i punti per una parola trovata da un solo giocatore', () => {
+    expect(scoreForRound('casa')).toBe(2);
+    expect(scoreForRound('casa', { unique: true })).toBe(4);
+    expect(scoreForRound('strada', { unique: true })).toBe(8);
   });
   it('normalizza accenti e simboli', () => {
     expect(normalizeWord('Perché')).toBe('perche');

@@ -23,11 +23,19 @@ export function MultiplayerSummaryScreen() {
                 <span className="result-row__score">{isFinal ? r.totalScore : r.roundScore}</span>
               </div>
               <div className="chip-list chip-list--compact">
-                {r.words.map((w) => (
-                  <span key={w} className="chip chip--small">
-                    {w.toUpperCase()}
-                  </span>
-                ))}
+                {r.words.map((w) => {
+                  const unique = r.uniqueWords?.includes(w);
+                  return (
+                    <span
+                      key={w}
+                      className={`chip chip--small${unique ? ' chip--unique' : ''}`}
+                      title={unique ? 'Trovata solo da te: punti doppi' : undefined}
+                    >
+                      {w.toUpperCase()}
+                      {unique ? ' ×2' : ''}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           </li>

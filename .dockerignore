@@ -8,10 +8,10 @@ node_modules
 
 # Fonti dizionario grezze (19 MB): non servono, il build usa words.br versionato.
 # ATTENZIONE: words.br NON va escluso — è la fonte versionata da cui
-# `ensure-words.mjs` ricrea words.txt senza rete.
+# `ensure-words.mjs` ricrea words.txt senza rete. Anche 60000_parole_italiane.txt
+# va incluso: il generatore schede lo usa per i livelli facili.
 packages/dictionary/data/morph-it_048.txt
 packages/dictionary/data/current_version
-packages/dictionary/data/60000_parole_italiane.txt
 packages/dictionary/data/words.txt
 packages/dictionary/data/.sources.json
 
