@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.12.0';
+export const APP_VERSION = '0.12.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,28 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.12.1',
+    date: '2026-09-20',
+    title: 'Recuperate parole valide che finivano in vocale accentata',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          'Parole come **fruirà**, **città**, **verità**, **società** e tutti i futuri in -erà/-irà non erano riconosciute. La causa era un **errore di codifica**: il dizionario di partenza è in formato Latin-1, ma veniva letto come UTF-8, quindi gli accenti si corrompevano e le forme accentate andavano perse. Recuperate **2.433 parole**.',
+          'Un secondo filtro scartava per errore le parole che **finiscono in vocale accentata**, per un\'ipotesi sbagliata sul funzionamento della normalizzazione: scartava futuri e nomi propri. Rimosso.',
+          'Le schede sono state rigenerate: le parole totali passano da 73.006 a **77.416**.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Aggiunto un commento esplicito sull\'encoding nel punto critico: è la seconda volta che questo file causa un problema per la codifica.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.12.0',
     date: '2026-09-20',

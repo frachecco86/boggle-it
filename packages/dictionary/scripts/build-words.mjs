@@ -96,8 +96,15 @@ async function main() {
 
   const words = new Set();
 
-  // 1. Morph-it: la prima colonna e' la forma flessa.
-  const morphRaw = await readFile(morphPath, 'utf8');
+  /*
+   * 1. Morph-it: la prima colonna e' la forma flessa.
+   *
+   * ATTENZIONE ALL'ENCODING: Morph-it e' in ISO-8859-1 (Latin-1), NON UTF-8.
+   * Leggendolo come UTF-8 gli accenti si corrompono e le forme accentate si
+   * perdono: mancavano `fruirà`, `città`, `verità` e tutti i futuri in -erà/-irà
+   * (2.433 parole). Decodifichiamo esplicitamente come Latin-1.
+   */
+  const morphRaw = new TextDecoder('latin1').decode(await readFile(morphPath));
   let morphCount = 0;
   for (const line of morphRaw.split('\n')) {
     if (!line) continue;

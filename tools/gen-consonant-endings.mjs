@@ -53,7 +53,6 @@ const endsInConsonant = (w) => /[bcdfghjklmnpqrstvwxyz]$/.test(w);
 const morphText = new TextDecoder('latin1').decode(readFileSync(MORPH));
 
 const autonome = new Set();
-let scartateAccento = 0;
 let scartateTipo = 0;
 let scartateRumore = 0;
 let infinitiTroncati = 0;
@@ -139,14 +138,18 @@ for (const line of morphText.split('\n')) {
     continue;
   }
 
-  // Una forma che perde una lettera ACCENTATA finale non e' un troncamento:
-  // e' la forma piena letta male (`normalità` -> `normalit`). La scartiamo qui
-  // perche' la sua versione normalizzata e' assimilabile a un troncamento.
-  if (/[àèéìòóùáíú]$/.test(formaRaw.toLowerCase())) {
-    scartateAccento++;
-    continue;
-  }
-
+  /*
+   * FILTRO RIMOSSO: scartava le forme con accento finale.
+   *
+   * Era basato su un'ipotesi SBAGLIATA: credevo che `normalità` diventasse
+   * `normalit` (sembrando un troncamento), ma la normalizzazione sostituisce
+   * l'accento con la vocale base, quindi diventa `normalita`, che termina in
+   * vocale e non ha nulla di strano.
+   *
+   * Il filtro faceva danni: scartava futuri (`abbacchierà`, `fruirà`) e nomi
+   * propri accentati. Il controllo sui troncamenti è già fatto dal filtro
+   * principale (`endsInConsonant` + lemma).
+   */
   const forma = norm(formaRaw);
   const lemma = norm(lemmaRaw);
   if (forma.length < 3 || !endsInConsonant(forma)) continue;
@@ -222,7 +225,6 @@ console.log(`✓ ${all.length} voci scritte in packages/dictionary/data/consonan
 console.log(`  di cui curate a mano: ${curated.length}`);
 console.log(`  da Morph-it (lemma = forma): ${autonome.size}`);
 console.log(`  scartate per tipo (NPR/SMI/ABR): ${scartateTipo.toLocaleString('it-IT')}`);
-console.log(`  scartate per accento finale: ${scartateAccento.toLocaleString('it-IT')}`);
 console.log(`  scartate come rumore (versi/sigle/composti): ${scartateRumore.toLocaleString('it-IT')}`);
 console.log(`  infiniti troncati legittimi (far, dir): ${infinitiTroncati}`);
 console.log(`\n  esempi: ${all.slice(0, 30).join(', ')}`);
