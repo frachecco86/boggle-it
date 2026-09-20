@@ -102,6 +102,26 @@ e aggiunge il fallback SPA; altrimenti resta solo API + Socket.IO.
 
 ---
 
+### ⚠️ Il dizionario e il contesto di build
+
+Il build usa **`words.br` versionato** (616 KB) come fonte: `ensure-words.mjs` lo
+decomprime per ricreare `words.txt` senza toccare la rete.
+
+**Non escludere `words.br` dal `.dockerignore`.** Se lo escludi, il build fallisce con:
+
+```
+✗ Né words.txt né words.br sono presenti in packages/dictionary/data/.
+```
+
+Per non ripetere l'errore, un controllo preventivo è integrato nel `Dockerfile` e nel
+`netlify.toml` (gira prima della catena di build), ed è eseguibile a mano:
+
+```bash
+pnpm check:context
+```
+
+---
+
 ## Sviluppo locale
 
 ```bash

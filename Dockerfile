@@ -25,6 +25,10 @@ RUN pnpm install --frozen-lockfile
 # Codice
 COPY . .
 
+# Controllo preventivo del contesto: se un .dockerignore esclude words.br (fonte
+# versionata del dizionario) il build fallirebbe in modo poco chiaro. Meglio qui.
+RUN node tools/check-context.mjs
+
 # Dizionario (da words.br versionato: nessuna rete richiesta) + server + web
 RUN pnpm --filter @boggle/dictionary build \
  && pnpm --filter @boggle/server build \

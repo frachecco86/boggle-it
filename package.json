@@ -11,7 +11,8 @@
     "build:dict": "pnpm --filter @boggle/dictionary build:full",
     "test": "pnpm -r test",
     "test:e2e": "node tests/e2e/run-all.mjs",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "check:context": "node tools/check-context.mjs"
   },
   "packageManager": "pnpm@10.8.1",
   "engines": {

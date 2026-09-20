@@ -1,5 +1,5 @@
 [build]
-  command = "pnpm install --frozen-lockfile && pnpm --filter @boggle/dictionary build && pnpm --filter @boggle/web build"
+  command = "pnpm install --frozen-lockfile && node tools/check-context.mjs && pnpm --filter @boggle/dictionary build && pnpm --filter @boggle/web build"
   publish = "apps/web/dist"
 
 # Il dizionario e' immutabile: cache aggressiva + Brotli servito direttamente da Netlify.

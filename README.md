@@ -56,6 +56,7 @@ Se il dizionario non è stato generato, il server usa una mini-lista di fallback
 | `pnpm build:dict` | Scarica le fonti e rigenera `words.txt` + `words.br` |
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
+| `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
 | `pnpm typecheck` | Type-check di tutti i pacchetti |
 
 ### Variabili d'ambiente del server
