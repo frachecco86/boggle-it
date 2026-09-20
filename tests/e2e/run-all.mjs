@@ -31,7 +31,12 @@ if (!alive) {
 }
 console.log(`✓ Server attivo su ${SERVER_URL}\n`);
 
-const suites = ['multiplayer-basic.mjs', 'multiplayer-fullgame.mjs', 'multiplayer-reconnect.mjs'];
+const suites = [
+  'multiplayer-basic.mjs',
+  'multiplayer-fullgame.mjs',
+  'multiplayer-reconnect.mjs',
+  'opponent-privacy.mjs',
+];
 let failed = 0;
 for (const suite of suites) {
   console.log(`\n=== ${suite} ===`);

@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import type { GridSize } from '@boggle/shared';
+import {
+  DIFFICULTIES,
+  DIFFICULTY_ORDER,
+  ROUND_DURATIONS_SEC,
+  type GridSize,
+} from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 
 /** Lobby multiplayer: codice stanza, giocatori, impostazioni host. */
@@ -41,6 +46,8 @@ export function LobbyScreen() {
     );
   }
 
+  const activeDifficulty = DIFFICULTIES[room.difficulty];
+
   return (
     <div className="screen lobby">
       <button className="btn btn--ghost setup__back" onClick={leaveRoom}>
@@ -71,29 +78,87 @@ export function LobbyScreen() {
 
       <section className="lobby__section">
         <h3 className="summary__label">Impostazioni</h3>
-        <div className="settings-grid">
-          <label className="field">
-            <span className="field__label">Il tuo nome</span>
-            <input
-              className="field__input"
-              value={nickname}
-              maxLength={20}
-              onChange={(e) => setNickname(e.target.value)}
-            />
-          </label>
-          {isHost ? (
-            <div className="settings-host">
-              <GridSizePicker value={room.gridSize} onChange={(size) => configureRoom(size, room.rounds)} />
-              <RoundsPicker value={room.rounds} onChange={(rounds) => configureRoom(room.gridSize, rounds)} />
-              <p className="settings-host__hint">Le modifiche sono visibili a tutti in tempo reale.</p>
+        <label className="field">
+          <span className="field__label">Il tuo nome</span>
+          <input
+            className="field__input"
+            value={nickname}
+            maxLength={20}
+            onChange={(e) => setNickname(e.target.value)}
+          />
+        </label>
+
+        {isHost ? (
+          <div className="settings-host">
+            <span className="field__label">Dimensione griglia</span>
+            <div className="rounds-options">
+              {([4, 5, 6] as GridSize[]).map((s) => (
+                <button
+                  key={s}
+                  className={`pill${room.gridSize === s ? ' pill--active' : ''}`}
+                  onClick={() => configureRoom(s, room.difficulty, room.rounds, room.roundDurationMs)}
+                >
+                  {s}×{s}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div className="settings-readonly">
-              <span>Griglia {room.gridSize}×{room.gridSize}</span>
-              <span>{room.rounds} round</span>
+
+            <span className="field__label">Difficoltà</span>
+            <div className="difficulty-options difficulty-options--compact">
+              {DIFFICULTY_ORDER.map((id) => {
+                const meta = DIFFICULTIES[id];
+                return (
+                  <button
+                    key={id}
+                    className={`difficulty-option difficulty-option--compact${
+                      room.difficulty === id ? ' difficulty-option--active' : ''
+                    }`}
+                    style={{ ['--level-accent' as string]: meta.theme.accent }}
+                    onClick={() => configureRoom(room.gridSize, id, room.rounds, room.roundDurationMs)}
+                  >
+                    <span className="difficulty-option__dot" />
+                    <span className="difficulty-option__label">{meta.label}</span>
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </div>
+
+            <span className="field__label">Durata round</span>
+            <div className="rounds-options">
+              {ROUND_DURATIONS_SEC.map((sec) => (
+                <button
+                  key={sec}
+                  className={`pill${room.roundDurationMs === sec * 1000 ? ' pill--active' : ''}`}
+                  onClick={() => configureRoom(room.gridSize, room.difficulty, room.rounds, sec * 1000)}
+                >
+                  {sec} sec
+                </button>
+              ))}
+            </div>
+
+            <span className="field__label">Round</span>
+            <div className="rounds-options">
+              {[1, 3, 5].map((r) => (
+                <button
+                  key={r}
+                  className={`pill${room.rounds === r ? ' pill--active' : ''}`}
+                  onClick={() => configureRoom(room.gridSize, room.difficulty, r, room.roundDurationMs)}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <p className="settings-host__hint">Le modifiche sono visibili a tutti in tempo reale.</p>
+          </div>
+        ) : (
+          <div className="settings-readonly">
+            <span>
+              {activeDifficulty.label} · {room.gridSize}×{room.gridSize} · {room.roundDurationMs / 1000}s ·{' '}
+              {room.rounds} round
+            </span>
+          </div>
+        )}
       </section>
 
       {isHost ? (
@@ -103,30 +168,6 @@ export function LobbyScreen() {
       ) : (
         <p className="lobby__waiting">In attesa che l'host avvii la partita…</p>
       )}
-    </div>
-  );
-}
-
-function GridSizePicker({ value, onChange }: { value: GridSize; onChange: (s: GridSize) => void }) {
-  return (
-    <div className="rounds-options">
-      {([4, 5, 6] as GridSize[]).map((s) => (
-        <button key={s} className={`pill${value === s ? ' pill--active' : ''}`} onClick={() => onChange(s)}>
-          {s}×{s}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function RoundsPicker({ value, onChange }: { value: number; onChange: (r: number) => void }) {
-  return (
-    <div className="rounds-options">
-      {[1, 3, 5].map((r) => (
-        <button key={r} className={`pill${value === r ? ' pill--active' : ''}`} onClick={() => onChange(r)}>
-          {r} round
-        </button>
-      ))}
     </div>
   );
 }

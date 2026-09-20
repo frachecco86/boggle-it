@@ -5,6 +5,7 @@ import {
   pathMatchesWord,
   scoreForWord,
   wordFromPath,
+  type Difficulty,
   type FoundWord,
   type Grid,
   type GridSize,
@@ -12,14 +13,20 @@ import {
 } from '@boggle/shared';
 import { SwipeController, type SwipePoint } from './swipe.js';
 import type { Dictionary } from '@boggle/dictionary';
+import { audio } from '../audio/AudioEngine.js';
 
-export type WordFeedback = { kind: 'valid'; word: string; points: number } | { kind: 'invalid'; word: string; reason: string };
+export type WordFeedback =
+  | { kind: 'valid'; word: string; points: number }
+  | { kind: 'invalid'; word: string; reason: string }
+  /** Parola corretta ma gia' trovata: feedback e suono diversi. */
+  | { kind: 'duplicate'; word: string; reason: string };
 
 interface UseSoloGameOptions {
   dictionary: Dictionary;
   gridSize: GridSize;
+  difficulty: Difficulty;
   rounds: number;
-  roundDurationMs?: number;
+  roundDurationMs: number;
 }
 
 export interface SoloGameState {
@@ -36,11 +43,9 @@ export interface SoloGameState {
   missedWords: string[];
 }
 
-const DEFAULT_ROUND_MS = 180_000;
-
 /** Logica completa del single player: round, timer, validazione, punteggio. */
 export function useSoloGame(options: UseSoloGameOptions) {
-  const { dictionary, gridSize, rounds, roundDurationMs = DEFAULT_ROUND_MS } = options;
+  const { dictionary, gridSize, difficulty, rounds, roundDurationMs } = options;
 
   const [phase, setPhase] = useState<SoloGameState['phase']>('idle');
   const [round, setRound] = useState(0);
@@ -66,7 +71,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
 
   const startRound = useCallback(
     (roundNumber: number) => {
-      const g = generateGrid(gridSize);
+      const g = generateGrid(gridSize, Math.random, difficulty);
       setGrid(g);
       setRound(roundNumber);
       setFound([]);
@@ -78,7 +83,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setDeadline(end);
       setTimeLeftMs(roundDurationMs);
     },
-    [gridSize, roundDurationMs],
+    [gridSize, difficulty, roundDurationMs],
   );
 
   const start = useCallback(() => {
@@ -111,20 +116,26 @@ export function useSoloGame(options: UseSoloGameOptions) {
       const word = wordFromPath(g, path);
       if (!isValidPath(g, path)) return;
       if (word.length < 3) {
+        audio.play('invalid');
         setFeedback({ kind: 'invalid', word, reason: 'Minimo 3 lettere' });
         return;
       }
       if (!pathMatchesWord(g, path, word)) return;
       if (foundRef.current.some((f) => f.word === word)) {
-        setFeedback({ kind: 'invalid', word, reason: 'Già trovata' });
+        // Parola corretta ma ripetuta: suono e colore distinti dall'errore.
+        audio.play('already-found');
+        setFeedback({ kind: 'duplicate', word, reason: 'Già trovata' });
         return;
       }
       if (!dictionary.has(word)) {
+        audio.play('invalid');
         setFeedback({ kind: 'invalid', word, reason: 'Non nel dizionario' });
         return;
       }
       const points = scoreForWord(word);
       setFound((prev) => [...prev, { word, points, at: Date.now() }]);
+      // Motivo musicale crescente in base alla lunghezza della parola.
+      audio.playWordFound(word.length);
       setFeedback({ kind: 'valid', word, points });
       if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
     },

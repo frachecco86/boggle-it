@@ -1,20 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Grid as GridModel } from '@boggle/shared';
 import { SwipeController, type SwipePoint } from '../game/swipe.js';
+import { audio } from '../audio/AudioEngine.js';
 
 interface GridBoardProps {
   grid: GridModel;
   selectedPath: readonly number[];
   onPathChange: (path: number[]) => void;
   onCommit: (path: number[]) => void;
-  shake?: boolean;
+  /** Flash rosso discreto su parola non valida (niente scuotimento). */
+  flashError?: boolean;
 }
 
 /**
  * Griglia con swipe. Il percorso e' renderizzato come trailer SVG luminoso
  * che collega i centri delle celle selezionate.
  */
-export function GridBoard({ grid, selectedPath, onPathChange, onCommit, shake }: GridBoardProps) {
+export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError }: GridBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [centers, setCenters] = useState<{ x: number; y: number }[]>([]);
@@ -27,6 +29,8 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, shake }:
   onPathChangeRef.current = onPathChange;
   const onCommitRef = useRef(onCommit);
   onCommitRef.current = onCommit;
+  // Suono di selezione: lo emettiamo quando il percorso si estende, non ad ogni move.
+  const lastPathLenRef = useRef(0);
 
   // Hit test: usa i rect delle celle (aggiornati al layout corrente).
   const hitTestRef = useRef((p: SwipePoint): number | null => {
@@ -49,8 +53,15 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, shake }:
     if (!el) return;
     const controller = new SwipeController(el, () => gridRef.current, {
       hitTest: (p) => hitTestRef.current(p),
-      onPathChange: (path) => onPathChangeRef.current(path),
-      onCommit: (path) => onCommitRef.current(path),
+      onPathChange: (path) => {
+        if (path.length > lastPathLenRef.current) audio.play('tap');
+        lastPathLenRef.current = path.length;
+        onPathChangeRef.current(path);
+      },
+      onCommit: (path) => {
+        lastPathLenRef.current = 0;
+        onCommitRef.current(path);
+      },
     });
     return () => controller.destroy();
   }, []);
@@ -88,7 +99,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, shake }:
   return (
     <div
       ref={containerRef}
-      className={`grid-board${shake ? ' shake' : ''}`}
+      className={`grid-board${flashError ? ' grid-board--error' : ''}`}
       style={{ ['--grid-size' as string]: grid.size }}
       onContextMenu={(e) => e.preventDefault()}
     >

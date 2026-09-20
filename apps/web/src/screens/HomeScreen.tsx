@@ -1,11 +1,38 @@
 import { useState } from 'react';
+import {
+  DIFFICULTIES,
+  DIFFICULTY_ORDER,
+  ROUND_DURATIONS_SEC,
+  type Difficulty,
+  type GridSize,
+} from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { AudioSettings } from '../components/AudioSettings.js';
 
-/** Schermata iniziale: nickname, scelta modalita'. */
+/** Schermata iniziale: nickname, modalità, impostazioni host e audio. */
 export function HomeScreen() {
-  const { nickname, setNickname, setScreen, joinRoom, createRoom, errorMessage, clearError } = useAppStore();
+  const {
+    nickname,
+    setNickname,
+    setScreen,
+    joinRoom,
+    createRoom,
+    errorMessage,
+    clearError,
+    soloGridSize,
+    soloDifficulty,
+    soloRoundDurationMs,
+    setSoloSetup,
+    soloRounds,
+  } = useAppStore();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showHostOptions, setShowHostOptions] = useState(false);
+
+  // Impostazioni usate come default quando si crea una stanza.
+  const [hostGridSize, setHostGridSize] = useState<GridSize>(soloGridSize);
+  const [hostDifficulty, setHostDifficulty] = useState<Difficulty>(soloDifficulty);
+  const [hostDurationMs, setHostDurationMs] = useState(soloRoundDurationMs);
 
   const handleJoin = async () => {
     if (code.trim().length < 4) return;
@@ -24,7 +51,7 @@ export function HomeScreen() {
     setBusy(true);
     clearError();
     try {
-      await createRoom(4, 3);
+      await createRoom(hostGridSize, hostDifficulty, soloRounds, hostDurationMs);
     } catch {
       /* errore mostrato dallo store */
     } finally {
@@ -59,9 +86,73 @@ export function HomeScreen() {
         <button className="btn btn--primary btn--big" disabled={busy} onClick={() => setScreen('solo-setup')}>
           Gioca da solo
         </button>
-        <button className="btn btn--secondary btn--big" disabled={busy} onClick={handleCreate}>
-          Crea partita
+
+        <button
+          className="btn btn--secondary btn--big"
+          disabled={busy}
+          onClick={() => setShowHostOptions((v) => !v)}
+        >
+          {showHostOptions ? 'Chiudi impostazioni' : 'Crea partita'}
         </button>
+
+        {showHostOptions && (
+          <div className="host-options" style={{ ['--level-accent' as string]: DIFFICULTIES[hostDifficulty].theme.accent }}>
+            <span className="field__label">Griglia</span>
+            <div className="rounds-options">
+              {([4, 5, 6] as GridSize[]).map((s) => (
+                <button
+                  key={s}
+                  className={`pill${hostGridSize === s ? ' pill--active' : ''}`}
+                  onClick={() => setHostGridSize(s)}
+                >
+                  {s}×{s}
+                </button>
+              ))}
+            </div>
+
+            <span className="field__label">Difficoltà</span>
+            <div className="difficulty-options difficulty-options--compact">
+              {DIFFICULTY_ORDER.map((id) => (
+                <button
+                  key={id}
+                  className={`difficulty-option difficulty-option--compact${
+                    hostDifficulty === id ? ' difficulty-option--active' : ''
+                  }`}
+                  style={{ ['--level-accent' as string]: DIFFICULTIES[id].theme.accent }}
+                  onClick={() => setHostDifficulty(id)}
+                >
+                  <span className="difficulty-option__dot" />
+                  <span className="difficulty-option__label">{DIFFICULTIES[id].label}</span>
+                </button>
+              ))}
+            </div>
+
+            <span className="field__label">Durata round</span>
+            <div className="rounds-options">
+              {ROUND_DURATIONS_SEC.map((sec) => (
+                <button
+                  key={sec}
+                  className={`pill${hostDurationMs === sec * 1000 ? ' pill--active' : ''}`}
+                  onClick={() => setHostDurationMs(sec * 1000)}
+                >
+                  {sec} sec
+                </button>
+              ))}
+            </div>
+
+            <button
+              className="btn btn--primary"
+              disabled={busy}
+              onClick={() => {
+                setSoloSetup(hostGridSize, hostDifficulty, soloRounds, hostDurationMs);
+                void handleCreate();
+              }}
+            >
+              Crea la stanza
+            </button>
+          </div>
+        )}
+
         <div className="join">
           <input
             className="field__input join__input"
@@ -76,8 +167,12 @@ export function HomeScreen() {
         </div>
       </div>
 
+      <AudioSettings />
+
       <footer className="home__footer">
         Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni Wikizionario.
+        <br />
+        Musica: “Project Utopia” di congusbongus (CC0). Suoni generati nel browser.
       </footer>
     </div>
   );

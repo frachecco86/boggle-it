@@ -15,7 +15,7 @@ a.on('game:roundEnd', (p) => events.roundEnd.push(p));
 a.on('game:gameEnd', (p) => events.gameEnd.push(p));
 a.on('game:playerWord', (p) => events.playerWord.push(p));
 
-const created = await ack(a, 'room:create', { nickname: 'Alice', gridSize: 4, rounds: 2 });
+const created = await ack(a, 'room:create', { nickname: 'Alice', gridSize: 4, difficulty: 'normale', rounds: 2, roundDurationMs: 5000 });
 const code = created.roomCode;
 const aliceId = created.playerId;
 await ack(b, 'room:join', { code, nickname: 'Bob' });

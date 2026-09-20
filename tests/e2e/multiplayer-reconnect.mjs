@@ -8,7 +8,7 @@ const log = (...a) => console.log(...a);
 
 const a = io(URL, { transports: ['websocket'] });
 await once(a, 'connect');
-const created = await ack(a, 'room:create', { nickname: 'Alice', gridSize: 4, rounds: 3 });
+const created = await ack(a, 'room:create', { nickname: 'Alice', gridSize: 4, difficulty: 'normale', rounds: 3, roundDurationMs: 30000 });
 const { roomCode: code, playerId } = created;
 log('stanza', code);
 

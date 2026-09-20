@@ -5,23 +5,52 @@ import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { WordList } from '../components/WordList.js';
 import { useAppStore } from '../state/store.js';
+import { audio } from '../audio/AudioEngine.js';
 
-/** Partita multiplayer: griglia sincronizzata dal server, validazione lato server. */
+type Feedback = { kind: 'valid' | 'invalid' | 'duplicate'; text: string };
+
+/** Partita multiplayer: griglia sincronizzata, validazione server, parole avversarie nascoste. */
 export function MultiplayerGameScreen() {
-  const { grid, room, roomCode, liveWords, roundEndsAt, roundDurationMs, countdown, submitWord, playerId } =
-    useAppStore();
+  const {
+    grid,
+    room,
+    roomCode,
+    roundEndsAt,
+    roundDurationMs,
+    countdown,
+    submitWord,
+    playerId,
+    opponentEvents,
+  } = useAppStore();
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
-  const [feedback, setFeedback] = useState<{ kind: 'valid' | 'invalid'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [myWords, setMyWords] = useState<FoundWord[]>([]);
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
-  const [shake, setShake] = useState(false);
+  const [flashError, setFlashError] = useState(false);
+  const flashTimer = useRef<number | null>(null);
 
   const currentWord = useMemo(() => (grid ? wordFromPath(grid, selectedPath) : ''), [grid, selectedPath]);
   const myRoundWordStrings = useMemo(() => new Set(myWords.map((w) => w.word)), [myWords]);
   const score = useMemo(() => myWords.reduce((a, b) => a + b.points, 0), [myWords]);
-  const shakeTimer = useRef<number | null>(null);
 
-  // Timer compensato dalla latenza del server (endsAt e' un timestamp server).
+  // Badge "+N" per giocatore: somma i punti degli eventi recenti (finestra 3.5s).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const badges = useMemo(() => {
+    const map = new Map<string, { points: number; id: number }>();
+    for (const ev of opponentEvents) {
+      if (now - ev.at > 3500) continue;
+      const current = map.get(ev.playerId);
+      map.set(ev.playerId, { points: (current?.points ?? 0) + ev.points, id: ev.id });
+    }
+    return map;
+  }, [opponentEvents, now]);
+
+  // Timer compensato dalla latenza del server (endsAt è un timestamp server).
   useEffect(() => {
     if (!roundEndsAt) return;
     let raf = 0;
@@ -40,42 +69,49 @@ export function MultiplayerGameScreen() {
     setSelectedPath([]);
   }, [grid]);
 
+  const flash = useCallback((kind: Feedback['kind'], text: string) => {
+    setFeedback({ kind, text });
+    if (kind === 'invalid') {
+      setFlashError(true);
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlashError(false), 500);
+    }
+    window.setTimeout(() => setFeedback(null), 1600);
+  }, []);
+
   const handleCommit = useCallback(
     async (path: number[]) => {
       if (!grid) return;
       if (!isValidPath(grid, path)) return;
       const word = wordFromPath(grid, path);
       if (word.length < 3) {
+        audio.play('invalid');
         flash('invalid', 'Minimo 3 lettere');
         return;
       }
       if (!pathMatchesWord(grid, path, word)) return;
       if (myRoundWordStrings.has(word)) {
-        flash('invalid', 'Già trovata');
+        audio.play('already-found');
+        flash('duplicate', 'Già trovata');
         return;
       }
       const res = await submitWord(word, path);
       if (res.accepted) {
         const points = scoreForWord(word);
         setMyWords((prev) => [...prev, { word, points, at: Date.now() }]);
+        audio.playWordFound(word.length);
         flash('valid', `${word.toUpperCase()} +${points}`);
         if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
+      } else if (res.reason && /gia|già/i.test(res.reason)) {
+        audio.play('already-found');
+        flash('duplicate', 'Già trovata');
       } else {
+        audio.play('invalid');
         flash('invalid', res.reason ?? 'Non valida');
       }
     },
-    [grid, myRoundWordStrings, submitWord],
+    [grid, myRoundWordStrings, submitWord, flash],
   );
-
-  const flash = (kind: 'valid' | 'invalid', text: string) => {
-    setFeedback({ kind, text });
-    if (kind === 'invalid') {
-      setShake(true);
-      if (shakeTimer.current) window.clearTimeout(shakeTimer.current);
-      shakeTimer.current = window.setTimeout(() => setShake(false), 420);
-    }
-    window.setTimeout(() => setFeedback(null), 1400);
-  };
 
   if (!grid || !room) {
     return (
@@ -86,6 +122,12 @@ export function MultiplayerGameScreen() {
   }
 
   const others = room.players.filter((p) => p.id !== playerId);
+  const toastClass =
+    feedback?.kind === 'valid'
+      ? 'toast--valid'
+      : feedback?.kind === 'duplicate'
+        ? 'toast--duplicate'
+        : 'toast--invalid';
 
   return (
     <div className="screen game">
@@ -100,7 +142,7 @@ export function MultiplayerGameScreen() {
       <div className="game__topbar">
         <Timer timeLeftMs={timeLeftMs} totalMs={roundDurationMs} />
         <div className="game__round">
-          Round {room.currentRound}/{room.rounds} · stanza {roomCode}
+          Round {room.currentRound}/{room.rounds} · {room.difficulty} · stanza {roomCode}
         </div>
       </div>
 
@@ -110,7 +152,7 @@ export function MultiplayerGameScreen() {
           selectedPath={selectedPath}
           onPathChange={setSelectedPath}
           onCommit={handleCommit}
-          shake={shake}
+          flashError={flashError}
         />
         <aside className="game__side">
           <div className="score-chip">
@@ -121,41 +163,39 @@ export function MultiplayerGameScreen() {
         </aside>
       </div>
 
-      <section className="live-feed">
-        <h3 className="summary__label">In diretta</h3>
-        <ul className="live-feed__list">
-          {liveWords
-            .slice(-6)
-            .reverse()
-            .map((w, i) => (
-              <li key={`${w.playerId}-${w.word}-${i}`} className={`live-feed__item${w.playerId === playerId ? ' live-feed__item--me' : ''}`}>
-                <span className="live-feed__who">{w.nickname}</span>
-                <span className="live-feed__word">{w.word.toUpperCase()}</span>
-                <span className="live-feed__points">+{w.points}</span>
-              </li>
-            ))}
-        </ul>
-      </section>
-
       <section className="scoreboard">
         <h3 className="summary__label">Classifica</h3>
         <ul className="player-list">
           {[...room.players]
             .sort((a, b) => b.score - a.score)
-            .map((p, i) => (
-              <li key={p.id} className={`player-row${p.id === playerId ? ' player-row--you' : ''}`}>
-                <span className="player-row__rank">{i + 1}</span>
-                <span className="player-row__name">{p.nickname}</span>
-                <span className="player-row__score">{p.score}</span>
-              </li>
-            ))}
+            .map((p, i) => {
+              const badge = badges.get(p.id);
+              return (
+                <li key={p.id} className={`player-row${p.id === playerId ? ' player-row--you' : ''}`}>
+                  <span className="player-row__rank">{i + 1}</span>
+                  <span className="player-row__name">
+                    {p.nickname}
+                    {badge && (
+                      <span key={badge.id} className="score-pop" aria-label={`+${badge.points} punti`}>
+                        +{badge.points}
+                      </span>
+                    )}
+                  </span>
+                  <span className="player-row__score">{p.score}</span>
+                </li>
+              );
+            })}
         </ul>
-        {others.length === 0 && <p className="scoreboard__hint">Sei da solo per ora: condividi il codice {roomCode}.</p>}
+        {others.length === 0 && (
+          <p className="scoreboard__hint">Sei da solo per ora: condividi il codice {roomCode}.</p>
+        )}
       </section>
 
       {feedback && (
-        <div className={`toast toast--${feedback.kind}`} key={feedback.text}>
-          {feedback.kind === 'valid' ? `✓ ${feedback.text}` : `✗ ${feedback.text}`}
+        <div className={`toast ${toastClass}`} key={feedback.text}>
+          {feedback.kind === 'valid' && `✓ ${feedback.text}`}
+          {feedback.kind === 'duplicate' && `• ${feedback.text}`}
+          {feedback.kind === 'invalid' && `✗ ${feedback.text}`}
         </div>
       )}
     </div>

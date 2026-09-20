@@ -3,6 +3,8 @@
  * Questo pacchetto è la fonte di verità per tipi e logica deterministica.
  */
 
+import type { Difficulty } from './difficulty.js';
+
 export type GridSize = 4 | 5 | 6;
 
 export type GamePhase = 'lobby' | 'countdown' | 'playing' | 'roundEnd' | 'gameEnd';
@@ -42,7 +44,11 @@ export interface RoomState {
   code: string;
   hostId: string;
   gridSize: GridSize;
+  /** Difficoltà: cambia distribuzione lettere, tema e durata consigliata. */
+  difficulty: Difficulty;
   rounds: number;
+  /** Durata di un round in millisecondi. */
+  roundDurationMs: number;
   currentRound: number;
   phase: GamePhase;
   players: PlayerPublic[];
@@ -57,7 +63,9 @@ export interface RoomState {
 export interface RoomCreatePayload {
   nickname: string;
   gridSize: GridSize;
+  difficulty: Difficulty;
   rounds: number;
+  roundDurationMs: number;
 }
 
 export interface RoomJoinPayload {
@@ -77,6 +85,14 @@ export interface RoomJoinAck {
   ok: true;
   playerId: string;
   state: RoomState;
+}
+
+export interface RoomConfigPayload {
+  code: string;
+  gridSize: GridSize;
+  difficulty: Difficulty;
+  rounds: number;
+  roundDurationMs: number;
 }
 
 export interface SubmitWordPayload {
@@ -101,9 +117,14 @@ export interface RoundStartPayload {
 export interface PlayerWordPayload {
   playerId: string;
   nickname: string;
+  /** Parola trovata. Stringa VUOTA per gli avversari (non riveliamo le parole). */
   word: string;
+  /** Lunghezza della parola: permette al client di scdere il suono giusto anche per gli altri. */
+  wordLength: number;
   points: number;
   score: number;
+  /** true se la parola e' del giocatore che riceve l'evento. */
+  self: boolean;
 }
 
 export interface RoundResultEntry {
@@ -136,7 +157,7 @@ export interface ClientToServerEvents {
   'room:create': (payload: RoomCreatePayload, ack: (res: RoomCreateAck | ErrorPayload) => void) => void;
   'room:join': (payload: RoomJoinPayload, ack: (res: RoomJoinAck | ErrorPayload) => void) => void;
   'room:start': (payload: { code: string }) => void;
-  'room:config': (payload: { code: string; gridSize: GridSize; rounds: number }) => void;
+  'room:config': (payload: RoomConfigPayload) => void;
   'game:submitWord': (payload: SubmitWordPayload, ack: (res: SubmitWordAck) => void) => void;
   'room:leave': (payload: { code: string }) => void;
 }

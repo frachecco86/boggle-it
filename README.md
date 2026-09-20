@@ -18,9 +18,16 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
   Parole trovate da più giocatori danno **punteggio pieno a tutti**.
 - **Single player**: partita multi-round con riepilogo parole trovate e mancate.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
-  classifica live, riconnessione a partita in corso.
-- **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso
-  sullo swipe, shake su parola non valida, countdown 3-2-1, confetti a fine round.
+  classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
+  nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto.
+- **Difficoltà** (facile / normale / difficile): cambia la distribuzione delle lettere
+  (45% / 39% / 32% vocali) e il tema visivo. La dimensione della griglia è una scelta separata.
+- **Durata del round** selezionabile: 90, 120 o 180 secondi.
+- **Audio**: effetti sintetizzati con Web Audio (nessun asset da scaricare), motivi musicali
+  crescenti in base alla lunghezza della parola, e musica di sottofondo CC0.
+  Tutto disattivabile con volumi separati.
+- **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
+  flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
   Tutte rispettano `prefers-reduced-motion`.
 
 ---
@@ -57,6 +64,15 @@ Se il dizionario non è stato generato, il server usa una mini-lista di fallback
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
 | `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
+
+### Feedback sonoro
+
+| Evento | Suono |
+|---|---|
+| Parola valida | Motivo crescente: 3→nota, 4→intervallo, 5→arpeggio, 6→accordo, 7+→accordo + sparkle |
+| Parola già trovata | Due note discendenti (ambra, non è un errore) |
+| Parola non valida | Tono basso filtrato, morbido |
+| Parola di un avversario | Ding discreto + badge "+N" accanto al nome |
 | `pnpm typecheck` | Type-check di tutti i pacchetti |
 
 ### Variabili d'ambiente del server

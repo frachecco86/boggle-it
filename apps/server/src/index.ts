@@ -10,12 +10,13 @@ import {
   MIN_WORD_LENGTH,
   solveGrid,
   type ClientToServerEvents,
+  type Difficulty,
   type GridSize,
   type ErrorPayload,
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getDictionaryTrie } from './dictionary.js';
-import { RoomRegistry, ROUND_DURATION_MS, ROUND_END_PAUSE_MS, COUNTDOWN_MS, type Room } from './rooms.js';
+import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -117,12 +118,18 @@ function clampRounds(n: unknown): number {
   return Math.min(10, Math.max(1, Math.round(v)));
 }
 
+function isValidDifficulty(v: unknown): v is Difficulty {
+  return v === 'facile' || v === 'normale' || v === 'difficile';
+}
+
 io.on('connection', (socket) => {
   socket.on('room:create', (payload, ack) => {
     try {
       const gridSize = isValidGridSize(payload?.gridSize) ? payload.gridSize : 4;
       const rounds = clampRounds(payload?.rounds);
-      const room = registry.create(gridSize, rounds);
+      const difficulty = isValidDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
+      const roundDurationMs = clampDuration(payload?.roundDurationMs);
+      const room = registry.create(gridSize, rounds, difficulty, roundDurationMs);
       const playerId = randomUUID();
       const player = room.addPlayer(playerId, payload?.nickname ?? 'Host');
       player.socketId = socket.id;
@@ -168,7 +175,7 @@ io.on('connection', (socket) => {
         round: room.currentRound,
         grid: room.grid,
         endsAt: room.roundEndsAt,
-        durationMs: ROUND_DURATION_MS,
+        durationMs: room.roundDurationMs,
       };
       setTimeout(() => socket.emit('game:roundStart', payload), 0);
     }
@@ -187,7 +194,7 @@ io.on('connection', (socket) => {
         round: room.currentRound,
         grid,
         endsAt,
-        durationMs: ROUND_DURATION_MS,
+        durationMs: room.roundDurationMs,
       });
       broadcastState(room);
       scheduleRoundEnd(room);
@@ -197,8 +204,12 @@ io.on('connection', (socket) => {
     if (room.phase === 'lobby') {
       room.phase = 'countdown';
       broadcastState(room);
-      for (let s = 3; s >= 1; s--) {
-        setTimeout(() => io.to(room.code).emit('game:countdown', { seconds: s }), (3 - s) * 1000);
+      const seconds = Math.max(1, Math.round(COUNTDOWN_MS / 1000));
+      for (let s = seconds; s >= 1; s--) {
+        setTimeout(
+          () => io.to(room.code).emit('game:countdown', { seconds: s }),
+          (seconds - s) * 1000,
+        );
       }
       setTimeout(startRound, COUNTDOWN_MS);
     } else {
@@ -206,14 +217,16 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('room:config', ({ code, gridSize, rounds }) => {
+  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs }) => {
     const st = socketState.get(socket.id);
     const room = registry.get(code);
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby') return;
     if (isValidGridSize(gridSize)) room.gridSize = gridSize;
+    if (isValidDifficulty(difficulty)) room.difficulty = difficulty;
     room.rounds = clampRounds(rounds);
+    room.roundDurationMs = clampDuration(roundDurationMs);
     broadcastState(room);
   });
 
@@ -226,13 +239,30 @@ io.on('connection', (socket) => {
     const result = room.submitWord(st.playerId, payload.word, payload.path);
     if (result.accepted) {
       const player = room.players.get(st.playerId)!;
-      io.to(room.code).emit('game:playerWord', {
+      // NOTA PRIVACY: agli avversari non va rivelata la parola trovata (nascondiamo
+      // quali parole esistono sulla griglia). Nel feed live inviamo solo chi e quanti
+      // punti, cosi' il client puo' mostrare "+2" accanto al nome.
+      // Al proprietario inviamo la parola (serve per la propria lista).
+      io.to(room.code).except(player.socketId ?? '').emit('game:playerWord', {
         playerId: player.id,
         nickname: player.nickname,
-        word: result.word!,
+        word: '',
+        wordLength: result.word!.length,
         points: result.points!,
         score: player.totalScore,
+        self: false,
       });
+      if (player.socketId) {
+        io.to(player.socketId).emit('game:playerWord', {
+          playerId: player.id,
+          nickname: player.nickname,
+          word: result.word!,
+          wordLength: result.word!.length,
+          points: result.points!,
+          score: player.totalScore,
+          self: true,
+        });
+      }
       broadcastState(room);
     }
     ack(result);

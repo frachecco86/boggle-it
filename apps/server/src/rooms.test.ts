@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createDictionary } from '@boggle/dictionary';
-import type { Grid } from '@boggle/shared';
-import { Room } from './rooms.js';
+import { DICE, type Grid } from '@boggle/shared';
+import { Room, clampDuration } from './rooms.js';
 
 /** Griglia fissa di test: tutte le lettere note, layout 4x4. */
 function fixedGrid(letters: string[]): Grid {
@@ -125,5 +125,63 @@ describe('Room lifecycle', () => {
     expect(room.hostId).toBe('p1');
     room.removePlayer('p1');
     expect(room.hostId).toBe('p2');
+  });
+});
+
+describe('Difficoltà e durata round', () => {
+  it('applica la difficoltà alla stanza', () => {
+    const room = new Room('DIFF01', DICT, 5, 3, 'difficile', 90_000);
+    expect(room.difficulty).toBe('difficile');
+    expect(room.roundDurationMs).toBe(90_000);
+    const state = room.publicState();
+    expect(state.difficulty).toBe('difficile');
+    expect(state.roundDurationMs).toBe(90_000);
+  });
+
+  it('genera griglie diverse per difficoltà diverse', () => {
+    const counts: Record<string, number> = {};
+    const vowels = 'aeiou';
+    for (const diff of ['facile', 'normale', 'difficile'] as const) {
+      let v = 0;
+      let total = 0;
+      for (let i = 0; i < 60; i++) {
+        const room = new Room(`D${diff}`, DICT, 4, 1, diff, 60_000);
+        room.addPlayer('p', 'X');
+        const { grid } = room.startRound();
+        for (const t of grid.tiles) {
+          total++;
+          if (vowels.includes(t.letter) || t.letter === 'q') v++;
+        }
+      }
+      counts[diff] = v / total;
+    }
+    // La difficoltà facile deve avere più vocali della difficile.
+    expect(counts.facile!).toBeGreaterThan(counts.difficile!);
+    expect(counts.facile!).toBeGreaterThan(0.35);
+    expect(counts.difficile!).toBeLessThan(0.42);
+  });
+
+  it('usa i set di dadi corretti per difficoltà e dimensione', () => {
+    for (const size of [4, 5, 6] as const) {
+      for (const diff of ['facile', 'normale', 'difficile'] as const) {
+        expect(DICE[size][diff]).toHaveLength(size * size);
+        // ogni dado ha esattamente 6 facce
+        for (const die of DICE[size][diff]) expect(die).toHaveLength(6);
+      }
+    }
+  });
+
+  it('clampDuration accetta i valori nei limiti di sicurezza', () => {
+    // Le tre durate della UI.
+    expect(clampDuration(90_000)).toBe(90_000);
+    expect(clampDuration(120_000)).toBe(120_000);
+    expect(clampDuration(180_000)).toBe(180_000);
+    // Valori intermedi sono accettati (utili per i test e per durate future).
+    expect(clampDuration(95_000)).toBe(95_000);
+    expect(clampDuration(5_000)).toBe(5_000);
+    // Fuori dai limiti di sicurezza: si torna al default (mai un round istantaneo o infinito).
+    expect(clampDuration(1_000)).toBe(180_000);
+    expect(clampDuration(60 * 60_000)).toBe(180_000);
+    expect(clampDuration('boh')).toBe(180_000);
   });
 });

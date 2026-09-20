@@ -6,12 +6,17 @@ import { SoloGameScreen } from './screens/SoloGameScreen.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
+import { DIFFICULTIES, type Difficulty } from '@boggle/shared';
 import { bindSocketEvents, useAppStore } from './state/store.js';
 import { SERVER_BASE } from './net/socket.js';
+import { audio, installAudioUnlock } from './audio/AudioEngine.js';
 
 export function App() {
   const screen = useAppStore((s) => s.screen);
   const setScreen = useAppStore((s) => s.setScreen);
+  const soloDifficulty = useAppStore((s) => s.soloDifficulty);
+  const roomDifficulty = useAppStore((s) => s.room?.difficulty);
+  const audioSettings = useAppStore((s) => s.audioSettings);
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
   const [dictError, setDictError] = useState<string | null>(null);
 
@@ -34,6 +39,27 @@ export function App() {
 
   // Collega gli eventi Socket.IO allo store.
   useEffect(() => bindSocketEvents(), []);
+
+  // Audio: sblocca il contesto al primo gesto utente e tieni lo store allineato.
+  useEffect(() => installAudioUnlock(), []);
+  useEffect(() => {
+    audio.setSettings(audioSettings);
+  }, [audioSettings]);
+
+  /**
+   * Tema visivo per difficoltà: sfondo, superfici e accento.
+   * In multiplayer vince la difficoltà della stanza; altrimenti quella scelta per il single player.
+   */
+  const difficulty: Difficulty = roomDifficulty ?? soloDifficulty;
+  useEffect(() => {
+    const theme = DIFFICULTIES[difficulty].theme;
+    const root = document.documentElement;
+    root.style.setProperty('--difficulty-bg', theme.background);
+    root.style.setProperty('--difficulty-surface', theme.surface);
+    root.style.setProperty('--primary', theme.accent);
+    root.style.setProperty('--primary-soft', theme.accentSoft);
+    root.dataset.difficulty = difficulty;
+  }, [difficulty]);
 
   if (dictError) {
     return (

@@ -5,6 +5,7 @@ import {
   pathMatchesWord,
   scoreForWord,
   normalizeWord,
+  type Difficulty,
   type FoundWord,
   type Grid,
   type GridSize,
@@ -13,10 +14,34 @@ import {
 } from '@boggle/shared';
 import type { Dictionary } from './dictionary.js';
 
-// Durata round configurabile via env per test/dev (default 3 minuti).
-export const ROUND_DURATION_MS = Number(process.env.ROUND_DURATION_MS ?? 180_000);
+// Default di sviluppo/test: sovrascrivibili via env o per-stanza.
+export const DEFAULT_ROUND_DURATION_MS = Number(process.env.ROUND_DURATION_MS ?? 180_000);
 export const COUNTDOWN_MS = Number(process.env.COUNTDOWN_MS ?? 3_000);
 export const ROUND_END_PAUSE_MS = Number(process.env.ROUND_END_PAUSE_MS ?? 10_000);
+
+/** Durate offerte dall'interfaccia (secondi) — allineate a ROUND_DURATIONS_SEC nel shared. */
+const ALLOWED_DURATION_MS = [90_000, 120_000, 180_000];
+
+/** Limiti di sicurezza: evitano round istantanei o infiniti. */
+const MIN_DURATION_MS = 5_000;
+const MAX_DURATION_MS = 15 * 60_000;
+
+/**
+ * Normalizza la durata richiesta dal client.
+ *
+ * La UI propone 90/120/180s, ma il server non impone quella lista: accetta qualsiasi
+ * valore nei limiti di sicurezza. Cosi' i test possono usare round da pochi secondi
+ * e in futuro si potranno aggiungere durate personalizzate senza toccare il server.
+ */
+export function clampDuration(ms: unknown): number {
+  const v = Number(ms);
+  if (!Number.isFinite(v)) return DEFAULT_ROUND_DURATION_MS;
+  if (v < MIN_DURATION_MS || v > MAX_DURATION_MS) return DEFAULT_ROUND_DURATION_MS;
+  return Math.round(v);
+}
+
+/** Durate offerte dalla UI (usata nei messaggi di aiuto/test). */
+export const PREDEFINED_DURATIONS_MS = [...ALLOWED_DURATION_MS];
 
 export interface Player {
   id: string;
@@ -33,7 +58,9 @@ export class Room {
   readonly code: string;
   hostId: string;
   gridSize: GridSize;
+  difficulty: Difficulty;
   rounds: number;
+  roundDurationMs: number;
   currentRound = 0;
   phase: RoomState['phase'] = 'lobby';
   grid: Grid | null = null;
@@ -44,16 +71,31 @@ export class Room {
 
   private readonly dictionary: Dictionary;
 
-  constructor(code: string, dictionary: Dictionary, gridSize: GridSize = 4, rounds = 3) {
+  constructor(
+    code: string,
+    dictionary: Dictionary,
+    gridSize: GridSize = 4,
+    rounds = 3,
+    difficulty: Difficulty = 'normale',
+    roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+  ) {
     this.code = code;
     this.hostId = '';
     this.gridSize = gridSize;
     this.rounds = rounds;
+    this.difficulty = difficulty;
+    this.roundDurationMs = roundDurationMs;
     this.dictionary = dictionary;
   }
 
-  static create(dictionary: Dictionary, gridSize: GridSize, rounds: number): Room {
-    return new Room(generateRoomCode(), dictionary, gridSize, rounds);
+  static create(
+    dictionary: Dictionary,
+    gridSize: GridSize,
+    rounds: number,
+    difficulty: Difficulty = 'normale',
+    roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+  ): Room {
+    return new Room(generateRoomCode(), dictionary, gridSize, rounds, difficulty, roundDurationMs);
   }
 
   addPlayer(id: string, nickname: string): Player {
@@ -81,7 +123,9 @@ export class Room {
       code: this.code,
       hostId: this.hostId,
       gridSize: this.gridSize,
+      difficulty: this.difficulty,
       rounds: this.rounds,
+      roundDurationMs: this.roundDurationMs,
       currentRound: this.currentRound,
       phase: this.phase,
       players: this.publicPlayers(),
@@ -103,13 +147,13 @@ export class Room {
   startRound(): { grid: Grid; endsAt: number } {
     this.currentRound++;
     this.phase = 'playing';
-    this.grid = generateGrid(this.gridSize);
+    this.grid = generateGrid(this.gridSize, Math.random, this.difficulty);
     this.roundFoundWords = new Set();
     for (const p of this.players.values()) {
       p.roundScore = 0;
       p.roundWords = new Set();
     }
-    this.roundEndsAt = Date.now() + ROUND_DURATION_MS;
+    this.roundEndsAt = Date.now() + this.roundDurationMs;
     return { grid: this.grid, endsAt: this.roundEndsAt };
   }
 
@@ -194,11 +238,16 @@ export class RoomRegistry {
   private rooms = new Map<string, Room>();
   constructor(private dictionary: Dictionary) {}
 
-  create(gridSize: GridSize = 4, rounds = 3): Room {
+  create(
+    gridSize: GridSize = 4,
+    rounds = 3,
+    difficulty: Difficulty = 'normale',
+    roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
+  ): Room {
     let room: Room;
     let attempts = 0;
     do {
-      room = Room.create(this.dictionary, gridSize, rounds);
+      room = Room.create(this.dictionary, gridSize, rounds, difficulty, roundDurationMs);
       attempts++;
     } while (this.rooms.has(room.code) && attempts < 200);
     this.rooms.set(room.code, room);

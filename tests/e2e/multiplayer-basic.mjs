@@ -14,7 +14,7 @@ const emitAck = (sock, ev, payload) => new Promise((res) => sock.emit(ev, payloa
 await Promise.all([once(a, 'connect'), once(b, 'connect')]);
 log('✓ connessi');
 
-const created = await emitAck(a, 'room:create', { nickname: 'Alice', gridSize: 4, rounds: 2 });
+const created = await emitAck(a, 'room:create', { nickname: 'Alice', gridSize: 4, difficulty: 'normale', rounds: 2, roundDurationMs: 5000 });
 log('create:', created.ok, 'code=', created.roomCode);
 const code = created.roomCode;
 const aliceId = created.playerId;

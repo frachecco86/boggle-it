@@ -1,7 +1,30 @@
 // ⚠️  GENERATO da tools/gen-dice.mjs — non modificare a mano.
 // Ogni stringa = un dado (6 facce). 'q' = faccia "Qu" (Q+U inseparabili).
+// Tre livelli di difficoltà: distribuzione di vocali e consonanti diverse.
 
-export const DICE_4: readonly string[] = [
+import type { GridSize } from './types.js';
+import type { Difficulty } from './difficulty.js';
+
+export const DICE_4_EASY: readonly string[] = [
+  'leeima',
+  'iluitl',
+  'nnlotr',
+  'ogmtdc',
+  'eeumuu',
+  'irreil',
+  'vvbmrr',
+  'omouos',
+  'aoovgd',
+  'urorob',
+  'tfocra',
+  'ourned',
+  'sfuouo',
+  'roucsp',
+  'cienni',
+  'alnfas',
+];
+
+export const DICE_4_NORMAL: readonly string[] = [
   'eomrna',
   'abtoer',
   'eohetp',
@@ -20,7 +43,54 @@ export const DICE_4: readonly string[] = [
   'mcdell',
 ];
 
-export const DICE_5: readonly string[] = [
+export const DICE_4_HARD: readonly string[] = [
+  'bnhsst',
+  'mstioo',
+  'lusczu',
+  'epiica',
+  'ggcuci',
+  'ahtisu',
+  'glooaz',
+  'tuvidm',
+  'tlnglp',
+  'nmvoaa',
+  'gnhsrf',
+  'xcqvde',
+  'urailm',
+  'sacpnr',
+  'rmmass',
+  'pgrxuq',
+];
+
+export const DICE_5_EASY: readonly string[] = [
+  'ubbore',
+  'oeefeu',
+  'enartt',
+  'rcictd',
+  'uotltr',
+  'eorsnu',
+  'sriiil',
+  'cueser',
+  'sfosou',
+  'ntacao',
+  'euvmva',
+  'nnugrr',
+  'gspnvd',
+  'asasei',
+  'itispa',
+  'msltag',
+  'lsoeec',
+  'geeufo',
+  'slronu',
+  'uigigt',
+  'oculao',
+  'rpovni',
+  'urgdle',
+  'liiili',
+  'iioorr',
+];
+
+export const DICE_5_NORMAL: readonly string[] = [
   'qteeen',
   'ouolrd',
   'hfteci',
@@ -48,7 +118,74 @@ export const DICE_5: readonly string[] = [
   'poiogu',
 ];
 
-export const DICE_6: readonly string[] = [
+export const DICE_5_HARD: readonly string[] = [
+  'ruhlur',
+  'cgqmla',
+  'tauzae',
+  'rovnmh',
+  'cmflsl',
+  'nistkz',
+  'seldqv',
+  'rbfmzc',
+  'soxepc',
+  'ystrrj',
+  'nemgzb',
+  'vdmanm',
+  'vnogvp',
+  'euaisw',
+  'osdhcr',
+  'ruedzv',
+  'hrtnae',
+  'ewyipi',
+  'tnsgco',
+  'qttnas',
+  'sierko',
+  'edueir',
+  'cloitm',
+  'atarni',
+  'aorate',
+];
+
+export const DICE_6_EASY: readonly string[] = [
+  'eaaoci',
+  'reoarn',
+  'ovriul',
+  'tvutsr',
+  'mltnpn',
+  'obsseo',
+  'regona',
+  'vuleet',
+  'ucutte',
+  'ctooca',
+  'adtaic',
+  'reotod',
+  'siimoi',
+  'utctte',
+  'umbmpt',
+  'eibndo',
+  'cuiobt',
+  'mntpto',
+  'urtsrr',
+  'meiirr',
+  'evaoeo',
+  'lturbe',
+  'soiiom',
+  'eeovri',
+  'bussau',
+  'alcblc',
+  'nuruas',
+  'ootiuo',
+  'nmvrbc',
+  'uomrec',
+  'irzeao',
+  'orpeop',
+  'iricre',
+  'vsegup',
+  'upritu',
+  'mtulss',
+];
+
+export const DICE_6_NORMAL: readonly string[] = [
   'gtsslc',
   'ierbci',
   'nuetiz',
@@ -87,3 +224,48 @@ export const DICE_6: readonly string[] = [
   'sopunu',
 ];
 
+export const DICE_6_HARD: readonly string[] = [
+  'itrasg',
+  'onhrnc',
+  'deodiu',
+  'foqyrc',
+  'oevtgn',
+  'uutroi',
+  'angnqf',
+  'ogshbi',
+  'qsisog',
+  'huaupb',
+  'ullvre',
+  'uvslht',
+  'ssvmni',
+  'gapgcp',
+  'narnht',
+  'otdaei',
+  'ittgnb',
+  'farrvu',
+  'rbtchm',
+  'nvmibl',
+  'nhsohq',
+  'rbhret',
+  'onurnu',
+  'roascq',
+  'engsav',
+  'uarzvg',
+  'odsutb',
+  'scvdhs',
+  'esnqeg',
+  'geaofe',
+  'ifxzst',
+  'raglii',
+  'btpdvh',
+  'auctes',
+  'orpsqs',
+  'etsrti',
+];
+
+/** Mappa dimensione → difficoltà → set di dadi. */
+export const DICE: Record<GridSize, Record<Difficulty, readonly string[]>> = {
+  4: { facile: DICE_4_EASY, normale: DICE_4_NORMAL, difficile: DICE_4_HARD },
+  5: { facile: DICE_5_EASY, normale: DICE_5_NORMAL, difficile: DICE_5_HARD },
+  6: { facile: DICE_6_EASY, normale: DICE_6_NORMAL, difficile: DICE_6_HARD },
+};

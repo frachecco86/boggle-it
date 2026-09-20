@@ -31,7 +31,9 @@ body,
 }
 
 body {
-  background: radial-gradient(1200px 800px at 50% -10%, #23284f 0%, var(--bg) 55%);
+  /* Sfondo pilotato dalla difficoltà (impostato da App.tsx). Fallback al tema normale. */
+  background: var(--difficulty-bg, radial-gradient(1200px 800px at 50% -10%, #23284f 0%, var(--bg) 55%));
+  transition: background 0.6s ease;
   color: var(--text);
   font-family: var(--font);
   overscroll-behavior: none;
@@ -424,6 +426,9 @@ body {
   z-index: 1;
 }
 
+/* Le lettere riempiono quasi tutta la tile, come Boggle/Ruzzle.
+   La dimensione è calcolata da --grid-size: più la griglia è grande, più il
+   carattere scala, così il rapporto lettera/cella resta alto a ogni formato. */
 .tile {
   aspect-ratio: 1;
   display: grid;
@@ -431,21 +436,39 @@ body {
   background: linear-gradient(160deg, var(--surface-2), var(--surface));
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: clamp(1.1rem, 4.5vw, 2rem);
-  font-weight: 800;
+  font-size: calc(min(64vw, 420px) / var(--grid-size, 4) * 0.62);
+  line-height: 0.9;
+  font-weight: 900;
+  letter-spacing: -0.02em;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.15s, box-shadow 0.2s;
   animation: tile-in 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
   position: relative;
+  overflow: hidden;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Dimensioni dedicate: il "Qu" resta leggibile e le griglie grandi restano compatte. */
+.grid-board[style*='--grid-size: 5'] .tile {
+  font-size: calc(min(64vw, 420px) / 5 * 0.66);
 }
 
 .grid-board[style*='--grid-size: 6'] .tile {
-  font-size: clamp(0.95rem, 3.4vw, 1.5rem);
+  font-size: calc(min(64vw, 420px) / 6 * 0.7);
   border-radius: 10px;
 }
 
-.grid-board[style*='--grid-size: 5'] .tile {
-  font-size: clamp(1rem, 3.8vw, 1.7rem);
+/* Desktop: usa anche l'altezza disponibile, così le lettere restano grandi. */
+@media (min-width: 821px) {
+  .tile {
+    font-size: calc(min(42vw, 58vh, 460px) / var(--grid-size, 4) * 0.64);
+  }
+  .grid-board[style*='--grid-size: 5'] .tile {
+    font-size: calc(min(42vw, 58vh, 460px) / 5 * 0.68);
+  }
+  .grid-board[style*='--grid-size: 6'] .tile {
+    font-size: calc(min(42vw, 58vh, 460px) / 6 * 0.72);
+  }
 }
 
 @keyframes tile-in {
@@ -479,27 +502,20 @@ body {
   }
 }
 
-.grid-board.shake {
-  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+/* Parola non valida: flash morbido, NIENTE scuotimento (era fastidioso). */
+.grid-board--error {
+  animation: error-flash 0.5s ease-out;
 }
 
-@keyframes shake {
-  10%,
-  90% {
-    transform: translateX(-3px);
+@keyframes error-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.55), var(--shadow);
   }
-  20%,
-  80% {
-    transform: translateX(5px);
+  45% {
+    box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.28), var(--shadow);
   }
-  30%,
-  50%,
-  70% {
-    transform: translateX(-8px);
-  }
-  40%,
-  60% {
-    transform: translateX(8px);
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0), var(--shadow);
   }
 }
 
@@ -648,6 +664,12 @@ body {
 .toast--invalid {
   background: var(--danger);
   color: #3a0505;
+}
+
+/* Parola corretta ma già trovata: colore distinto (ambra), non è un errore. */
+.toast--duplicate {
+  background: var(--warning);
+  color: #3d2700;
 }
 
 @keyframes toast-in {
@@ -1082,5 +1104,237 @@ body {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Difficoltà: selettori, summary e tema                               */
+/* ------------------------------------------------------------------ */
+
+.difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.difficulty-options--compact {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.difficulty-option {
+  --level-accent: var(--primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.2s, transform 0.15s, background 0.2s;
+}
+
+.difficulty-option:hover {
+  transform: translateY(-2px);
+}
+
+.difficulty-option--active {
+  border-color: var(--level-accent);
+  background: color-mix(in srgb, var(--level-accent) 16%, var(--surface));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--level-accent) 22%, transparent);
+}
+
+.difficulty-option--compact {
+  align-items: center;
+  flex-direction: row;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  gap: 8px;
+}
+
+.difficulty-option__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--level-accent);
+  box-shadow: 0 0 8px var(--level-accent);
+  flex-shrink: 0;
+}
+
+.difficulty-option__label {
+  font-weight: 700;
+}
+
+.difficulty-option__hint {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.35;
+}
+
+.setup__summary {
+  --level-accent: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--level-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--level-accent) 35%, transparent);
+  font-size: 0.9rem;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.setup__summary-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--level-accent);
+  box-shadow: 0 0 10px var(--level-accent);
+}
+
+/* ------------------------------------------------------------------ */
+/* Impostazioni host (home) e audio                                   */
+/* ------------------------------------------------------------------ */
+
+.host-options {
+  --level-accent: var(--primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  animation: screen-in 0.25s ease-out;
+}
+
+.audio-settings {
+  width: min(420px, 100%);
+  margin: 6px auto 0;
+}
+
+.audio-settings__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.audio-settings__toggle:hover {
+  color: var(--text);
+  border-color: var(--primary-soft);
+}
+
+.audio-settings__icon {
+  font-size: 1rem;
+}
+
+.audio-settings__chevron {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.audio-settings__chevron--open {
+  transform: rotate(180deg);
+}
+
+.audio-settings__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  margin-top: 8px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  animation: screen-in 0.22s ease-out;
+}
+
+.audio-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.audio-settings__row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.audio-settings__row--slider {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.audio-settings__row--slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.audio-settings__row--slider input[type='range']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------ */
+/* Badge "+N" accanto al nome avversario                              */
+/* ------------------------------------------------------------------ */
+
+.score-pop {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #04291a;
+  background: var(--success);
+  animation: score-pop 2.6s cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
+  vertical-align: middle;
+}
+
+@keyframes score-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.12);
+  }
+  22% {
+    transform: translateY(0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.9);
   }
 }

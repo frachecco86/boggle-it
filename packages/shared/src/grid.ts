@@ -1,11 +1,6 @@
 import type { Grid, GridSize, Tile } from './types.js';
-import { DICE_4, DICE_5, DICE_6 } from './dice.js';
-
-const DICE_BY_SIZE: Record<GridSize, readonly string[]> = {
-  4: DICE_4,
-  5: DICE_5,
-  6: DICE_6,
-};
+import { DICE } from './dice.js';
+import type { Difficulty } from './difficulty.js';
 
 /** Mostra "Qu" per la faccia 'q', altrimenti la lettera maiuscola. */
 export function letterDisplay(letter: string): string {
@@ -21,11 +16,17 @@ export function letterValue(letter: string): string {
 /**
  * Genera una griglia N×N estraendo una faccia casuale da ogni dado.
  * Ogni dado è usato una sola volta.
+ *
+ * `difficulty` sceglie il set di dadi (distribuzione di vocali/consonanti diverse).
  */
-export function generateGrid(size: GridSize, rng: () => number = Math.random): Grid {
-  const dice = DICE_BY_SIZE[size];
-  if (dice.length !== size * size) {
-    throw new Error(`Set di dadi incoerente per griglia ${size}x${size}: ${dice.length} dadi`);
+export function generateGrid(
+  size: GridSize,
+  rng: () => number = Math.random,
+  difficulty: Difficulty = 'normale',
+): Grid {
+  const dice = DICE[size][difficulty];
+  if (!dice || dice.length !== size * size) {
+    throw new Error(`Set di dadi incoerente per griglia ${size}x${size} (${difficulty})`);
   }
   const shuffled = [...dice];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -88,4 +89,4 @@ export function pathMatchesWord(grid: Grid, path: number[], word: string): boole
   return wordFromPath(grid, path).toLowerCase() === word.toLowerCase();
 }
 
-export { DICE_4, DICE_5, DICE_6 };
+export { DICE };

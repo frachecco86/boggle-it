@@ -1,16 +1,35 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Grid, GridSize, PlayerPublic, RoomState, RoundResultEntry } from '@boggle/shared';
+import type { Difficulty, Grid, GridSize, PlayerPublic, RoomState, RoundResultEntry } from '@boggle/shared';
+import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { getSocket } from '../net/socket.js';
 
 export type Screen = 'home' | 'solo-setup' | 'solo-game' | 'lobby' | 'mp-game' | 'summary';
+
+/**
+ * Notifica di una parola trovata da un avversario.
+ * La parola NON è inclusa (il server la nasconde): solo punti e lunghezza,
+ * così il client mostra "+2" accanto al nome e sceglie il suono giusto.
+ */
+export interface OpponentEvent {
+  id: number;
+  playerId: string;
+  nickname: string;
+  points: number;
+  wordLength: number;
+  at: number;
+}
 
 interface AppState {
   screen: Screen;
   nickname: string;
   // single player
   soloGridSize: GridSize;
+  soloDifficulty: Difficulty;
+  soloRoundDurationMs: number;
   soloRounds: number;
+  // audio
+  audioSettings: AudioSettings;
   // multiplayer
   roomCode: string | null;
   playerId: string | null;
@@ -21,7 +40,13 @@ interface AppState {
   roundEndsAt: number;
   roundDurationMs: number;
   countdown: number | null;
-  liveWords: { playerId: string; nickname: string; word: string; points: number }[];
+  /**
+   * Eventi di parole trovate dagli avversari. NON contengono la parola:
+   * solo chi, quanti punti e la lunghezza (per scegliere il suono).
+   */
+  opponentEvents: OpponentEvent[];
+  /** Riassunto per giocatore: punti guadagnati di recente (per il badge "+2"). */
+  liveWords: { playerId: string; nickname: string; word: string; points: number; wordLength: number }[];
   roundResults: RoundResultEntry[] | null;
   missedWords: string[];
   finalScores: RoundResultEntry[] | null;
@@ -29,11 +54,12 @@ interface AppState {
 
   setScreen: (s: Screen) => void;
   setNickname: (n: string) => void;
-  setSoloSetup: (gridSize: GridSize, rounds: number) => void;
-  createRoom: (gridSize: GridSize, rounds: number) => Promise<void>;
+  setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
+  setAudioSettings: (next: Partial<AudioSettings>) => void;
+  createRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
-  configureRoom: (gridSize: GridSize, rounds: number) => void;
+  configureRoom: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string }>;
   leaveRoom: () => void;
   clearError: () => void;
@@ -45,7 +71,10 @@ export const useAppStore = create<AppState>()(
       screen: 'home',
       nickname: '',
       soloGridSize: 4,
+      soloDifficulty: 'normale',
+      soloRoundDurationMs: 180_000,
       soloRounds: 3,
+      audioSettings: audio.getSettings(),
       roomCode: null,
       playerId: null,
       playerIds: {},
@@ -54,6 +83,7 @@ export const useAppStore = create<AppState>()(
       roundEndsAt: 0,
       roundDurationMs: 180_000,
       countdown: null,
+      opponentEvents: [],
       liveWords: [],
       roundResults: null,
       missedWords: [],
@@ -62,13 +92,24 @@ export const useAppStore = create<AppState>()(
 
       setScreen: (screen) => set({ screen }),
       setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),
-      setSoloSetup: (gridSize, rounds) => set({ soloGridSize: gridSize, soloRounds: rounds }),
+      setSoloSetup: (gridSize, difficulty, rounds, roundDurationMs) =>
+        set({
+          soloGridSize: gridSize,
+          soloDifficulty: difficulty,
+          soloRounds: rounds,
+          soloRoundDurationMs: roundDurationMs,
+        }),
 
-      createRoom: async (gridSize, rounds) => {
+      setAudioSettings: (next) => {
+        audio.setSettings(next);
+        set({ audioSettings: audio.getSettings() });
+      },
+
+      createRoom: async (gridSize, difficulty, rounds, roundDurationMs) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Host';
         await new Promise<void>((resolve, reject) => {
-          socket.emit('room:create', { nickname, gridSize, rounds }, (res) => {
+          socket.emit('room:create', { nickname, gridSize, difficulty, rounds, roundDurationMs }, (res) => {
             if ('ok' in res && res.ok) {
               set((s) => ({
                 roomCode: res.roomCode,
@@ -117,10 +158,10 @@ export const useAppStore = create<AppState>()(
         getSocket().emit('room:start', { code });
       },
 
-      configureRoom: (gridSize, rounds) => {
+      configureRoom: (gridSize, difficulty, rounds, roundDurationMs) => {
         const code = get().roomCode;
         if (!code) return;
-        getSocket().emit('room:config', { code, gridSize, rounds });
+        getSocket().emit('room:config', { code, gridSize, difficulty, rounds, roundDurationMs });
       },
 
       submitWord: async (word, path) => {
@@ -142,6 +183,7 @@ export const useAppStore = create<AppState>()(
           roundResults: null,
           finalScores: null,
           liveWords: [],
+          opponentEvents: [],
           screen: 'home',
         });
       },
@@ -153,7 +195,10 @@ export const useAppStore = create<AppState>()(
       partialize: (s) => ({
         nickname: s.nickname,
         soloGridSize: s.soloGridSize,
+        soloDifficulty: s.soloDifficulty,
         soloRounds: s.soloRounds,
+        soloRoundDurationMs: s.soloRoundDurationMs,
+        audioSettings: s.audioSettings,
         playerIds: s.playerIds,
       }),
     },
@@ -174,11 +219,39 @@ export function bindSocketEvents(): () => void {
       roundResults: null,
       missedWords: [],
       liveWords: [],
+      opponentEvents: [],
       countdown: null,
       screen: 'mp-game',
     });
-  const onPlayerWord = (p: { playerId: string; nickname: string; word: string; points: number }) =>
-    set((s) => ({ liveWords: [...s.liveWords, { playerId: p.playerId, nickname: p.nickname, word: p.word, points: p.points }] }));
+  const onPlayerWord = (p: {
+    playerId: string;
+    nickname: string;
+    word: string;
+    wordLength: number;
+    points: number;
+    self: boolean;
+  }) =>
+    set((s) => {
+      const liveWords = [
+        ...s.liveWords,
+        { playerId: p.playerId, nickname: p.nickname, word: p.word, points: p.points, wordLength: p.wordLength },
+      ];
+      if (p.self) return { liveWords };
+      // Avversario: aggiungi una notifica "+N" accanto al nome e suona un ding discreto.
+      audio.play('opponent');
+      const opponentEvents = [
+        ...s.opponentEvents,
+        {
+          id: Date.now() + Math.random(),
+          playerId: p.playerId,
+          nickname: p.nickname,
+          points: p.points,
+          wordLength: p.wordLength,
+          at: Date.now(),
+        },
+      ];
+      return { liveWords, opponentEvents };
+    });
   const onRoundEnd = (p: { results: RoundResultEntry[]; missedWords: string[] }) =>
     set({ roundResults: p.results, missedWords: p.missedWords, screen: 'summary' });
   const onGameEnd = (p: { finalScores: RoundResultEntry[] }) => set({ finalScores: p.finalScores, screen: 'summary' });
