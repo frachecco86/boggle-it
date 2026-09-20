@@ -51,6 +51,7 @@ export type Screen =
   | 'profiles'
   | 'profile'
   | 'leaderboard'
+  | 'words'
   | 'changelog';
 
 /**

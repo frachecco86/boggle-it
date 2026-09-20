@@ -17,6 +17,8 @@ import {
   type ErrorPayload,
   type LeaderboardKind,
   type LeaderboardPeriod,
+  type WordCatalogQuery,
+  WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
@@ -177,6 +179,51 @@ app.get('/schede', (_req, res) => {
     bySize[size] = (bySize[size] ?? 0) + count;
   }
   res.json({ total: schede.size, byKey, bySize, ids });
+});
+
+
+/**
+ * Catalogo di tutte le parole componibili, con il numero di schede in cui compaiono.
+ *
+ * Pubblico: è utile anche solo per curiosità ("quali parole lunghe esistono?").
+ * Supporta ricerca, filtro per lunghezza e dimensione/difficoltà, ordinamento
+ * e paginazione. La distribuzione per lunghezza è calcolata sull'intero insieme
+ * filtrato, non solo sulla pagina restituita.
+ */
+app.get('/words', (req, res) => {
+  const num = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const sizeRaw = num(req.query.gridSize);
+  const gridSize = sizeRaw === 4 || sizeRaw === 5 || sizeRaw === 6 ? (sizeRaw as GridSize) : undefined;
+  const diffRaw = String(req.query.difficulty ?? '');
+  const difficulty = isValidDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
+
+  const sortRaw = String(req.query.sort ?? 'occurrences');
+  const sort: WordCatalogQuery['sort'] =
+    sortRaw === 'word' || sortRaw === 'length' ? sortRaw : 'occurrences';
+  const direction = req.query.direction === 'asc' ? 'asc' : 'desc';
+
+  const limitRaw = num(req.query.limit);
+  const limit = Math.min(500, Math.max(1, limitRaw ?? WORD_CATALOG_DEFAULT_LIMIT));
+  const offset = Math.max(0, num(req.query.offset) ?? 0);
+
+  const result = schede.wordCatalog({
+    search: typeof req.query.search === 'string' ? req.query.search : undefined,
+    length: num(req.query.length),
+    minLength: num(req.query.minLength),
+    maxLength: num(req.query.maxLength),
+    gridSize,
+    difficulty,
+    sort,
+    direction,
+    limit,
+    offset,
+  });
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(result);
 });
 
 app.get('/schede/:id', (req, res) => {

@@ -11,6 +11,8 @@ import type {
   LeaderboardResponse,
   PlayerStats,
   SubmitGamePayload,
+  WordCatalogQuery,
+  WordCatalogResponse,
 } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
 
@@ -78,3 +80,28 @@ export async function fetchMyStats(
 }
 
 export type { Difficulty, GridSize };
+
+/** Scarica il catalogo delle parole. Pubblico: funziona anche senza token. */
+export async function fetchWordCatalog(
+  query: Partial<WordCatalogQuery>,
+  signal?: AbortSignal,
+): Promise<WordCatalogResponse | null> {
+  const params = new URLSearchParams();
+  if (query.search) params.set('search', query.search);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.direction) params.set('direction', query.direction);
+  if (query.length !== undefined) params.set('length', String(query.length));
+  if (query.minLength !== undefined) params.set('minLength', String(query.minLength));
+  if (query.maxLength !== undefined) params.set('maxLength', String(query.maxLength));
+  if (query.gridSize !== undefined) params.set('gridSize', String(query.gridSize));
+  if (query.difficulty) params.set('difficulty', query.difficulty);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.offset !== undefined) params.set('offset', String(query.offset));
+  try {
+    const res = await fetch(`${SERVER_BASE}/words?${params.toString()}`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as WordCatalogResponse;
+  } catch {
+    return null;
+  }
+}

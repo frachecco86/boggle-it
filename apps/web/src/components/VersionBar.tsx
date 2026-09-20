@@ -31,6 +31,19 @@ export function VersionBar() {
 
       <button
         type="button"
+        className={`topbar__item${screen === 'words' ? ' topbar__item--active' : ''}`}
+        onClick={() => setScreen('words')}
+        title="Tutte le parole che si possono trovare"
+        aria-current={screen === 'words' ? 'page' : undefined}
+      >
+        <span className="topbar__icon" aria-hidden>
+          📖
+        </span>
+        <span className="topbar__label">Parole</span>
+      </button>
+
+      <button
+        type="button"
         className="versionbar"
         onClick={() => setScreen('changelog')}
         title="Novità di questa versione"

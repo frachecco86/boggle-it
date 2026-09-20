@@ -58,9 +58,25 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
     if (!endsInConsonant(w)) return true;
     return allowedEndings.has(w) || protectedSet.has(w);
   };
-  const commonList = [...new Set([...options.commonWords].map(normalizeWord).filter((w) => w && keep(w)))];
+  /*
+   * Lessico comune usato per risolvere le schede.
+   *
+   * Oltre al file dei 60k, includiamo le parole della lista bianca delle finali in
+   * consonante (`tic`, `mar`, `sol`, `bar`, `film`, `gol`, `computer`): sono parole
+   * valide che pero' NON compaiono nel file 60k, quindi senza questo passaggio
+   * restavano non componibili anche dopo aver corretto il filtro.
+   * La lista bianca e' gia' curata (nessun troncamento), quindi non reintroduce rumore.
+   */
+  const commonList = [
+    ...new Set([
+      ...[...options.commonWords].map(normalizeWord).filter((w) => w && keep(w)),
+      ...allowedEndings,
+    ]),
+  ];
   const commonSet = new Set(commonList);
-  const fullList = [...new Set([...options.fullWords].map(normalizeWord).filter((w) => w && keep(w)))];
+  const fullList = [
+    ...new Set([...[...options.fullWords].map(normalizeWord).filter((w) => w && keep(w)), ...allowedEndings]),
+  ];
   const tries: SchedaTries = {
     full: buildTrie(fullList, { maxLength }),
     common: buildTrie(commonList, { maxLength }),

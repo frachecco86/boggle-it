@@ -9,6 +9,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ProfileStore } from './profiles.js';
+import { SchedaCatalog } from './schede.js';
 
 let dir: string;
 let store: ProfileStore;
@@ -183,5 +184,76 @@ describe('clearGames', () => {
     expect(store.clearGames(a)).toBe(1);
     expect(store.playerStats(a).games).toBe(0);
     expect(store.playerStats(b).games).toBe(1);
+  });
+});
+
+describe('catalogo parole', () => {
+  it('aggrega le parole con le occorrenze e la distribuzione per lunghezza', () => {
+    const catalog = new SchedaCatalog();
+    // Tre schede con parole in comune: 'casa' compare in due.
+    catalog.add({
+      id: 's1', size: 4, difficulty: 'normale', grid: 'casa\nzzzz\nzzzz\nzzzz',
+      words: ['casa', 'caso', 'cassa'], longest: 5,
+    });
+    catalog.add({
+      id: 's2', size: 4, difficulty: 'normale', grid: 'casa\nzzzz\nzzzz\nzzzz',
+      words: ['casa', 'cassa'], longest: 5,
+    });
+    catalog.add({
+      id: 's3', size: 5, difficulty: 'facile', grid: 'x\nx\nx\nx\nx',
+      words: ['rete'], longest: 4,
+    });
+
+    const res = catalog.wordCatalog({ sort: 'occurrences', direction: 'desc', limit: 100, offset: 0 });
+    // 'casa' in 2 schede, 'cassa' in 2, gli altri in 1.
+    expect(res.total).toBe(4);
+    expect(res.entries[0]!.occurrences).toBe(2);
+    const casa = res.entries.find((e) => e.word === 'casa');
+    expect(casa).toBeDefined();
+    expect(casa!.occurrences).toBe(2);
+    expect(casa!.length).toBe(4);
+    // Punteggio = lunghezza - 2.
+    expect(casa!.points).toBe(2);
+  });
+
+  it('filtra per dimensione e difficoltà', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 'a', size: 4, difficulty: 'facile', grid: 'x', words: ['rete', 'rete2'], longest: 4,
+    });
+    catalog.add({
+      id: 'b', size: 6, difficulty: 'difficile', grid: 'x', words: ['parola'], longest: 6,
+    });
+
+    const solo4 = catalog.wordCatalog({ gridSize: 4, sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(solo4.entries.map((e) => e.word).sort()).toEqual(['rete', 'rete2']);
+
+    const soloDifficile = catalog.wordCatalog({ difficulty: 'difficile', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(soloDifficile.entries.map((e) => e.word)).toEqual(['parola']);
+  });
+
+  it('cerca, filtra per lunghezza e ordina', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 'a', size: 4, difficulty: 'facile', grid: 'x',
+      words: ['casa', 'caso', 'cavolo', 'rete'], longest: 6,
+    });
+
+    const cerca = catalog.wordCatalog({ search: 'cas', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(cerca.entries.map((e) => e.word)).toEqual(['casa', 'caso']);
+
+    const lunghezza = catalog.wordCatalog({ length: 4, sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(lunghezza.entries.map((e) => e.word)).toEqual(['casa', 'caso', 'rete']);
+
+    const decrescente = catalog.wordCatalog({ sort: 'length', direction: 'desc', limit: 100, offset: 0 });
+    expect(decrescente.entries[0]!.word).toBe('cavolo');
+  });
+
+  it('ignora le schede duplicate per id', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({ id: 'x', size: 4, difficulty: 'facile', grid: 'x', words: ['casa'], longest: 4 });
+    catalog.add({ id: 'x', size: 4, difficulty: 'facile', grid: 'x', words: ['casa'], longest: 4 });
+    const res = catalog.wordCatalog({ sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(res.total).toBe(1);
   });
 });

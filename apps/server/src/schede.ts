@@ -24,6 +24,9 @@ import {
   type GridSize,
   type Scheda,
   type SchedaFile,
+  type WordCatalogEntry,
+  type WordCatalogQuery,
+  type WordCatalogResponse,
 } from '@boggle/shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +72,8 @@ export function toMeta(scheda: Scheda): SchedaMeta {
 export class SchedaCatalog {
   private readonly byId = new Map<string, Scheda>();
   private readonly byKey = new Map<string, Scheda[]>();
+  /** Indice parola -> occorrenze, costruito pigramente per il catalogo parole. */
+  private wordIndex: { words: Map<string, { occurrences: number; schedaIds: string[] }> } | null = null;
 
   /** Carica schede base + extra. */
   static load(): SchedaCatalog {
@@ -113,15 +118,29 @@ export class SchedaCatalog {
     else list.push(scheda);
     this.byKey.set(key, list);
     this.byId.set(scheda.id, scheda);
+    this.invalidate();
   }
 
   get(id: string): Scheda | undefined {
     return this.byId.get(id);
   }
 
+  /**
+   * Elenca le schede, con filtri opzionali e indipendenti.
+   *
+   * Prima filtrava solo se venivano passati ENTRAMBI size e difficulty:
+   * con uno solo restituiva l'intero catalogo, quindi un filtro per sola
+   * dimensione (o sola difficoltà) non aveva effetto. Ora i filtri si applicano
+   * singolarmente.
+   */
   list(size?: GridSize, difficulty?: Difficulty): Scheda[] {
-    if (size && difficulty) return [...(this.byKey.get(schedaKey(size, difficulty)) ?? [])];
-    return [...this.byId.values()];
+    if (size === undefined && difficulty === undefined) return [...this.byId.values()];
+    if (size !== undefined && difficulty !== undefined) {
+      return [...(this.byKey.get(schedaKey(size, difficulty)) ?? [])];
+    }
+    return [...this.byId.values()].filter(
+      (s) => (size === undefined || s.size === size) && (difficulty === undefined || s.difficulty === difficulty),
+    );
   }
 
   countByKey(): Record<string, number> {
@@ -135,6 +154,92 @@ export class SchedaCatalog {
     const list = this.byKey.get(schedaKey(size, difficulty));
     if (!list || list.length === 0) return undefined;
     return list[Math.floor(rng() * list.length)];
+  }
+
+  /**
+   * Catalogo di TUTTE le parole componibili, con il numero di schede in cui compaiono.
+   *
+   * L'indice viene calcolato una volta e memorizzato: le schede cambiano solo quando
+   * l'admin ne aggiunge, quindi rifarlo a ogni richiesta sarebbe spreco.
+   * `invalidate()` lo azzera quando il catalogo cambia.
+   */
+  wordCatalog(query: WordCatalogQuery): WordCatalogResponse {
+    const index = this.getWordIndex();
+
+    // Filtro per dimensione/difficoltà: serve la mappa parola -> schede.
+    // Se non ci sono filtri di scheda usiamo l'indice globale (più veloce).
+    const restrictSchedaIds =
+      query.gridSize !== undefined || query.difficulty !== undefined
+        ? new Set(this.list(query.gridSize, query.difficulty).map((s) => s.id))
+        : null;
+
+    const search = query.search?.trim().toLowerCase() ?? '';
+    const entries: WordCatalogEntry[] = [];
+    const byLengthAll = new Map<number, number>();
+
+    for (const [word, entry] of index.words) {
+      // distribuzione per lunghezza sull'intero catalogo filtrato (prima della paginazione)
+      const occ = restrictSchedaIds
+        ? entry.schedaIds.reduce((n, id) => (restrictSchedaIds.has(id) ? n + 1 : n), 0)
+        : entry.occurrences;
+      if (occ === 0) continue;
+
+      if (query.length !== undefined && word.length !== query.length) continue;
+      if (query.minLength !== undefined && word.length < query.minLength) continue;
+      if (query.maxLength !== undefined && word.length > query.maxLength) continue;
+      if (search && !word.includes(search)) continue;
+
+      byLengthAll.set(word.length, (byLengthAll.get(word.length) ?? 0) + 1);
+      entries.push({
+        word,
+        length: word.length,
+        occurrences: occ,
+        points: Math.max(1, word.length - 2),
+      });
+    }
+
+    // Ordinamento
+    const dir = query.direction === 'asc' ? 1 : -1;
+    entries.sort((a, b) => {
+      if (query.sort === 'word') return dir * a.word.localeCompare(b.word, 'it');
+      if (query.sort === 'length') {
+        return dir * (a.length - b.length) || a.word.localeCompare(b.word, 'it');
+      }
+      return dir * (a.occurrences - b.occurrences) || a.word.localeCompare(b.word, 'it');
+    });
+
+    const total = entries.length;
+    const page = entries.slice(query.offset, query.offset + query.limit);
+
+    const byLength = [...byLengthAll.entries()]
+      .map(([length, words]) => ({ length, words }))
+      .sort((a, b) => a.length - b.length);
+
+    return { entries: page, total, byLength, offset: query.offset, limit: query.limit };
+  }
+
+  /** Indice parole, costruito alla prima richiesta e riusato. */
+  private getWordIndex(): { words: Map<string, { occurrences: number; schedaIds: string[] }> } {
+    if (this.wordIndex) return this.wordIndex;
+    const words = new Map<string, { occurrences: number; schedaIds: string[] }>();
+    for (const scheda of this.byId.values()) {
+      for (const word of scheda.words) {
+        let entry = words.get(word);
+        if (!entry) {
+          entry = { occurrences: 0, schedaIds: [] };
+          words.set(word, entry);
+        }
+        entry.occurrences++;
+        entry.schedaIds.push(scheda.id);
+      }
+    }
+    this.wordIndex = { words };
+    return this.wordIndex;
+  }
+
+  /** Azzera l'indice parole: da chiamare quando le schede cambiano. */
+  invalidate(): void {
+    this.wordIndex = null;
   }
 
   /**

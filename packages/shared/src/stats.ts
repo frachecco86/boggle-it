@@ -139,3 +139,54 @@ export function isSubmitGamePayload(value: unknown): value is SubmitGamePayload 
     (p.schedaId === undefined || p.schedaId === null || typeof p.schedaId === 'string')
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* Catalogo delle parole                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Una parola del catalogo, con quante volte compare nelle schede.
+ *
+ * Serve a rispondere a "quali parole posso trovare, e quanto sono comuni?":
+ * una parola che appare in molte schede è più facile da incontrare.
+ */
+export interface WordCatalogEntry {
+  word: string;
+  length: number;
+  /** Numero di schede in cui la parola è componibile. */
+  occurrences: number;
+  /** Punteggio che vale (lunghezza - 2, come nel Boggle). */
+  points: number;
+}
+
+/** Filtri del catalogo parole. */
+export interface WordCatalogQuery {
+  /** Ricerca testuale (prefisso o sottostringa). */
+  search?: string;
+  /** Lunghezza esatta. */
+  length?: number;
+  /** Solo parole di almeno N lettere. */
+  minLength?: number;
+  /** Solo parole di al più N lettere. */
+  maxLength?: number;
+  /** Restringe alle schede di una dimensione. */
+  gridSize?: GridSize;
+  /** Restringe alle schede di una difficoltà. */
+  difficulty?: Difficulty;
+  sort: 'word' | 'length' | 'occurrences';
+  direction: 'asc' | 'desc';
+  limit: number;
+  offset: number;
+}
+
+export interface WordCatalogResponse {
+  entries: WordCatalogEntry[];
+  /** Totale parole che soddisfano i filtri (per la paginazione). */
+  total: number;
+  /** Distribuzione per lunghezza sull'INTERO catalogo filtrato. */
+  byLength: Array<{ length: number; words: number }>;
+  offset: number;
+  limit: number;
+}
+
+export const WORD_CATALOG_DEFAULT_LIMIT = 100;

@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '0.8.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,38 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.8.0',
+    date: '2026-09-20',
+    title: 'Catalogo delle parole e filtro dei troncamenti corretto',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          'Nuova voce **Parole** nella barra in alto: tutte le parole componibili, con quante volte compaiono nelle schede. Ordinabili per **occorrenze**, **lunghezza** o **alfabetico**, con ricerca e filtri per dimensione e difficoltà.',
+          'Grafico della **distribuzione per lunghezza**: cliccando una barra si filtra per quella lunghezza.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          'Corretto il filtro che scartava parole valide: `tic`, `con`, `far`, `mar`, `sol`, `bar`, `film`, `gol` non erano più accettate perché finiscono in consonante. Ora la lista delle finali ammesse è **1068 voci** invece di 171, generata dal **lemma** di Morph-it (criterio linguistico) invece che da una lista a mano.',
+          'Escluse le **parole funzionali** (`il`, `in`, `del`, `nel`, `non`): non ha senso "trovare" un articolo in una griglia.',
+          'Esclusi versi (`ahhh`), sigle (`btp`, `ccd`), interiezioni (`boh`) e composti giornalistici (`antibush`, `anticlinton`).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le schede scendono da 1200 a **300** (25 per ognuna delle 12 combinazioni): file da 2,6 MB a 752 KB.',
+          'Il filtro usa il **lemma di Morph-it** per distinguere un troncamento (`andar` → `andare`) da una parola autonoma (`tic` → `tic`). Morph-it è in **ISO-8859-1**, non UTF-8: letto male, `normalità` sembrava un troncamento.',
+          'Le parole della lista bianca ora entrano anche nel **lessico comune**: prima `tic` o `bar`, assenti dal file dei 60k, restavano non componibili anche dopo la correzione.',
+          'Corretto `SchedaCatalog.list()`: filtrava solo con dimensione E difficoltà insieme, quindi un filtro singolo veniva ignorato.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.7.0',
     date: '2026-09-20',
