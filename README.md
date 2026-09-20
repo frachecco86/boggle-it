@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.5.3** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.6.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -33,8 +33,9 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Profili persistenti** (opzionali): più profili salvati sul dispositivo con switch rapido,
   registrazione/acceso con nickname e password (scrypt, SQLite). Il profilo porta con sé
   avatar, **foto** e **suoni personali**.
-- **Foto profilo con filtri** applicati localmente (canvas): cartoon, fumetto, poster, schizzo,
-  seppia. La foto originale non lascia il dispositivo: si carica solo il risultato 256×256.
+- **Foto profilo con effetti AI**: stili **AnimeGANv2** (Hayao/Shinkai/Paprika) eseguiti nel
+  browser con onnxruntime-web — vera rete neurale, non un filtro grafico. Più filtri rapidi
+  in canvas. La foto originale non lascia il dispositivo: si carica solo il risultato 256×256.
 - **Suoni personali delle parole**: registri una clip per 5 fasce di lunghezza (3/4/5/6/7+);
   le senti tu quando trovi una parola. Se non registri nulla, si usa il suono sintetizzato.
 - **Musica di sottofondo reale** (non generata): 6 tracce **CC0** incluse nel bundle

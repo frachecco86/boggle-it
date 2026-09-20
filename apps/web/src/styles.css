@@ -2282,3 +2282,54 @@ body {
 .screen {
   padding-top: 30px;
 }
+
+/* ---------- Editor foto: stili AI, progresso, gruppi ---------- */
+
+.photo-editor__group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.photo-editor__group-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.photo-editor__group-hint {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.photo-editor__filter:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Avanzamento durante download del modello o inferenza. */
+.photo-editor__progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 6px 8px;
+  background: rgba(20, 20, 35, 0.72);
+  color: #fff;
+  font-size: 0.72rem;
+  text-align: center;
+  backdrop-filter: blur(3px);
+}
+
+/* Firma dell'autrice: piccola, in corsivo, sotto il titolo. */
+.home__author {
+  margin: 2px 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+  opacity: 0.85;
+}

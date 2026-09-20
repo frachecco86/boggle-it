@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.5.3';
+export const APP_VERSION = '0.6.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,36 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.6.0',
+    date: '2026-09-20',
+    title: 'Foto profilo con veri effetti AI (cartoon anime)',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          'Effetti AI per la foto profilo con **AnimeGANv2**, una vera rete neurale di style transfer eseguita nel browser (onnxruntime-web + WebAssembly): tre stili, Hayao (ispirato a Miyazaki), Shinkai e Paprika. Ridisegna il volto in stile anime invece di scurire i contorni come facevano i filtri grafici.',
+          'I filtri rapidi in canvas restano disponibili accanto agli stili AI, per chi vuole un effetto immediato senza scaricare nulla.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          'Niente API cloud: la foto non lascia il dispositivo, non c\'è costo per immagine e la funzione lavora offline dopo il primo uso (utile nell\'app Android).',
+          'I pesi (8.25 MB per stile) e il runtime WASM si scaricano al primo uso e restano in cache: l\'app resta leggera (bundle iniziale +295 KB) e le volte successive sono offline.',
+          'Avanzamento visibile durante il download del modello e durante l\'elaborazione.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il runtime WASM è servito da CDN con `wasmPaths`: onnxruntime-web espone più varianti (base/JSEP/asyncify/JSPI) e Vite le copiava TUTTE (~80 MB). Un plugin di build le rimuove: nel bundle non resta nessun `.wasm`.',
+          'Modello ONNX con input NHWC `[1,H,W,3]` in [-1,1] e output tanh: ~250 ms a 256×256 su CPU (3.4 s su telefono).',
+          'La firma "un gioco di Margherita Checco" compare sotto il titolo in home.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.5.3',
     date: '2026-09-20',

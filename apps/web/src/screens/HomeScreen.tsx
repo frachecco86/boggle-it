@@ -79,6 +79,7 @@ export function HomeScreen() {
         <h1 className="title">
           <span className="title__b">sbooble</span>
         </h1>
+        <p className="home__author">un gioco di Margherita Checco</p>
         <p className="home__tagline">Trova più parole degli altri. Scorri il dito sulle lettere.</p>
         {schedeTotal !== null && (
           <p className="home__schede">
