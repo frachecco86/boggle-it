@@ -36,9 +36,9 @@ describe('Room.submitWord', () => {
     const res = room.submitWord('p1', 'casa', [0, 1, 2, 3]);
     expect(res.accepted).toBe(true);
     expect(res.word).toBe('casa');
-    // 1 punto ogni 3 lettere: 'casa' (4) → 1 punto base
-    expect(res.points).toBe(1);
-    expect(room.players.get('p1')!.totalScore).toBe(1);
+    // Regola Boggle: 'casa' (4 lettere) → 2 punti base
+    expect(res.points).toBe(2);
+    expect(room.players.get('p1')!.totalScore).toBe(2);
   });
 
   it('rifiuta un percorso non adiacente', () => {
@@ -77,8 +77,8 @@ describe('Room.submitWord', () => {
     expect(room.submitWord('p1', 'casa', [0, 1, 2, 3]).accepted).toBe(true);
     expect(room.submitWord('p2', 'casa', [0, 1, 2, 3]).accepted).toBe(true);
     // I punti base vengono accreditati subito; il raddoppio si applica a fine round.
-    expect(room.players.get('p1')!.totalScore).toBe(1);
-    expect(room.players.get('p2')!.totalScore).toBe(1);
+    expect(room.players.get('p1')!.totalScore).toBe(2);
+    expect(room.players.get('p2')!.totalScore).toBe(2);
   });
 
   it('raddoppia i punti se la parola è trovata da un solo giocatore', () => {
@@ -87,9 +87,9 @@ describe('Room.submitWord', () => {
     room.submitWord('p1', 'casa', [0, 1, 2, 3]); // trovata solo da p1
     const results = room.endRound();
     const p1 = results.find((r) => r.playerId === 'p1')!;
-    // 'casa' = 1 punto base, raddoppiato a 2 perché nessun altro l'ha trovata
-    expect(p1.roundScore).toBe(2);
-    expect(p1.totalScore).toBe(2);
+    // 'casa' = 2 punti base, raddoppiati a 4 perché nessun altro l'ha trovata
+    expect(p1.roundScore).toBe(4);
+    expect(p1.totalScore).toBe(4);
     expect(p1.uniqueWords).toContain('casa');
   });
 
@@ -100,7 +100,7 @@ describe('Room.submitWord', () => {
     room.submitWord('p2', 'casa', [0, 1, 2, 3]);
     const results = room.endRound();
     for (const r of results) {
-      expect(r.roundScore).toBe(1); // base, senza raddoppio
+      expect(r.roundScore).toBe(2); // base, senza raddoppio
       expect(r.uniqueWords ?? []).not.toContain('casa');
     }
   });
@@ -119,8 +119,8 @@ describe('Room.submitWord', () => {
     const res = room.submitWord('p1', 'quad', [0, 1, 2]);
     expect(res.accepted).toBe(true);
     expect(res.word).toBe('quad');
-    // 'quad' = 4 lettere → 1 punto base
-    expect(res.points).toBe(1);
+    // 'quad' = 4 lettere → 2 punti base
+    expect(res.points).toBe(2);
   });
 });
 
@@ -131,7 +131,7 @@ describe('Room lifecycle', () => {
     room.submitWord('p1', 'casa', [0, 1, 2, 3]);
     const results = room.endRound();
     expect(results[0]!.nickname).toBe('Alice');
-    expect(results[0]!.roundScore).toBe(2); // base 1 raddoppiata (unica)
+    expect(results[0]!.roundScore).toBe(4); // base 2 raddoppiata (unica)
     expect(room.phase).toBe('roundEnd');
   });
 

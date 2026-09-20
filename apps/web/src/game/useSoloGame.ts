@@ -31,7 +31,7 @@ interface UseSoloGameOptions {
 }
 
 export interface SoloGameState {
-  phase: 'idle' | 'playing' | 'roundEnd' | 'gameEnd';
+  phase: 'idle' | 'countdown' | 'playing' | 'roundEnd' | 'gameEnd';
   round: number;
   grid: Grid | null;
   /** Scheda giocata nel round corrente (griglia + tutte le parole trovabili). */
@@ -63,6 +63,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const { gridSize, difficulty, rounds, roundDurationMs } = options;
 
   const [phase, setPhase] = useState<SoloGameState['phase']>('idle');
+  /** Scheda scelta nell'anteprima, in attesa che il countdown finisca. */
+  const pendingSchedaRef = useRef<Scheda | null>(null);
   const [round, setRound] = useState(0);
   const [scheda, setScheda] = useState<Scheda | null>(null);
   const [found, setFound] = useState<FoundWord[]>([]);
@@ -121,15 +123,30 @@ export function useSoloGame(options: UseSoloGameOptions) {
     [gridSize, difficulty, roundDurationMs],
   );
 
-  /** Avvia la partita. `prescelta` è la scheda scelta nell'anteprima. */
+  /**
+   * Avvia la partita. `prescelta` è la scheda scelta nell'anteprima.
+   *
+   * Non si parte subito: si entra in `countdown`, che mostra 3-2-1 con animazione
+   * e suoni. Al termine `beginRound` fa partire davvero il timer, così i secondi
+   * di gioco non si consumano durante il conto alla rovescia.
+   */
   const start = useCallback(
     (prescelta?: Scheda) => {
       savedRef.current = false;
       setRoundScores([]);
-      void startRound(1, prescelta);
+      // La scheda resta in attesa: la userà beginRound.
+      pendingSchedaRef.current = prescelta ?? null;
+      setPhase('countdown');
     },
-    [startRound],
+    [],
   );
+
+  /** Chiamato dal countdown quando ha finito: qui parte il round vero. */
+  const beginRound = useCallback(() => {
+    const prescelta = pendingSchedaRef.current ?? undefined;
+    pendingSchedaRef.current = null;
+    void startRound(1, prescelta);
+  }, [startRound]);
 
   // Timer
   useEffect(() => {
@@ -242,6 +259,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     loadError,
     totalScore,
     start,
+    beginRound,
     commitPath,
     setSelectedPath,
     nextRound,

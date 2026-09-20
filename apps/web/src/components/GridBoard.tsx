@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Grid as GridModel } from '@boggle/shared';
 import { SwipeController, gridAreAdjacent, type Layout } from '../game/swipe.js';
 import { audio } from '../audio/AudioEngine.js';
@@ -22,6 +22,8 @@ interface GridBoardProps {
 export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError }: GridBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
+  /** SVG del trail: serve per convertire le coordinate al momento del disegno. */
+  const trailSvgRef = useRef<SVGSVGElement>(null);
   const [centers, setCenters] = useState<{ x: number; y: number }[]>([]);
 
   // Callback e griglia via ref: lo SwipeController si crea UNA volta sola e non
@@ -37,8 +39,13 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
 
   /**
    * Layout fresco al momento della chiamata: i centri delle celle sono in
-   * coordinate locali al container. Rileggere il DOM ad ogni punto (invece di
-   * salvare i centri in stato) evita misure stale durante scroll/resize.
+   * coordinate locali al BOARD (`containerRef`).
+   *
+   * ATTENZIONE: queste coordinate servono ANCHE all'hit-test dello swipe, dove i
+   * punti arrivano da `element.getBoundingClientRect()` del board. Devono quindi
+   * restare nel sistema di coordinate del board: cambiarle romperebbe il tocco.
+   * Il trail SVG ha un'origine diversa e viene convertito al momento del disegno
+   * (vedi `trailPoints`).
    */
   const buildLayout = useCallback((): Layout => {
     const size = gridRef.current.size;
@@ -101,10 +108,32 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
     };
   }, [grid, buildLayout]);
 
-  const points = selectedPath
-    .map((i) => centers[i])
-    .filter((p): p is { x: number; y: number } => Boolean(p));
-  const polyPoints = points.map((p) => `${p.x},${p.y}`).join(' ');
+  /*
+   * Il trail SVG ha un'origine diversa da quella delle celle: le coordinate dei
+   * centri sono relative al BOARD, mentre l'SVG e' posizionato dentro il suo
+   * padding box. Senza convertire, il trail risultava spostato di ~13px
+   * (padding + bordo): l'errore era quasi invisibile sulle diagonali verso
+   * destra (lungo la linea) e ben visibile su quelle verso sinistra
+   * (perpendicolare alla linea).
+   *
+   * Qui misuriamo l'SVG direttamente e sottraiamo lo scostamento: cosi' il
+   * disegno resta corretto qualunque sia il padding o il bordo del board.
+   */
+  const trailPoints = useMemo(() => {
+    const svg = trailSvgRef.current;
+    const board = containerRef.current;
+    if (!svg || !board) return [];
+    const sRect = svg.getBoundingClientRect();
+    const bRect = board.getBoundingClientRect();
+    const dx = sRect.left - bRect.left;
+    const dy = sRect.top - bRect.top;
+    return selectedPath
+      .map((i) => centers[i])
+      .filter((p): p is { x: number; y: number } => Boolean(p))
+      .map((p) => ({ x: p.x - dx, y: p.y - dy }));
+  }, [selectedPath, centers]);
+
+  const polyPoints = trailPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <div
@@ -113,7 +142,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       style={{ ['--grid-size' as string]: grid.size }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <svg className="grid-trail" aria-hidden>
+      <svg ref={trailSvgRef} className="grid-trail" aria-hidden>
         {polyPoints && (
           <>
             <polyline className="grid-trail__glow" points={polyPoints} />

@@ -89,11 +89,11 @@ describe('generatore schede', () => {
     expect(wordFromPath(grid, [0, 1])).toBe('qua');
   });
 
-  it('scoreForWord cresce ogni 3 lettere anche oltre le 8', () => {
-    // 'cassaforte' = 10 lettere → 3 punti.
-    expect(scoreForWord('cassaforte')).toBe(3);
-    // 16 lettere → 5 punti.
-    expect(scoreForWord('x'.repeat(16))).toBe(5);
+  it('scoreForWord cresce di 1 punto per lettera anche oltre le 8', () => {
+    // 'cassaforte' = 10 lettere → 8 punti (lunghezza − 2).
+    expect(scoreForWord('cassaforte')).toBe(8);
+    // 16 lettere → 14 punti.
+    expect(scoreForWord('x'.repeat(16))).toBe(14);
   });
 });
 

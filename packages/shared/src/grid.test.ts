@@ -9,32 +9,40 @@ const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
 });
 
 describe('scoring', () => {
-  it('assegna 1 punto ogni 3 lettere', () => {
-    expect(scoreForWord('ab')).toBe(0);
-    // 3-5 lettere → 1 punto
+  it('assegna 1 punto per 3 lettere, poi 1 per lettera in più', () => {
+    expect(scoreForWord('ab')).toBe(0); // sotto il minimo
+    // Regola Boggle: lunghezza − 2.
     expect(scoreForWord('abc')).toBe(1);
-    expect(scoreForWord('abcd')).toBe(1);
-    expect(scoreForWord('abcde')).toBe(1);
-    // 6-8 → 2 punti
-    expect(scoreForWord('abcdef')).toBe(2);
-    expect(scoreForWord('abcdefg')).toBe(2);
-    expect(scoreForWord('abcdefgh')).toBe(2);
-    // 9-11 → 3 punti
-    expect(scoreForWord('abcdefghi')).toBe(3);
-    expect(scoreForWord('abcdefghij')).toBe(3);
-    expect(scoreForWord('abcdefghijk')).toBe(3);
-    // 12+ → 4 punti
-    expect(scoreForWord('abcdefghijkl')).toBe(4);
-    expect(scoreForWord('abcdefghijklmnop')).toBe(5);
+    expect(scoreForWord('abcd')).toBe(2);
+    expect(scoreForWord('abcde')).toBe(3);
+    expect(scoreForWord('abcdef')).toBe(4);
+    expect(scoreForWord('abcdefg')).toBe(5);
+    expect(scoreForWord('abcdefgh')).toBe(6);
+    expect(scoreForWord('abcdefghi')).toBe(7);
+    expect(scoreForWord('abcdefghij')).toBe(8);
+    expect(scoreForWord('abcdefghijklmnop')).toBe(14);
+  });
+
+  it('le parole lunghe valgono molto più delle corte', () => {
+    // Il motivo della formula: con una piatta (⌊len/3⌋) una parola da 9 lettere
+    // valeva 3 punti, come tre parole da 3. Ora ne vale 7.
+    const nove = scoreForWord('abcdefghi');
+    const tre = scoreForWord('abc');
+    expect(nove).toBe(7);
+    expect(nove / tre).toBe(7);
+    // La crescita è lineare: ogni lettera in più vale 1 punto.
+    for (let len = 4; len <= 15; len++) {
+      expect(scoreForWord('x'.repeat(len)) - scoreForWord('x'.repeat(len - 1))).toBe(1);
+    }
   });
 
   it('raddoppia i punti per una parola trovata da un solo giocatore', () => {
-    // 'casa' = 4 lettere → 1 punto, doppio = 2.
-    expect(scoreForRound('casa')).toBe(1);
-    expect(scoreForRound('casa', { unique: true })).toBe(2);
-    // 'strada' = 6 lettere → 2 punti, doppio = 4.
-    expect(scoreForRound('strada')).toBe(2);
-    expect(scoreForRound('strada', { unique: true })).toBe(4);
+    // 'casa' = 4 lettere → 2 punti, doppio = 4.
+    expect(scoreForRound('casa')).toBe(2);
+    expect(scoreForRound('casa', { unique: true })).toBe(4);
+    // 'strada' = 6 lettere → 4 punti, doppio = 8.
+    expect(scoreForRound('strada')).toBe(4);
+    expect(scoreForRound('strada', { unique: true })).toBe(8);
   });
   it('normalizza accenti e simboli', () => {
     expect(normalizeWord('Perché')).toBe('perche');

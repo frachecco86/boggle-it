@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import {
   schedaFileName,
   schedaKey,
+  schedaWordPoints,
   SCHEDA_FORMAT_VERSION,
   type Difficulty,
   type GridSize,
@@ -200,7 +201,9 @@ export class SchedaCatalog {
         word,
         length: word.length,
         occurrences: occ,
-        points: Math.max(1, word.length - 2),
+        // Formula CENTRALIZZATA: una copia hardcoded resterebbe indietro se
+        // cambiassimo il punteggio (è già successo con la validazione difficoltà).
+        points: schedaWordPoints(word.length),
       });
     }
 

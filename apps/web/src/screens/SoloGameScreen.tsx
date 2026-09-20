@@ -5,6 +5,7 @@ import { WordList } from '../components/WordList.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 import { SchedaPreview } from '../components/SchedaPreview.js';
+import { CountdownOverlay } from '../components/CountdownOverlay.js';
 
 /** Partita single player completa (schede pre-calcolate dal server). */
 export function SoloGameScreen() {
@@ -63,6 +64,15 @@ export function SoloGameScreen() {
         <button className="btn btn--ghost" onClick={() => setScreen('home')}>
           Torna alla home
         </button>
+      </div>
+    );
+  }
+
+  // Countdown di inizio: 3-2-1 con animazione e suoni.
+  if (state.phase === 'countdown') {
+    return (
+      <div className="screen">
+        <CountdownOverlay onComplete={game.beginRound} />
       </div>
     );
   }

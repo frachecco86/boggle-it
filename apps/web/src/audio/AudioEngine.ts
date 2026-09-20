@@ -23,7 +23,10 @@ export type SfxKind =
   | 'already-found'
   | 'invalid'
   | 'tap'
-  | 'opponent';
+  | 'opponent'
+  /* Countdown di inizio round: tre… due… uno… via! */
+  | 'countdown-tick'
+  | 'countdown-go';
 
 export interface AudioSettings {
   sfxEnabled: boolean;
@@ -51,7 +54,13 @@ const DEFAULT_SETTINGS: AudioSettings = {
  * Scale pentatonica: qualsiasi combinazione suona consonante.
  * 3 → nota singola, 4 → intervallo, 5 → arpeggio, 6 → accordo, 7+ → accordo + sparkle.
  */
-const SUCCESS_MOTIFS: Record<Exclude<SfxKind, 'already-found' | 'invalid' | 'tap' | 'opponent'>, number[]> = {
+const SUCCESS_MOTIFS: Record<
+  Exclude<
+    SfxKind,
+    'already-found' | 'invalid' | 'tap' | 'opponent' | 'countdown-tick' | 'countdown-go'
+  >,
+  number[]
+> = {
   'word-3': [523.25],                       // C5
   'word-4': [523.25, 659.25],               // C5 E5
   'word-5': [523.25, 659.25, 783.99],       // C5 E5 G5
@@ -208,6 +217,12 @@ export class AudioEngine {
       case 'opponent':
         this.playOpponent();
         break;
+      case 'countdown-tick':
+        this.playCountdownTick();
+        break;
+      case 'countdown-go':
+        this.playCountdownGo();
+        break;
     }
   }
 
@@ -302,6 +317,49 @@ export class AudioEngine {
     const now = this.ctx.currentTime;
     [1046.5, 1318.5].forEach((freq, i) => this.blip(freq, now + i * 0.06, 0.16, 'sine', 0.09));
   }
+
+  /**
+   * Tick del countdown: nota breve, acuta e secca. Il tono SALE a ogni numero,
+   * così si percepisce l'avvicinarsi della partenza (come nei giochi veri).
+   */
+  private playCountdownTick(): void {
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    // Il numero corrente non è noto qui: due note alternate creano comunque
+    // una sensazione di progressione.
+    const notes = [659.25, 783.99]; // E5, G5
+    const freq = notes[this.countdownStep % notes.length]!;
+    this.countdownStep++;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.22, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.25);
+    // Armonica: dà corpo al tick senza alzare il volume.
+    this.blip(freq * 2, now, 0.12, 'sine', 0.06);
+  }
+
+  /** "Via!": accordo ascendente che segnala l'inizio della partita. */
+  private playCountdownGo(): void {
+    if (!this.ctx || !this.sfxGain) return;
+    this.countdownStep = 0; // pronto per il prossimo countdown
+    const now = this.ctx.currentTime;
+    // Do-Mi-Sol-Do: accordo maggiore brillante.
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      this.blip(freq, now + i * 0.06, 0.45, 'triangle', 0.2);
+    });
+    // Sparkle finale.
+    [1567.98, 2093.0].forEach((f, i) => this.blip(f, now + 0.24 + i * 0.07, 0.3, 'sine', 0.08));
+  }
+
+  /** Passo corrente del countdown (alterna le note dei tick). */
+  private countdownStep = 0;
 
   /** Oscillatore con envelope: mattone di tutti gli effetti. */
   private blip(

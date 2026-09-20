@@ -488,6 +488,7 @@ body {
   inset: 12px;
   pointer-events: none;
   overflow: visible;
+  z-index: 2;
 }
 
 .grid-trail__line {
@@ -771,41 +772,6 @@ body {
   to {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
-  }
-}
-
-/* ---------- Countdown ---------- */
-
-.countdown-overlay {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-content: center;
-  background: rgba(246, 248, 253, 0.82);
-  backdrop-filter: blur(4px);
-  z-index: 60;
-}
-
-.countdown-overlay__num {
-  font-size: clamp(5rem, 22vw, 11rem);
-  font-weight: 900;
-  color: var(--primary);
-  animation: countdown-pop 1s ease-out;
-  text-shadow: 0 6px 30px color-mix(in srgb, var(--primary) 40%, transparent);
-}
-
-@keyframes countdown-pop {
-  0% {
-    transform: scale(0.3);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.85;
   }
 }
 
@@ -2996,4 +2962,278 @@ body {
   height: 16px;
   accent-color: var(--primary);
   cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pannello regole e punteggi                                          */
+/* ------------------------------------------------------------------ */
+
+.rules {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  overflow: hidden;
+}
+
+.rules__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rules__toggle:hover {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.rules__icon {
+  font-size: 1rem;
+}
+
+.rules__title {
+  flex: 1;
+  text-align: left;
+}
+
+.rules__chevron {
+  color: var(--text-dim);
+  transition: transform 0.2s;
+}
+
+.rules__chevron--open {
+  transform: rotate(180deg);
+}
+
+.rules__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 16px 16px;
+  animation: screen-in 0.22s ease-out;
+}
+
+.rules__how {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rules__how-line {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.rules__how-line strong {
+  color: var(--text);
+}
+
+.rules__scores,
+.rules__multi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rules__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.rules__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.84rem;
+}
+
+.rules__row-label {
+  min-width: 78px;
+  color: var(--text-dim);
+}
+
+/* Puntini di riempimento fra etichetta e punti, come in un indice. */
+.rules__row-dots {
+  flex: 1;
+  border-bottom: 1px dotted var(--border);
+  transform: translateY(-3px);
+}
+
+.rules__row-points {
+  font-weight: 700;
+  color: var(--success);
+  white-space: nowrap;
+}
+
+.rules__note,
+.rules__example {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.rules__note strong,
+.rules__example strong {
+  color: var(--text);
+}
+
+.rules__example em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.rules__multi {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Countdown di inizio round                                           */
+/* ------------------------------------------------------------------ */
+
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  /* Velo scuro: mette a fuoco il countdown senza nascondere la griglia. */
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+  animation: fade-in 0.25s ease-out;
+}
+
+.countdown {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(46vw, 190px);
+  height: min(46vw, 190px);
+}
+
+.countdown__ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* l'anello si riempie partendo dall'alto */
+}
+
+.countdown__ring-bg {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+
+.countdown__ring-fill {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 283; /* circonferenza di r=45: 2πr ≈ 283 */
+  transition: stroke-dashoffset 0.85s linear, stroke 0.3s;
+}
+
+.countdown--go .countdown__ring-fill {
+  stroke: var(--success);
+}
+
+.countdown__num {
+  position: relative;
+  font-size: clamp(4rem, 18vw, 7rem);
+  font-weight: 900;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  /* Lo "scatto" a ogni numero: parte piccolo, va oltre, si assesta. */
+  animation: countdown-pop 0.9s cubic-bezier(0.2, 1.5, 0.35, 1);
+}
+
+.countdown--go .countdown__num {
+  color: var(--success);
+  font-size: clamp(2.6rem, 11vw, 4.6rem);
+  letter-spacing: 0.06em;
+  animation: countdown-go 0.9s cubic-bezier(0.2, 1.5, 0.35, 1);
+}
+
+@keyframes countdown-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  55% {
+    transform: scale(0.97);
+  }
+  70% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes countdown-go {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.countdown__hint {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  animation: fade-in 0.4s ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Rispetta chi preferisce ridurre le animazioni: niente scale, solo comparsa. */
+@media (prefers-reduced-motion: reduce) {
+  .countdown__num,
+  .countdown--go .countdown__num {
+    animation: fade-in 0.2s ease-out;
+  }
+  .countdown__ring-fill {
+    transition: none;
+  }
 }

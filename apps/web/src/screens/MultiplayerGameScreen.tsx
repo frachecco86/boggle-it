@@ -131,11 +131,21 @@ export function MultiplayerGameScreen() {
 
   return (
     <div className="screen game">
+      {/*
+        Countdown sincronizzato: i numeri arrivano dal server (stesso per tutti).
+        Animazione e suoni sono locali, così ognuno li sente senza ritardo di rete.
+      */}
       {countdown !== null && (
-        <div className="countdown-overlay" aria-hidden>
-          <span key={countdown} className="countdown-overlay__num">
-            {countdown}
-          </span>
+        <div className="countdown-overlay" role="status" aria-live="assertive">
+          <div className="countdown">
+            <svg className="countdown__ring" viewBox="0 0 100 100" aria-hidden>
+              <circle className="countdown__ring-bg" cx="50" cy="50" r="45" />
+            </svg>
+            <span key={countdown} className="countdown__num">
+              {countdown}
+            </span>
+          </div>
+          <p className="countdown__hint">Preparati…</p>
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Scheda, SchedaStats } from '@boggle/shared';
 import { loadRandomScheda } from '../game/schedeLoader.js';
 import { fetchSchedaStats } from '../game/statsClient.js';
+import { RulesPanel } from './RulesPanel.js';
 
 interface SchedaPreviewProps {
   size: 4 | 5 | 6;
@@ -15,6 +16,8 @@ interface SchedaPreviewProps {
   /** Etichetta del pulsante di conferma. */
   playLabel?: string;
   busy?: boolean;
+  /** In multiplayer il pannello regole mostra anche il bonus unicità. */
+  multiplayer?: boolean;
 }
 
 /**
@@ -34,6 +37,7 @@ export function SchedaPreview({
   onPlay,
   playLabel = 'Gioca',
   busy = false,
+  multiplayer = false,
 }: SchedaPreviewProps) {
   const [scheda, setScheda] = useState<Scheda | null>(schedaProp ?? null);
   const [stats, setStats] = useState<SchedaStats | null>(null);
@@ -86,6 +90,9 @@ export function SchedaPreview({
 
   return (
     <section className="scheda-preview">
+      {/* Regole e punteggi, apribili: chi non li conosce li trova qui. */}
+      <RulesPanel multiplayer={multiplayer} />
+
       <h3 className="summary__label">La tua scheda</h3>
 
       <div className="scheda-preview__body">

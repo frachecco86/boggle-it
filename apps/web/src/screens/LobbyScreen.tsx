@@ -247,6 +247,7 @@ export function LobbyScreen() {
           scheda={pendingScheda}
           canShuffle={isHost}
           busy={pendingLoading}
+          multiplayer
           onPlay={() => startRoom()}
           playLabel="Avvia partita"
         />

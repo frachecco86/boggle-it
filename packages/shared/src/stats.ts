@@ -231,7 +231,7 @@ export interface SchedaStats {
   gamesPlayed: number;
 }
 
-/** Punteggio di una parola nella scheda: 1 punto ogni 3 lettere. */
+/** Punteggio di una parola: 1 punto per 3 lettere, poi 1 per lettera in più. */
 export function schedaWordPoints(length: number): number {
-  return Math.floor(length / 3);
+  return Math.max(0, length - 2);
 }

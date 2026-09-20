@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.10.1';
+export const APP_VERSION = '0.11.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,35 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.11.0',
+    date: '2026-09-20',
+    title: 'Punteggi premiati per le parole lunghe, countdown e trail allineato',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Punteggio corretto**: le parole lunghe valgono finalmente quanto meritano. Prima la formula era piatta (1 punto ogni 3 lettere) e una parola da 9 lettere valeva **3 punti**, come tre parole da 3. Ora si usa la regola classica del Boggle, **lunghezza − 2**: 3→1, 5→3, 7→5, **9→7**, 10→8. Su una scheda 5×5 il punteggio massimo passa da 155 a **328 punti**.',
+          '**Trail dello swipe allineato**: la scia luminosa era spostata di ~13px rispetto alle lettere. L\'errore si notava sulle diagonali verso **sinistra**, dove lo scostamento è perpendicolare alla linea, e quasi per niente su quelle verso destra, dove corre lungo la linea. Ora il disegno usa lo stesso sistema di coordinate delle celle.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**Countdown di inizio round** con animazione e suoni: ogni numero compare con uno scatto, un anello si riempie e un tick sonoro accompagna 3-2-1, poi un accordo ascendente per **VIA!**. C\'è anche in single player, dove prima si partiva subito.',
+          '**Pannello Regole e punteggi** prima della partita: spiega come si gioca e mostra le fasce di punteggio reali, derivate dal codice (non scritte a mano, così non possono divergere). In multiplayer include la regola del **raddoppio** per le parole trovate da un solo giocatore.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La formula del punteggio è ora **centralizzata**: una copia hardcoded in un endpoint è stata eliminata. Era lo stesso tipo di problema già visto con la validazione delle difficoltà: due copie che possono divergere.',
+          'Le regole nel pannello sono generate da `scoreForWord`, quindi se la formula cambia, il testo si aggiorna da solo.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.10.1',
     date: '2026-09-20',
