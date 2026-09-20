@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -504,24 +504,114 @@ app.get('/profiles/:id/sfx/:slot', (req, res) => {
 /* ------------------------------------------------------------------ */
 
 /**
- * Token admin da `ADMIN_TOKEN`. Se non impostato, le rotte admin rispondono 503:
- * meglio un admin disabilitato che un admin aperto a tutti per dimenticanza.
+ * Autenticazione admin con utente e password da VARIABILI D'AMBIENTE.
+ *
+ * Perché non nel codice: il repository è pubblico. Una password scritta nel
+ * sorgente finisce su GitHub e chiunque può leggerla, rendendo l'admin inutile.
+ *
+ * Configurazione (Railway → Variables):
+ *   ADMIN_USER=admin
+ *   ADMIN_PASSWORD=<scegli una password robusta>
+ *
+ * Il login restituisce un TOKEN DI SESSIONE temporaneo: la password viaggia una
+ * volta sola e non a ogni richiesta. Le sessioni stanno in memoria e scadono.
  */
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';
+const ADMIN_USER = process.env.ADMIN_USER ?? '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
+const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000; // 12 ore
 
-function requireAdmin(req: express.Request, res: express.Response): boolean {
-  if (!ADMIN_TOKEN) {
-    res.status(503).json({ error: 'Admin non configurato: imposta ADMIN_TOKEN' });
-    return false;
-  }
-  const header = req.headers.authorization ?? '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : String(req.query.token ?? '');
-  if (token !== ADMIN_TOKEN) {
-    res.status(401).json({ error: 'Token non valido' });
+/** Sessioni admin attive: token -> scadenza (ms epoch). In memoria, non su disco. */
+const adminSessions = new Map<string, number>();
+
+function adminConfigured(): boolean {
+  return Boolean(ADMIN_USER && ADMIN_PASSWORD);
+}
+
+/** Confronto a tempo costante: evita di rivelare la password dal tempo di risposta. */
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  // timingSafeEqual richiede la stessa lunghezza: confrontiamo su una copia
+  // allineata e teniamo conto della differenza di lunghezza a parte.
+  const len = Math.max(bufA.length, bufB.length, 1);
+  const padA = Buffer.alloc(len);
+  const padB = Buffer.alloc(len);
+  bufA.copy(padA);
+  bufB.copy(padB);
+  return timingSafeEqual(padA, padB) && bufA.length === bufB.length;
+}
+
+/** Crea una sessione admin e ritorna il token. */
+function createAdminSession(): string {
+  const token = randomBytes(32).toString('hex');
+  adminSessions.set(token, Date.now() + ADMIN_SESSION_MS);
+  return token;
+}
+
+/** true se il token è una sessione admin valida e non scaduta. */
+function isValidAdminSession(token: string): boolean {
+  const expires = adminSessions.get(token);
+  if (expires === undefined) return false;
+  if (expires < Date.now()) {
+    adminSessions.delete(token);
     return false;
   }
   return true;
 }
+
+/** Pulizia periodica delle sessioni scadute. */
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, expires] of adminSessions) if (expires < now) adminSessions.delete(token);
+}, 10 * 60 * 1000).unref();
+
+/**
+ * Protegge le rotte admin.
+ * Accetta un token di sessione (da /admin/login) oppure `ADMIN_TOKEN` se impostato,
+ * per retro-compatibilità con chi lo usa già.
+ */
+function requireAdmin(req: express.Request, res: express.Response): boolean {
+  if (!adminConfigured() && !process.env.ADMIN_TOKEN) {
+    res.status(503).json({ error: 'Admin non configurato: imposta ADMIN_USER e ADMIN_PASSWORD' });
+    return false;
+  }
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : String(req.query.token ?? '');
+  if (isValidAdminSession(token)) return true;
+  // Retro-compatibilità: vecchio token statico.
+  const legacy = process.env.ADMIN_TOKEN;
+  if (legacy && safeEqual(token, legacy)) return true;
+  res.status(401).json({ error: 'Autenticazione richiesta' });
+  return false;
+}
+
+/**
+ * Login admin: utente + password dalle variabili d'ambiente.
+ * Ritorna un token di sessione valido 12 ore.
+ */
+app.post('/admin/login', (req, res) => {
+  if (!adminConfigured()) {
+    return res.status(503).json({ error: 'Admin non configurato: imposta ADMIN_USER e ADMIN_PASSWORD' });
+  }
+  const user = String(req.body?.user ?? '');
+  const password = String(req.body?.password ?? '');
+  const ok = safeEqual(user, ADMIN_USER) && safeEqual(password, ADMIN_PASSWORD);
+  if (!ok) {
+    console.warn(`✗ Login admin fallito (utente: ${user.slice(0, 20) || '(vuoto)'})`);
+    return res.status(401).json({ error: 'Credenziali non valide' });
+  }
+  const token = createAdminSession();
+  console.log('✓ Login admin riuscito');
+  res.json({ token, expiresInMs: ADMIN_SESSION_MS });
+});
+
+/** Logout: invalida la sessione corrente. */
+app.post('/admin/logout', (req, res) => {
+  const header = req.headers.authorization ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : String(req.body?.token ?? '');
+  adminSessions.delete(token);
+  res.json({ ok: true });
+});
 
 /** Verifica il token (usata dalla pagina /admin per il login). */
 app.get('/admin/verify', (req, res) => {

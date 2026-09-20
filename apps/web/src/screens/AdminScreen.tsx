@@ -20,12 +20,17 @@ interface AdminListResponse {
 }
 
 /**
- * Pannello admin: token, elenco schede (con anteprima visiva) e generazione di
- * nuove schede. Il token viene salvato in localStorage e inviato come Bearer.
+ * Pannello admin: elenco schede (con anteprima visiva) e generazione di nuove.
+ *
+ * Accesso con UTENTE e PASSWORD, configurati come variabili d'ambiente sul server
+ * (`ADMIN_USER`, `ADMIN_PASSWORD`): nulla di segreto sta nel codice o su GitHub.
+ * Il login restituisce un token di sessione, salvato in localStorage e inviato
+ * come Bearer nelle richieste successive. La password viaggia una volta sola.
  */
 export function AdminScreen() {
   const { adminToken, setAdminToken, setScreen, setSchedaId } = useAppStore();
-  const [tokenInput, setTokenInput] = useState(adminToken);
+  const [userInput, setUserInput] = useState('admin');
+  const [passwordInput, setPasswordInput] = useState('');
   const [authed, setAuthed] = useState(false);
   const [list, setList] = useState<AdminListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,20 +52,35 @@ export function AdminScreen() {
       const res = await fetch(`${SERVER_BASE}/admin/schede?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 401) throw new Error('Token non valido');
-      if (res.status === 503) throw new Error('Admin non configurato sul server (ADMIN_TOKEN)');
+      if (res.status === 401) throw new Error('Sessione scaduta');
+      if (res.status === 503) throw new Error('Admin non configurato sul server');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return (await res.json()) as AdminListResponse;
     },
     [],
   );
 
+  /** Login: scambia utente e password con un token di sessione. */
   const connect = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const data = await load(tokenInput, filterSize, filterDifficulty);
-      setAdminToken(tokenInput);
+      const res = await fetch(`${SERVER_BASE}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: userInput, password: passwordInput }),
+      });
+      if (res.status === 503) {
+        throw new Error('Admin non configurato sul server (ADMIN_USER / ADMIN_PASSWORD)');
+      }
+      if (res.status === 401) throw new Error('Utente o password non validi');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { token } = (await res.json()) as { token: string };
+
+      // Il token sostituisce la password: da qui in poi viaggia solo quello.
+      const data = await load(token, filterSize, filterDifficulty);
+      setAdminToken(token);
+      setPasswordInput('');
       setList(data);
       setAuthed(true);
     } catch (err) {
@@ -69,13 +89,34 @@ export function AdminScreen() {
     } finally {
       setBusy(false);
     }
-  }, [tokenInput, filterSize, filterDifficulty, load, setAdminToken]);
+  }, [userInput, passwordInput, filterSize, filterDifficulty, load, setAdminToken]);
+
+  /** Logout: invalida la sessione sul server e dimentica il token. */
+  const logout = useCallback(async () => {
+    if (adminToken) {
+      void fetch(`${SERVER_BASE}/admin/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+    }
+    setAdminToken('');
+    setAuthed(false);
+    setList(null);
+  }, [adminToken, setAdminToken]);
 
   // Se il token è già salvato, prova a entrare automaticamente.
   useEffect(() => {
+    // Il token di sessione è ancora valido? Proviamo a usarlo.
     if (adminToken && !authed) {
-      setTokenInput(adminToken);
-      void connect();
+      load(adminToken, filterSize, filterDifficulty)
+        .then((data) => {
+          setList(data);
+          setAuthed(true);
+        })
+        .catch(() => {
+          // Sessione scaduta: si torna al login.
+          setAdminToken('');
+        });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,21 +158,37 @@ export function AdminScreen() {
       <div className="screen admin">
         <h2 className="screen__title">Amministrazione schede</h2>
         <p className="screen__hint">
-          Inserisci il token admin (variabile d'ambiente <code>ADMIN_TOKEN</code> sul server).
+          Accedi con l'utente e la password admin (variabili d'ambiente{' '}
+          <code>ADMIN_USER</code> e <code>ADMIN_PASSWORD</code> sul server).
         </p>
         <label className="field">
-          <span className="field__label">Token</span>
+          <span className="field__label">Utente</span>
+          <input
+            className="field__input"
+            type="text"
+            autoComplete="username"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span className="field__label">Password</span>
           <input
             className="field__input"
             type="password"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
+            autoComplete="current-password"
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void connect()}
           />
         </label>
         {error && <div className="banner banner--error">{error}</div>}
         <div className="summary__actions">
-          <button className="btn btn--primary" disabled={busy || !tokenInput} onClick={() => void connect()}>
+          <button
+            className="btn btn--primary"
+            disabled={busy || !userInput || !passwordInput}
+            onClick={() => void connect()}
+          >
             {busy ? 'Verifico…' : 'Entra'}
           </button>
           <button className="btn btn--ghost" onClick={() => setScreen('home')}>
@@ -146,6 +203,9 @@ export function AdminScreen() {
     <div className="screen admin">
       <div className="admin__topbar">
         <h2 className="screen__title">Schede ({list?.total ?? '…'})</h2>
+        <button className="btn btn--ghost" onClick={() => void logout()}>
+          Esci
+        </button>
         <button className="btn btn--ghost" onClick={() => setScreen('home')}>
           Home
         </button>

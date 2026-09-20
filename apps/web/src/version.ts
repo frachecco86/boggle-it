@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.9.0';
+export const APP_VERSION = '0.9.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,29 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.9.1',
+    date: '2026-09-20',
+    title: 'Admin con utente e password, generazione schede dall\'app',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          'Il pannello **Admin** ora si apre con **utente e password** invece di un token. Da lì si generano nuove schede (dimensione, difficoltà, quante) senza toccare il codice: finiscono subito nel catalogo, per tutti.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le credenziali stanno in **variabili d\'ambiente** (`ADMIN_USER`, `ADMIN_PASSWORD`), non nel codice: il repository è pubblico e una password scritta nel sorgente sarebbe leggibile da chiunque.',
+          'La password viaggia **una volta sola**: il login restituisce un token di sessione valido 12 ore, che viene usato per le richieste successive. Il confronto è a **tempo costante**, per non rivelare la password dai tempi di risposta.',
+          'Le schede generate vengono salvate nella cartella `data/schede-extra/` (sul volume): **sopravvivono ai riavvii** e si sommano a quelle incluse nel repo.',
+          'Se `ADMIN_USER`/`ADMIN_PASSWORD` non sono impostati, le rotte admin rispondono **503**: meglio un admin disabilitato che uno aperto per dimenticanza. Il vecchio `ADMIN_TOKEN` resta accettato.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.9.0',
     date: '2026-09-20',
