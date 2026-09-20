@@ -1,4 +1,4 @@
-# Immagine multi-stage per Boggle-IT.
+# Immagine multi-stage per Sbooble.
 #
 # Contesto di build = root del monorepo.
 #   Stage 1 (builder): installa tutto, genera il dizionario, builda server e web.

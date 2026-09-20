@@ -168,7 +168,7 @@ Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata)
 ## Architettura
 
 ```
-boggle-it/
+sbooble/
 ├── apps/
 │   ├── web/                  React 18 + Vite + TypeScript
 │   │   └── src/

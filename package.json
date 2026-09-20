@@ -1,8 +1,8 @@
 {
-  "name": "boggle-it",
+  "name": "sbooble",
   "private": true,
   "version": "0.1.0",
-  "description": "Boggle in italiano — single player e multiplayer con codice stanza",
+  "description": "Sbooble in italiano \u2014 single player e multiplayer con codice stanza",
   "scripts": {
     "dev": "pnpm -r --parallel --filter \"./apps/*\" dev",
     "dev:web": "pnpm --filter @boggle/web dev",

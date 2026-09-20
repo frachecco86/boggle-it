@@ -629,6 +629,9 @@ export const useAppStore = create<AppState>()(
       clearError: () => set({ errorMessage: null }),
     }),
     {
+      // Chiave storica: prefisso `boggle-it` (nome precedente del gioco). Contiene le
+      // preferenze salvate (nickname, avatar, difficoltà, audio) e va mantenuta per non
+      // azzerarle a chi ha già giocato. Non è visibile all'utente.
       name: 'boggle-it',
       partialize: (s) => ({
         nickname: s.nickname,

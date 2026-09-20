@@ -1,4 +1,4 @@
-# Deploy di Boggle-IT
+# Deploy di Sbooble
 
 Due opzioni. Scegli in base a quanto vuoi spendere e quanto vuoi semplificare.
 
@@ -141,7 +141,7 @@ Un `walBytes` maggiore di zero significa scritture non ancora consolidate.
    > **non** funzionerebbe: `DecompressionStream` nei browser supporta solo `gzip`/`deflate`,
    > non brotli, quindi il client non saprebbe decomprimerlo.
 
-4. Deploy. L'URL sarà tipo `https://boggle-it.netlify.app`.
+4. Deploy. L'URL sarà tipo `https://sbooble.netlify.app`.
 
 > **Attenzione all'ordine**: `VITE_SERVER_URL` è una variabile **build-time**.
 > Se la cambi, serve un nuovo deploy (non basta il restart).
@@ -215,8 +215,8 @@ pnpm test:e2e
 
 - **Docker**: per buildare e provare l'immagine localmente:
   ```bash
-  docker build -t boggle-it .
-  docker run -p 3001:3001 -e CLIENT_ORIGIN='*' boggle-it
+  docker build -t sbooble .
+  docker run -p 3001:3001 -e CLIENT_ORIGIN='*' sbooble
   ```
 - **Dizionario**: le fonti grezze (19 MB) sono gitignored, ma **`words.br` È versionato**
   (616 KB). I deploy sono quindi **riproducibili e offline**: `pnpm --filter @boggle/dictionary build`

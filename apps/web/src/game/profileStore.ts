@@ -12,6 +12,14 @@
  */
 import type { ProfilePrivate } from '@boggle/shared';
 
+/**
+ * Chiavi di `localStorage`.
+ *
+ * NOTA: mantengono il prefisso storico `boggle-it.` anche se il gioco ora si chiama
+ * Sbooble. Queste chiavi contengono i DATI DEGLI UTENTI (profili, token di sessione),
+ * quindi rinominarle senza migrazione li perderebbe. Il nome interno non è visibile
+ * all'utente: non vale il rischio di una migrazione per cambiarlo.
+ */
 const STORAGE_KEY = 'boggle-it.profiles.v1';
 const ACTIVE_KEY = 'boggle-it.activeProfile.v1';
 

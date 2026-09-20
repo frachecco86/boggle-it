@@ -246,7 +246,7 @@ Tutte rispettano `prefers-reduced-motion`.
 ## 7. Architettura
 
 ```
-boggle-it/
+sbooble/
 ├── apps/
 │   ├── web/                    # React + Vite + TS
 │   │   ├── src/

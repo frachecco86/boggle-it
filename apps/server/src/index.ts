@@ -51,8 +51,14 @@ const schede = SchedaCatalog.load();
 /**
  * Profili: un file SQLite in DATA_DIR (lo stesso usato dal catalogo per le schede
  * dell'admin). Su Railway monta UN volume su /app/data: copre entrambi.
+ *
+ * NOTA: il file mantiene il nome storico `boggle.db` (dal nome precedente del gioco)
+ * perché contiene i PROFILI DEGLI UTENTI. Rinominarlo significherebbe che un'istanza
+ * già in produzione, al riavvio, creerebbe un database vuoto e i dati esistenti sul
+ * volume verrebbero ignorati. Il nome non è visibile all'utente.
  */
-const profiles = new ProfileStore(path.join(DATA_DIR, 'boggle.db'));
+const DB_FILE = 'boggle.db';
+const profiles = new ProfileStore(path.join(DATA_DIR, DB_FILE));
 
 // pulizia periodica delle stanze vuote/terminate
 setInterval(() => registry.cleanup(), 60_000).unref();
@@ -769,7 +775,7 @@ function computeMissedWords(room: Room): string[] {
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`✓ Boggle-IT server su http://localhost:${PORT}`);
+  console.log(`✓ Sbooble server su http://localhost:${PORT}`);
   console.log(`  origini client consentite: ${CLIENT_ORIGINS.join(', ')}`);
   console.log(`  parole in dizionario: ${dictionary.size.toLocaleString('it-IT')}`);
   console.log(`  schede disponibili: ${schede.size.toLocaleString('it-IT')}`);

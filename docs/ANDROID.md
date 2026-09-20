@@ -1,6 +1,6 @@
 # App Android e pubblicazione
 
-Guida pratica: come costruire l'APK/AAB di Boggle-IT con Capacitor e dove
+Guida pratica: come costruire l'APK/AAB di Sbooble con Capacitor e dove
 pubblicarlo **gratis**.
 
 ---
