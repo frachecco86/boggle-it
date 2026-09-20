@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.7.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,31 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.7.0',
+    date: '2026-09-20',
+    title: 'Classifica e statistiche dei giocatori',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Classifica** raggiungibile dalla barra in alto (🏆): tre classifiche per **miglior punteggio**, **punteggio totale** e **parola più lunga**. Filtri per dimensione della griglia, difficoltà e periodo (sempre, 30 giorni, 7 giorni).',
+          'Le **tue statistiche** in cima alla classifica: miglior punteggio, partite giocate, media punti, posizione globale e la tua parola più lunga. La tua riga in classifica è evidenziata.',
+          'Ogni partita conclusa entra in classifica automaticamente, con il profilo attivo.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le partite vengono salvate in una tabella **games** nel database SQLite già esistente, con **snapshot** di nome e avatar: se un profilo cambia nome, la classifica resta leggibile.',
+          'Classifica **pubblica** (si vede anche senza profilo), registrazione della partita **autenticata**: il profilo lo decide il server dal token, mai il client.',
+          'Il punteggio arriva dal client (in single player il server non conosce la griglia giocata), quindi vengono applicati limiti di plausibilità e salvati i dati per la verifica a posteriori.',
+          'Registrazione **best effort**: se il server non è raggiungibile la partita si gioca normalmente, semplicemente non entra in classifica.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.6.0',
     date: '2026-09-20',

@@ -18,12 +18,20 @@ import path from 'node:path';
 import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import {
   DEFAULT_MUSIC_ID,
+  LEADERBOARD_LIMIT,
   MUSIC_IDS,
   SFX_SLOTS,
+  type Difficulty,
+  type GameMode,
+  type GridSize,
+  type LeaderboardEntry,
+  type LeaderboardFilters,
   type MusicId,
+  type PlayerStats,
   type ProfilePrivate,
   type ProfileSfx,
   type SfxSlot,
+  type SubmitGamePayload,
 } from '@boggle/shared';
 
 /** Parametri scrypt: N=16384, r=8, p=1 — robusti ma veloci (~50ms). */
@@ -107,6 +115,28 @@ export class ProfileStore {
         profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
         created_at INTEGER NOT NULL
       );
+      -- Partite concluse: alimenta la leaderboard. Nickname e avatar sono SNAPSHOT:
+      -- la classifica resta leggibile anche se il profilo cambia nome o viene eliminato.
+      CREATE TABLE IF NOT EXISTS games (
+        id          TEXT PRIMARY KEY,
+        profile_id  TEXT REFERENCES profiles(id) ON DELETE CASCADE,
+        nickname    TEXT NOT NULL,
+        avatar      TEXT NOT NULL DEFAULT '🐱',
+        score       INTEGER NOT NULL,
+        words       INTEGER NOT NULL,
+        word_count  INTEGER NOT NULL DEFAULT 0,
+        longest     TEXT NOT NULL DEFAULT '',
+        difficulty  TEXT NOT NULL,
+        grid_size   INTEGER NOT NULL,
+        mode        TEXT NOT NULL DEFAULT 'solo',
+        scheda_id   TEXT,
+        played_at   INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_games_score ON games(score DESC);
+      CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at);
+      CREATE INDEX IF NOT EXISTS idx_games_profile ON games(profile_id);
+      CREATE INDEX IF NOT EXISTS idx_games_filter ON games(grid_size, difficulty, mode);
+      CREATE INDEX IF NOT EXISTS idx_games_longest ON games(length(longest) DESC);
     `);
   }
 
@@ -322,6 +352,226 @@ export class ProfileStore {
    * o una copia del solo `boggle.db` perderebbe i dati. `TRUNCATE` scrive tutto nel
    * file principale e azzera il -wal, quindi il DB resta valido anche da solo.
    */
+  /* ------------------------------------------------------------------ */
+  /* Partite e leaderboard                                               */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Registra una partita conclusa. Ritorna l'id assegnato.
+   *
+   * Nickname e avatar vengono copiati come snapshot: se il profilo cambia nome
+   * o viene eliminato, la classifica resta leggibile.
+   */
+  recordGame(profileId: string, payload: SubmitGamePayload): string {
+    const profile = this.getById(profileId);
+    if (!profile) throw new Error('Profilo non trovato');
+    const id = randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO games
+           (id, profile_id, nickname, avatar, score, words, word_count, longest,
+            difficulty, grid_size, mode, scheda_id, played_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        profileId,
+        profile.nickname,
+        profile.avatar,
+        Math.round(payload.score),
+        Math.round(payload.words),
+        Math.round(payload.wordCount),
+        payload.longest.slice(0, 32),
+        payload.difficulty,
+        payload.gridSize,
+        payload.mode,
+        payload.schedaId ?? null,
+        Date.now(),
+      );
+    return id;
+  }
+
+  /**
+   * Calcola la classifica secondo i filtri.
+   *
+   * Le tre classifiche:
+   *  - `best`:    punteggio più alto in una singola partita
+   *  - `total`:   somma dei punteggi di tutte le partite (solo single player)
+   *  - `longest`: parola più lunga mai trovata
+   */
+  leaderboard(filters: LeaderboardFilters): { entries: LeaderboardEntry[]; gamesConsidered: number } {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+
+    // La classifica "totali" somma le partite: solo single player, perché le partite
+    // multiplayer non hanno un punteggio confrontabile (dipendono dagli avversari).
+    if (filters.kind === 'total') where.push("mode = 'solo'");
+    if (filters.gridSize) {
+      where.push('grid_size = ?');
+      params.push(filters.gridSize);
+    }
+    if (filters.difficulty) {
+      where.push('difficulty = ?');
+      params.push(filters.difficulty);
+    }
+    if (filters.period !== 'all') {
+      const days = filters.period === 'week' ? 7 : 30;
+      where.push('played_at >= ?');
+      params.push(Date.now() - days * 24 * 60 * 60 * 1000);
+    }
+    // partite valide: almeno una parola trovata (esclude partite abbandonate)
+    where.push('words > 0');
+
+    const whereSql = where.join(' AND ');
+    const limit = LEADERBOARD_LIMIT;
+
+    const countRow = this.db
+      .prepare(`SELECT COUNT(*) AS n FROM games WHERE ${whereSql}`)
+      .get(...params) as { n: number } | undefined;
+    const gamesConsidered = countRow?.n ?? 0;
+
+    if (filters.kind === 'total') {
+      const rows = this.db
+        .prepare(
+          `SELECT profile_id, nickname, avatar,
+                  SUM(score) AS value, COUNT(*) AS games,
+                  MAX(score) AS best, MAX(played_at) AS played_at
+             FROM games
+            WHERE ${whereSql}
+            GROUP BY profile_id
+            ORDER BY value DESC, best DESC
+            LIMIT ?`,
+        )
+        .all(...params, limit) as Array<{
+        profile_id: string;
+        nickname: string;
+        avatar: string;
+        value: number;
+        games: number;
+        best: number;
+        played_at: number;
+      }>;
+
+      return {
+        entries: rows.map((r, i) => ({
+          rank: i + 1,
+          profileId: r.profile_id,
+          nickname: r.nickname,
+          avatar: r.avatar,
+          value: r.value,
+          score: r.best,
+          words: 0,
+          longest: '',
+          gridSize: filters.gridSize ?? 4,
+          difficulty: filters.difficulty ?? 'normale',
+          playedAt: r.played_at,
+          games: r.games,
+        })),
+        gamesConsidered,
+      };
+    }
+
+    // `best` e `longest`: una riga per partita, la migliore per giocatore vince.
+    const orderBy =
+      filters.kind === 'longest' ? 'LENGTH(longest) DESC, score DESC' : 'score DESC, words DESC';
+    const rows = this.db
+      .prepare(
+        `SELECT profile_id, nickname, avatar, score, words, longest,
+                grid_size, difficulty, played_at, LENGTH(longest) AS longest_len
+           FROM games
+          WHERE ${whereSql}
+          ORDER BY ${orderBy}
+          LIMIT ?`,
+      )
+      .all(...params, limit) as Array<{
+      profile_id: string;
+      nickname: string;
+      avatar: string;
+      score: number;
+      words: number;
+      longest: string;
+      grid_size: number;
+      difficulty: string;
+      played_at: number;
+      longest_len: number;
+    }>;
+
+    const seen = new Set<string>();
+    const entries: LeaderboardEntry[] = [];
+    for (const r of rows) {
+      if (seen.has(r.profile_id)) continue;
+      seen.add(r.profile_id);
+      entries.push({
+        rank: entries.length + 1,
+        profileId: r.profile_id,
+        nickname: r.nickname,
+        avatar: r.avatar,
+        value: filters.kind === 'longest' ? r.longest_len : r.score,
+        score: r.score,
+        words: r.words,
+        longest: r.longest,
+        gridSize: r.grid_size as GridSize,
+        difficulty: r.difficulty as Difficulty,
+        playedAt: r.played_at,
+      });
+    }
+    return { entries, gamesConsidered };
+  }
+
+  /** Statistiche personali di un profilo. */
+  playerStats(profileId: string): PlayerStats {
+    const agg = this.db
+      .prepare(
+        `SELECT COUNT(*) AS games,
+                COALESCE(MAX(score), 0) AS best,
+                COALESCE(SUM(score), 0) AS total,
+                COALESCE(SUM(words), 0) AS words
+           FROM games WHERE profile_id = ?`,
+      )
+      .get(profileId) as { games: number; best: number; total: number; words: number } | undefined;
+
+    const longestRow = this.db
+      .prepare(
+        `SELECT longest FROM games
+          WHERE profile_id = ? AND longest <> ''
+          ORDER BY LENGTH(longest) DESC LIMIT 1`,
+      )
+      .get(profileId) as { longest: string } | undefined;
+
+    const games = agg?.games ?? 0;
+    const bestScore = agg?.best ?? 0;
+
+    // Posizione nella classifica globale: quanti giocatori DISTINTI hanno un
+    // miglior punteggio superiore, più uno.
+    let bestRank = 0;
+    if (games > 0) {
+      const row = this.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM (
+             SELECT profile_id, MAX(score) AS best FROM games GROUP BY profile_id
+           ) WHERE best > ?`,
+        )
+        .get(bestScore) as { n: number } | undefined;
+      bestRank = (row?.n ?? 0) + 1;
+    }
+
+    return {
+      games,
+      bestScore,
+      totalScore: agg?.total ?? 0,
+      totalWords: agg?.words ?? 0,
+      avgScore: games > 0 ? Math.round((agg?.total ?? 0) / games) : 0,
+      longest: longestRow?.longest ?? '',
+      bestRank,
+    };
+  }
+
+  /** Cancella le partite di un profilo (test e privacy). */
+  clearGames(profileId: string): number {
+    const res = this.db.prepare('DELETE FROM games WHERE profile_id = ?').run(profileId);
+    return Number(res.changes ?? 0);
+  }
+
   checkpoint(): void {
     this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   }

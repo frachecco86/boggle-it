@@ -13,6 +13,8 @@ import {
 } from '@boggle/shared';
 import { loadRandomScheda } from './schedeLoader.js';
 import { audio } from '../audio/AudioEngine.js';
+import { activeToken } from './profileStore.js';
+import { submitGame } from './statsClient.js';
 
 export type WordFeedback =
   | { kind: 'valid'; word: string; points: number }
@@ -79,6 +81,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
   schedaRef.current = scheda;
   const foundRef = useRef<FoundWord[]>([]);
   foundRef.current = found;
+  /** true quando la partita conclusa è già stata inviata alla classifica. */
+  const savedRef = useRef(false);
 
   const score = useMemo(() => found.reduce((sum, f) => sum + f.points, 0), [found]);
   const currentWord = useMemo(
@@ -113,6 +117,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
   );
 
   const start = useCallback(() => {
+    savedRef.current = false;
     setRoundScores([]);
     void startRound(1);
   }, [startRound]);
@@ -177,6 +182,37 @@ export function useSoloGame(options: UseSoloGameOptions) {
   }, [round, rounds, startRound]);
 
   const totalScore = useMemo(() => roundScores.reduce((a, b) => a + b, 0) + score, [roundScores, score]);
+
+  /**
+   * Registra la partita conclusa per la classifica.
+   *
+   * `savedRef` impedisce di inviarla due volte: `gameEnd` può essere raggiunto e
+   * poi rivalutato, e in StrictMode gli effect girano due volte in sviluppo.
+   * La registrazione è "best effort": se fallisce (offline, non autenticato) il
+   * gioco non deve mostrare errori — la partita semplicemente non entra in classifica.
+   */
+  useEffect(() => {
+    if (phase !== 'gameEnd' || savedRef.current) return;
+    savedRef.current = true;
+    const token = activeToken();
+    if (!token) return;
+
+    const words = foundRef.current.map((f) => f.word);
+    const longest = words.reduce((best, w) => (w.length > best.length ? w : best), '');
+    void submitGame(
+      {
+        score: totalScore,
+        words: words.length,
+        wordCount: schedaRef.current?.words.length ?? 0,
+        longest,
+        difficulty,
+        gridSize,
+        mode: 'solo',
+        schedaId: schedaRef.current?.id ?? null,
+      },
+      token,
+    );
+  }, [phase, totalScore, difficulty, gridSize]);
 
   return {
     state: {

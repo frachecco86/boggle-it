@@ -50,6 +50,7 @@ export type Screen =
   | 'admin'
   | 'profiles'
   | 'profile'
+  | 'leaderboard'
   | 'changelog';
 
 /**

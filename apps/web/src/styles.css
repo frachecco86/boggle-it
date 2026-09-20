@@ -2163,11 +2163,19 @@ body {
 
 /* ---------- Versione e pagina Novità ---------- */
 
-.versionbar {
+/* Barra superiore: tiene la voce Classifica e la versione, allineate a destra. */
+.topbar {
   position: fixed;
   top: calc(8px + env(safe-area-inset-top, 0px));
   right: 10px;
   z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.versionbar,
+.topbar__item {
   padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -2179,13 +2187,38 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, transform 0.12s;
+  transition: color 0.15s, border-color 0.15s, transform 0.12s, background 0.15s;
 }
 
-.versionbar:hover {
+.versionbar:hover,
+.topbar__item:hover {
   color: var(--primary);
   border-color: var(--primary-soft);
   transform: translateY(-1px);
+}
+
+.topbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar__item--active {
+  color: var(--primary);
+  border-color: var(--primary-soft);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.topbar__icon {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+/* Su schermi molto stretti resta solo l'icona, per non rubare spazio. */
+@media (max-width: 380px) {
+  .topbar__label {
+    display: none;
+  }
 }
 
 .changelog__head {
@@ -2332,4 +2365,238 @@ body {
   letter-spacing: 0.01em;
   color: var(--text-dim);
   opacity: 0.85;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Classifica e statistiche                                            */
+/* ------------------------------------------------------------------ */
+
+.leaderboard__head {
+  text-align: center;
+  margin-top: 6px;
+}
+
+.leaderboard__note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.my-stats {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.my-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.my-stats__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.my-stats__item--wide {
+  grid-column: 1 / -1;
+}
+
+.my-stats__value {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--primary);
+  line-height: 1;
+}
+
+.my-stats__value--word {
+  font-size: 1.1rem;
+  letter-spacing: 0.06em;
+  color: var(--success);
+}
+
+.my-stats__label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.leaderboard__tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.leaderboard__tab {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.leaderboard__tab--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.leaderboard__filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.leaderboard__filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.leaderboard__filter select {
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.86rem;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.leaderboard__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leaderboard__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  animation: screen-in 0.3s ease-out backwards;
+}
+
+.leaderboard__row--me {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+/* Podio: un tocco di colore per i primi tre. */
+.leaderboard__row--top1 {
+  border-color: #d9a521;
+  background: color-mix(in srgb, #ffd75e 22%, var(--surface));
+}
+
+.leaderboard__row--top2 {
+  border-color: #a8b0c4;
+  background: color-mix(in srgb, #c9d2e3 22%, var(--surface));
+}
+
+.leaderboard__row--top3 {
+  border-color: #c98a52;
+  background: color-mix(in srgb, #e8b483 22%, var(--surface));
+}
+
+.leaderboard__rank {
+  min-width: 26px;
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.leaderboard__row--top1 .leaderboard__rank,
+.leaderboard__row--top2 .leaderboard__rank,
+.leaderboard__row--top3 .leaderboard__rank {
+  color: var(--text);
+}
+
+.leaderboard__avatar {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.leaderboard__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.leaderboard__name {
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard__sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.leaderboard__value {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.leaderboard__value--word {
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--success);
+}
+
+.leaderboard__empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 24px 12px;
+  line-height: 1.5;
+}
+
+.loading--inline {
+  min-height: auto;
+  padding: 24px 0;
 }

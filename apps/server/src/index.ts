@@ -8,11 +8,15 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import {
   isSfxSlot,
+  isSubmitGamePayload,
+  LEADERBOARD_KINDS,
   PROFILE_LIMITS,
   type ClientToServerEvents,
   type Difficulty,
   type GridSize,
   type ErrorPayload,
+  type LeaderboardKind,
+  type LeaderboardPeriod,
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
@@ -290,6 +294,84 @@ app.get('/me/sfx', (req, res) => {
   const profile = requireProfile(req, res);
   if (!profile) return;
   res.json({ sfx: profiles.listSfx(profile.id) });
+});
+
+
+/* ---------------- Partite e leaderboard ---------------- */
+
+/**
+ * Registra una partita conclusa. Richiede autenticazione: il profilo viene dal
+ * token, non dal body (altrimenti chiunque potrebbe attribuirsi partite altrui).
+ *
+ * NOTA anti-cheat: il punteggio arriva dal client. In single player il server non
+ * conosce la griglia giocata, quindi non puo' ricalcolarlo. Accettiamo il valore
+ * ma imponiamo limiti di plausibilita' e salviamo anche i dati che permettono di
+ * verificare a posteriori (scheda, parole, lunghezza).
+ */
+app.post('/games', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const payload = req.body;
+  if (!isSubmitGamePayload(payload)) {
+    return res.status(400).json({ error: 'Dati partita non validi' });
+  }
+  // Limiti di plausibilita': una scheda ha al massimo qualche centinaio di parole.
+  if (payload.words > 1000 || payload.score > 5000) {
+    return res.status(400).json({ error: 'Punteggio fuori scala' });
+  }
+  try {
+    const id = profiles.recordGame(profile.id, payload);
+    res.status(201).json({ id, stats: profiles.playerStats(profile.id) });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+/**
+ * Leaderboard pubblica (nessun login richiesto: e' bello vedere i migliori anche
+ * da non registrati). I filtri arrivano dalla query string.
+ */
+app.get('/leaderboard', (req, res) => {
+  const kindRaw = String(req.query.kind ?? 'best');
+  const kind = LEADERBOARD_KINDS.includes(kindRaw as LeaderboardKind)
+    ? (kindRaw as LeaderboardKind)
+    : 'best';
+
+  const periodRaw = String(req.query.period ?? 'all');
+  const period: LeaderboardPeriod =
+    periodRaw === 'week' || periodRaw === 'month' ? periodRaw : 'all';
+
+  const sizeRaw = Number(req.query.gridSize);
+  const gridSize = sizeRaw === 4 || sizeRaw === 5 || sizeRaw === 6 ? (sizeRaw as GridSize) : undefined;
+
+  const diffRaw = String(req.query.difficulty ?? '');
+  const difficulty = isValidDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
+
+  const { entries, gamesConsidered } = profiles.leaderboard({ kind, period, gridSize, difficulty });
+
+  // Se c'e' un token valido, aggiungiamo la posizione del giocatore per evidenziarla.
+  const token = bearerToken(req);
+  const me = token ? profiles.getByToken(token) : null;
+  const myRank = me ? entries.findIndex((e) => e.profileId === me.id) + 1 : 0;
+
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({
+    kind,
+    period,
+    gridSize,
+    difficulty,
+    entries,
+    gamesConsidered,
+    myProfileId: me?.id ?? null,
+    myRank: myRank > 0 ? myRank : 0,
+  });
+});
+
+/** Statistiche personali del giocatore autenticato. */
+app.get('/me/stats', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  res.json(profiles.playerStats(profile.id));
 });
 
 /* ---------------- Foto profilo ---------------- */

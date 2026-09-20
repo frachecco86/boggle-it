@@ -7,6 +7,7 @@ import { AdminScreen } from './screens/AdminScreen.js';
 import { ProfilesScreen } from './screens/ProfilesScreen.js';
 import { ProfileScreen } from './screens/ProfileScreen.js';
 import { ChangelogScreen } from './screens/ChangelogScreen.js';
+import { LeaderboardScreen } from './screens/LeaderboardScreen.js';
 import { VersionBar } from './components/VersionBar.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
@@ -74,6 +75,7 @@ export function App() {
       {screen === 'admin' && <AdminScreen />}
       {screen === 'profiles' && <ProfilesScreen />}
       {screen === 'profile' && <ProfileScreen />}
+      {screen === 'leaderboard' && <LeaderboardScreen />}
       {screen === 'changelog' && <ChangelogScreen />}
       {screen === 'lobby' && <LobbyScreen />}
       {screen === 'mp-game' && <MultiplayerGameScreen />}

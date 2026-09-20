@@ -1,0 +1,187 @@
+/**
+ * Test della leaderboard: le tre classifiche, i filtri e la validazione.
+ *
+ * Usiamo un database su file temporaneo (non `:memory:`) perché il ProfileStore
+ * apre il file con WAL e vi si appoggia per il checkpoint.
+ */
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { ProfileStore } from './profiles.js';
+
+let dir: string;
+let store: ProfileStore;
+
+beforeEach(() => {
+  dir = mkdtempSync(path.join(tmpdir(), 'sbooble-stats-'));
+  store = new ProfileStore(path.join(dir, 'test.db'));
+});
+
+afterEach(() => {
+  store.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+/** Registra un profilo e ritorna l'id. */
+async function profile(nickname: string, avatar = '🐱'): Promise<string> {
+  const p = await store.register(nickname, 'password123', avatar);
+  return p.id;
+}
+
+const game = (over: Partial<Parameters<ProfileStore['recordGame']>[1]> = {}) => ({
+  score: 100,
+  words: 20,
+  wordCount: 50,
+  longest: 'casa',
+  difficulty: 'normale' as const,
+  gridSize: 4 as const,
+  mode: 'solo' as const,
+  schedaId: null,
+  ...over,
+});
+
+describe('leaderboard', () => {
+  it('classifica per miglior punteggio, un giocatore per riga', async () => {
+    const a = await profile('Anna', '🦊');
+    const b = await profile('Bruno', '🐼');
+
+    store.recordGame(a, game({ score: 100 }));
+    store.recordGame(a, game({ score: 300 })); // il migliore di Anna
+    store.recordGame(b, game({ score: 200 }));
+
+    const { entries } = store.leaderboard({ kind: 'best', period: 'all' });
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!.nickname).toBe('Anna');
+    expect(entries[0]!.value).toBe(300);
+    expect(entries[1]!.nickname).toBe('Bruno');
+    // Anna compare UNA volta, con la sua partita migliore.
+    expect(entries.filter((e) => e.nickname === 'Anna')).toHaveLength(1);
+  });
+
+  it('classifica per totale: somma le partite e conta quante', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    store.recordGame(a, game({ score: 100 }));
+    store.recordGame(a, game({ score: 150 }));
+    store.recordGame(b, game({ score: 400 }));
+
+    const { entries } = store.leaderboard({ kind: 'total', period: 'all' });
+    // Anna: 250 totali con 2 partite, Bruno: 400 con 1.
+    expect(entries[0]!.nickname).toBe('Bruno');
+    expect(entries[0]!.value).toBe(400);
+    expect(entries[1]!.nickname).toBe('Anna');
+    expect(entries[1]!.value).toBe(250);
+    expect(entries[1]!.games).toBe(2);
+  });
+
+  it('classifica per parola più lunga', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    store.recordGame(a, game({ longest: 'casa' }));
+    store.recordGame(b, game({ longest: 'costituzionale' }));
+
+    const { entries } = store.leaderboard({ kind: 'longest', period: 'all' });
+    expect(entries[0]!.nickname).toBe('Bruno');
+    expect(entries[0]!.longest).toBe('costituzionale');
+    expect(entries[0]!.value).toBe(14);
+  });
+
+  it('filtra per dimensione griglia e difficoltà', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 500, gridSize: 6, difficulty: 'difficile' }));
+    store.recordGame(a, game({ score: 50, gridSize: 4, difficulty: 'facile' }));
+
+    const big = store.leaderboard({ kind: 'best', period: 'all', gridSize: 6 });
+    expect(big.entries).toHaveLength(1);
+    expect(big.entries[0]!.value).toBe(500);
+
+    const small = store.leaderboard({ kind: 'best', period: 'all', gridSize: 4 });
+    expect(small.entries).toHaveLength(1);
+    expect(small.entries[0]!.value).toBe(50);
+
+    const easy = store.leaderboard({ kind: 'best', period: 'all', difficulty: 'facile' });
+    expect(easy.entries).toHaveLength(1);
+    expect(easy.entries[0]!.value).toBe(50);
+  });
+
+  it('ignora le partite senza parole (abbandonate)', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ words: 0, score: 0 }));
+    const { entries, gamesConsidered } = store.leaderboard({ kind: 'best', period: 'all' });
+    expect(entries).toHaveLength(0);
+    expect(gamesConsidered).toBe(0);
+  });
+
+  it('periodo "week" esclude le partite vecchie', async () => {
+    const a = await profile('Anna');
+    const id = store.recordGame(a, game({ score: 999 }));
+    // Retrodata la partita di 10 giorni, direttamente nel database.
+    // @ts-expect-error accesso interno per il test
+    store.db.prepare('UPDATE games SET played_at = ? WHERE id = ?').run(Date.now() - 10 * 86400000, id);
+
+    expect(store.leaderboard({ kind: 'best', period: 'all' }).entries).toHaveLength(1);
+    expect(store.leaderboard({ kind: 'best', period: 'week' }).entries).toHaveLength(0);
+    expect(store.leaderboard({ kind: 'best', period: 'month' }).entries).toHaveLength(1);
+  });
+
+  it('conserva nome e avatar come snapshot', async () => {
+    const a = await profile('AnnaVecchia', '🦊');
+    store.recordGame(a, game({ score: 100 }));
+    // Il profilo cambia nome: la classifica mostra ancora quello della partita.
+    store.update(a, { avatar: '🐼' });
+    const { entries } = store.leaderboard({ kind: 'best', period: 'all' });
+    expect(entries[0]!.nickname).toBe('AnnaVecchia');
+    expect(entries[0]!.avatar).toBe('🦊');
+  });
+});
+
+describe('playerStats', () => {
+  it('aggrega partite, punteggi e parola più lunga', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 100, words: 10, longest: 'casa' }));
+    store.recordGame(a, game({ score: 200, words: 30, longest: 'rinnovai' }));
+
+    const stats = store.playerStats(a);
+    expect(stats.games).toBe(2);
+    expect(stats.bestScore).toBe(200);
+    expect(stats.totalScore).toBe(300);
+    expect(stats.totalWords).toBe(40);
+    expect(stats.avgScore).toBe(150);
+    expect(stats.longest).toBe('rinnovai');
+  });
+
+  it('calcola la posizione globale', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    const c = await profile('Carla');
+    store.recordGame(b, game({ score: 300 }));
+    store.recordGame(c, game({ score: 200 }));
+    store.recordGame(a, game({ score: 100 }));
+
+    expect(store.playerStats(a).bestRank).toBe(3);
+    expect(store.playerStats(b).bestRank).toBe(1);
+  });
+
+  it('senza partite ritorna zeri', async () => {
+    const a = await profile('Nuovo');
+    const stats = store.playerStats(a);
+    expect(stats.games).toBe(0);
+    expect(stats.bestScore).toBe(0);
+    expect(stats.longest).toBe('');
+    expect(stats.bestRank).toBe(0);
+  });
+});
+
+describe('clearGames', () => {
+  it('rimuove solo le partite del profilo indicato', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    store.recordGame(a, game({ score: 100 }));
+    store.recordGame(b, game({ score: 200 }));
+
+    expect(store.clearGames(a)).toBe(1);
+    expect(store.playerStats(a).games).toBe(0);
+    expect(store.playerStats(b).games).toBe(1);
+  });
+});
