@@ -197,15 +197,23 @@ function requireProfile(req: express.Request, res: express.Response) {
   return profile;
 }
 
-/** Decodifica un data URL `data:<mime>;base64,<dati>` con controlli sui limiti. */
+/**
+ * Decodifica un data URL `data:<mime>[;parametri];base64,<dati>`.
+ *
+ * Nota: i data URL di `MediaRecorder` includono un parametro opzionale, es.
+ * `data:audio/webm;codecs=opus;base64,...`. La prima versione accettava solo
+ * `data:<mime>;base64,`, quindi RIFIUTAVA le registrazioni audio (il parametro
+ * `codecs=opus` faceva fallire il match). Ora i parametri sono ammessi; a DB si
+ * salva solo il mime senza parametri.
+ */
 function decodeDataUrl(
   raw: unknown,
   opts: { maxBytes: number; mimePrefix: string },
 ): { data: Buffer; mime: string } | { error: string } {
   if (typeof raw !== 'string') return { error: 'Formato non valido' };
-  const match = /^data:([^;]+);base64,(.+)$/s.exec(raw);
+  const match = /^data:([^,;]+)(?:;[^,;]+)*;base64,(.+)$/s.exec(raw);
   if (!match) return { error: 'Serve un data URL base64' };
-  const mime = match[1]!;
+  const mime = match[1]!.trim().toLowerCase();
   if (!mime.startsWith(opts.mimePrefix)) return { error: `Formato non supportato: ${mime}` };
   const data = Buffer.from(match[2]!, 'base64');
   if (data.length === 0) return { error: 'File vuoto' };

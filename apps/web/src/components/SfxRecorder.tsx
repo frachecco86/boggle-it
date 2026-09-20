@@ -68,8 +68,10 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
       try {
         const clip = await recorder.stop();
         await onSave(slot, clip.dataUrl, clip.durationMs);
-      } catch {
-        setError('Registrazione non riuscita');
+      } catch (err) {
+        // Mostra il motivo reale (es. errore del server) invece di un messaggio
+        // generico: senza, ogni problema appare come "registrazione non riuscita".
+        setError(err instanceof Error ? err.message : 'Registrazione non riuscita');
       } finally {
         setBusySlot(null);
         recorderRef.current = null;

@@ -53,6 +53,13 @@ export const RELEASES: ReleaseEntry[] = [
         ],
       },
       {
+        kind: 'fix',
+        items: [
+          'Registrazione audio: `MediaRecorder` produce data URL come `data:audio/webm;codecs=opus;base64,...`, ma il server accettava solo `data:<mime>;base64,` e RIFIUTAVA ogni clip. La regex ora ammette i parametri e i messaggi d\'errore mostrano la causa reale.',
+          'Le schede generate dall\'admin vivono in `DATA_DIR/schede-extra`: un solo volume copre profili e schede (Railway consente un volume per servizio).',
+        ],
+      },
+      {
         kind: 'tech',
         items: [
           'Foto e clip audio sono BLOB nel database: backup con un solo file, nessun object storage.',
