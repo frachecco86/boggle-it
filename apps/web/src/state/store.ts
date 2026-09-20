@@ -11,10 +11,23 @@ import type {
   RoundResultEntry,
   SfxSlot,
 } from '@boggle/shared';
-import { SFX_SLOTS } from '@boggle/shared';
 import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket, SERVER_BASE } from '../net/socket.js';
+
+/**
+ * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
+ *
+ * Perche' non un semplice `<audio src>`: l'endpoint `/profiles/:id/sfx/:slot` è
+ * protetto (le clip sono private), e un tag `<audio>` NON invia l'header
+ * `Authorization`. Risultato: 401 e silenzio, senza alcun errore visibile.
+ * Con fetch + blob il token viaggia nell'header e la clip diventa locale.
+ */
+async function fetchClipBlobUrl(url: string, token: string): Promise<string> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Clip non disponibile (${res.status})`);
+  return URL.createObjectURL(await res.blob());
+}
 import {
   activeToken,
   getActiveProfile,
@@ -98,8 +111,8 @@ interface AppState {
 
   setScreen: (s: Screen) => void;
   refreshProfiles: () => void;
-  /** Applica un profilo salvato a store e motore audio. */
-  applyActiveProfile: (saved: SavedProfile | null) => void;
+  /** Applica un profilo salvato a store e motore audio (scarica le clip autenticate). */
+  applyActiveProfile: (saved: SavedProfile | null, token: string | null) => void;
   switchProfile: (id: string) => Promise<void>;
   registerProfile: (nickname: string, password: string) => Promise<void>;
   loginProfile: (nickname: string, password: string) => Promise<void>;
@@ -176,15 +189,42 @@ export const useAppStore = create<AppState>()(
       refreshProfiles: () =>
         set({ profiles: listProfiles(), activeProfileId: getActiveProfile()?.id ?? null }),
 
-      /** Applica un profilo attivo a store + audio (nome, avatar, clip, musica). */
+      /**
+       * Applica un profilo attivo a store e motore audio (nome, avatar, clip, musica).
+       *
+       * Le clip vengono scaricate come blob autenticati: senza il token l'audio
+       * non parte (l'endpoint è privato e `<audio>` non manda header).
+       */
       applyActiveProfile: (() => {
-        const apply = (saved: SavedProfile | null) => {
+        /** Blob URL delle clip, per slot: vanno revocati prima di sostituirli. */
+        const blobUrls = new Map<SfxSlot, string>();
+        const apply = (saved: SavedProfile | null, token: string | null) => {
           if (!saved) return;
+          // Revoca i blob precedenti e azzera le clip nel motore audio: senza,
+          // le clip del profilo precedente resterebbero attive (e i blob orfani
+          // in memoria).
+          for (const url of blobUrls.values()) URL.revokeObjectURL(url);
+          blobUrls.clear();
+          audio.setPersonalClips([]);
+
           const sfxUrls: Partial<Record<SfxSlot, string>> = {};
-          for (const clip of saved.profile.sfx) sfxUrls[clip.slot] = `${SERVER_BASE}${clip.url}`;
-          audio.setPersonalClips(
-            SFX_SLOTS.filter((slot) => sfxUrls[slot]).map((slot) => ({ slot, url: sfxUrls[slot]! })),
-          );
+          const load = async () => {
+            for (const clip of saved.profile.sfx) {
+              if (!token) break;
+              try {
+                const blobUrl = await fetchClipBlobUrl(`${SERVER_BASE}${clip.url}`, token);
+                blobUrls.set(clip.slot, blobUrl);
+                sfxUrls[clip.slot] = blobUrl;
+                audio.setPersonalClip(clip.slot, blobUrl);
+              } catch {
+                // Clip non recuperabile (offline, token scaduto): resta il suono
+                // sintetizzato, e la riga compare come "predefinito".
+              }
+            }
+            set({ sfxUrls: { ...sfxUrls } });
+          };
+          void load();
+
           if (saved.profile.musicId !== undefined) {
             audio.setMusicTrack(saved.profile.musicId);
             set({ audioSettings: audio.getSettings() });
@@ -193,7 +233,6 @@ export const useAppStore = create<AppState>()(
             nickname: saved.profile.nickname,
             avatar: (saved.profile.avatar as Avatar) ?? DEFAULT_AVATAR,
             profile: saved.profile,
-            sfxUrls,
             activeProfileId: saved.id,
             profiles: listProfiles(),
           });
@@ -224,10 +263,10 @@ export const useAppStore = create<AppState>()(
             set({ profileError: 'Sessione scaduta: accedi di nuovo' });
           }
           const fresh = listProfiles().find((p) => p.id === id) ?? saved;
-          get().applyActiveProfile(fresh);
+          get().applyActiveProfile(fresh, saved.token);
         } catch {
           set({ profileError: 'Server non raggiungibile: uso i dati locali' });
-          get().applyActiveProfile(saved);
+          get().applyActiveProfile(saved, saved.token);
         } finally {
           set({ profileBusy: false });
         }
@@ -254,7 +293,7 @@ export const useAppStore = create<AppState>()(
             profile: body.profile,
           };
           saveProfile(entry);
-          get().applyActiveProfile(entry);
+          get().applyActiveProfile(entry, body.token);
         } catch (err) {
           set({ profileError: err instanceof Error ? err.message : String(err) });
           throw err;
@@ -284,7 +323,7 @@ export const useAppStore = create<AppState>()(
             profile: body.profile,
           };
           saveProfile(entry);
-          get().applyActiveProfile(entry);
+          get().applyActiveProfile(entry, body.token);
         } catch (err) {
           set({ profileError: err instanceof Error ? err.message : String(err) });
           throw err;
@@ -306,7 +345,7 @@ export const useAppStore = create<AppState>()(
         audio.setPersonalClips([]);
         const next = getActiveProfile();
         if (next) {
-          get().applyActiveProfile(next);
+          get().applyActiveProfile(next, next.token);
         } else {
           set({
             profile: null,
@@ -322,7 +361,7 @@ export const useAppStore = create<AppState>()(
       deleteProfile: (id) => {
         removeProfile(id);
         const next = getActiveProfile();
-        if (next) get().applyActiveProfile(next);
+        if (next) get().applyActiveProfile(next, next.token);
         else set({ profile: null, activeProfileId: null, profiles: listProfiles(), sfxUrls: {} });
       },
 
@@ -407,12 +446,18 @@ export const useAppStore = create<AppState>()(
           });
           if (me.ok) {
             const profile = (await me.json()) as ProfilePrivate;
-            const sfxUrls: Partial<Record<SfxSlot, string>> = { ...get().sfxUrls };
             const clip = profile.sfx.find((c) => c.slot === slot);
-            if (clip) sfxUrls[slot] = `${SERVER_BASE}${clip.url}`;
-            audio.setPersonalClip(slot, `${SERVER_BASE}${clip?.url ?? ''}`);
-            updateSavedProfile(id, { profile });
-            set({ profile, sfxUrls });
+            if (clip) {
+              // Blob autenticato: `<audio src>` non può mandare l'header.
+              const blobUrl = await fetchClipBlobUrl(`${SERVER_BASE}${clip.url}`, token);
+              const sfxUrls: Partial<Record<SfxSlot, string>> = {
+                ...get().sfxUrls,
+                [slot]: blobUrl,
+              };
+              audio.setPersonalClip(slot, blobUrl);
+              updateSavedProfile(id, { profile });
+              set({ profile, sfxUrls });
+            }
           }
         } catch (err) {
           set({ profileError: err instanceof Error ? err.message : String(err) });

@@ -13,6 +13,7 @@ import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
 import { DIFFICULTIES, type Difficulty } from '@boggle/shared';
 import { bindSocketEvents, useAppStore } from './state/store.js';
+import { getActiveProfile } from './game/profileStore.js';
 import { audio, installAudioUnlock } from './audio/AudioEngine.js';
 
 /**
@@ -30,6 +31,17 @@ export function App() {
 
   // Collega gli eventi Socket.IO allo store.
   useEffect(() => bindSocketEvents(), []);
+
+  /**
+   * Idrata il profilo attivo all'avvio.
+   *
+   * Senza questo, dopo un reload lo store partiva con `sfxUrls` vuoto e `profile`
+   * vecchio (dal localStorage): le clip audio NON venivano registrate nel motore
+   * audio, quindi l'app le mostrava come mancanti finche' non si cambiava profilo.
+   */
+  useEffect(() => {
+    void useAppStore.getState().switchProfile(getActiveProfile()?.id ?? '');
+  }, []);
 
   // Audio: sblocca il contesto al primo gesto utente e tieni lo store allineato.
   useEffect(() => installAudioUnlock(), []);

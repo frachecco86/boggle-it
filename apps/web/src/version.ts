@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.5.1';
+export const APP_VERSION = '0.5.2';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,28 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.5.2',
+    date: '2026-09-20',
+    title: 'Le clip audio si sentono e sopravvivono al reload',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          'Il pulsante ▶ non produceva audio: l\'endpoint delle clip è privato e un tag `<audio>` NON invia l\'header `Authorization`, quindi il server rispondeva 401 in silenzio. Le clip ora sono scaricate come blob autenticati (fetch + `URL.createObjectURL`).',
+          'Le clip sparivano ricaricando la pagina: il profilo attivo non veniva idratato all\'avvio, quindi `sfxUrls` restava vuoto e il motore audio non riceveva le clip. Ora l\'app le ricarica automaticamente al boot.',
+          'Cambiando profilo le clip del precedente restavano attive: ora vengono revocate (blob) e rimosse dal motore audio.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Con la rete assente l\'idratazione fallisce senza rompere nulla: resta il suono sintetizzato e la riga compare come "predefinito".',
+          'Verificato decodificando il blob con `decodeAudioData`: clip valida a 0.66 s / 44.1 kHz, riproduzione confermata (currentTime avanzato).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.5.1',
     date: '2026-09-20',
