@@ -23,21 +23,50 @@ Le parole valide arrivano dalle **schede pre-calcolate**: il server non costruis
 il trie da solver, quindi il picco è molto più basso di prima (~211 MB).
 `TRIE_MAX_WORD_LENGTH` non è più usato a runtime.
 
-### Volumi (profili e schede admin)
+### Volume unico (profili + schede admin)
 
-Il server salva profili (foto + clip audio) in un database SQLite dentro `DATA_DIR`
-(default `/app/data`). Il `Dockerfile` **non dichiara `VOLUME`** perché Railway non lo
-supporta: il volume va creato dalla piattaforma.
+Il server scrive in `DATA_DIR` (default `/app/data`) tutto ciò che deve sopravvivere
+ai deploy:
 
-In **Railway → Settings → Volumes**, aggiungi un volume e montato su:
-
-| Mount path | Cosa conserva |
+| Percorso | Contenuto |
 |---|---|
-| `/app/data` | profili (utente, foto, clip audio) |
-| `/app/packages/shared/schede-extra` | schede generate dall'admin |
+| `/app/data/boggle.db` | profili: utente, foto, clip audio |
+| `/app/data/schede-extra/` | schede generate dall'admin |
 
-Senza volume quei dati si perdono a ogni nuovo deploy (le schede di base sono
-versionate nell'immagine e restano).
+**Serve UN SOLO volume**, perché le schede dell'admin stanno dentro `DATA_DIR`.
+I PaaS (Railway) consentono un volume per servizio: così non ne servono due.
+
+#### Creare il volume su Railway
+
+I volumi **non sono in Settings**. Si crea così:
+
+1. **Command Palette**: `Ctrl+K` (o `⌘K`) → cerca `Volume`
+2. oppure **tasto destro sul canvas vuoto** del progetto → voce del menu
+
+Poi scegli il servizio e imposta il **mount path**:
+
+```
+/app/data
+```
+
+Se la voce non compare: il servizio deve avere **1 replica** (i volumi non
+supportano più repliche) e il piano deve consentirlo (Free: 1 volume per progetto).
+
+#### Permessi: `RAILWAY_RUN_UID=0` (importante)
+
+Railway monta i volumi come **root**, ma il container gira come utente `node`
+(`USER node` nel Dockerfile). Senza correzione il database **non è scrivibile** e
+la registrazione fallisce. Aggiungi nelle Variables:
+
+| Variabile | Valore |
+|---|---|
+| `RAILWAY_RUN_UID` | `0` |
+
+Il `Dockerfile` **non dichiara `VOLUME`** (Railway rifiuta il Dockerfile in quel
+caso): il volume si configura dalla piattaforma.
+
+Senza volume i profili e le schede admin si perdono a ogni deploy; le schede di
+base sono versionate nell'immagine e restano.
 
 ---
 
@@ -54,7 +83,8 @@ versionate nell'immagine e restano).
    | `CLIENT_ORIGIN` | `https://TUO-SITO.netlify.app,http://localhost:5173` |
    | `ADMIN_TOKEN` | token lungo e casuale (`openssl rand -hex 24`) |
    | `NODE_OPTIONS` | `--max-old-space-size=448` |
-   | `DATA_DIR` | `/app/data` (default; montaci un volume) |
+   | `RAILWAY_RUN_UID` | `0` — necessario col volume (permessi) |
+   | `DATA_DIR` | `/app/data` (default; è il mount del volume) |
 
    `PORT` viene iniettata da Railway: non serve impostarla.
 

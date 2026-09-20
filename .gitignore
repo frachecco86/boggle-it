@@ -27,8 +27,7 @@ tsconfig.tsbuildinfo
 apps/web/public/dictionary/
 apps/web/tsconfig.tsbuildinfo
 
-# Schede generate dall'admin (arte runtime, non versionate)
-packages/shared/schede-extra/
+# Schede generate dall'admin: vivono in DATA_DIR/schede-extra, non versionate
 
 # Android (Capacitor): web sincronizzato e output di build
 apps/web/dist/
@@ -40,5 +39,5 @@ apps/web/android/app/build/
 apps/web/android/local.properties
 apps/web/public/bundled-schede/
 
-# Database profili locale (creato dal server di sviluppo)
+# Dati persistenti del server in sviluppo: DB profili + schede admin
 /data/

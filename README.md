@@ -104,6 +104,14 @@ cd apps/web/android && ./gradlew assembleDebug
 
 Guida completa (requisiti, firma, store gratuiti): [`docs/ANDROID.md`](docs/ANDROID.md).
 
+### Dati persistenti in produzione
+
+Profili (foto + clip audio) e schede generate dall'admin vivono entrambi in
+`DATA_DIR` (default `/app/data`): **un solo volume** basta. Su Railway i volumi
+**non sono in Settings** — si creano da `Ctrl+K` → *Volume*, oppure col tasto destro
+sul canvas — e serve `RAILWAY_RUN_UID=0`, perché i volumi sono montati come root
+mentre il container gira come `node`. Dettagli in [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ### Schede
 
 Le schede di base sono versionate in `packages/shared/schede/` (480 schede, ~1.4 MB).

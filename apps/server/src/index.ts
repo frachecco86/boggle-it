@@ -16,7 +16,7 @@ import {
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
-import { SchedaCatalog, toMeta } from './schede.js';
+import { DATA_DIR, SchedaCatalog, toMeta } from './schede.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
@@ -49,10 +49,9 @@ const registry = new RoomRegistry(dictionary);
 const schede = SchedaCatalog.load();
 
 /**
- * Profili: un file SQLite. In Docker conviene montare un volume su DATA_DIR,
- * altrimenti i profili spariscono a ogni nuovo deploy.
+ * Profili: un file SQLite in DATA_DIR (lo stesso usato dal catalogo per le schede
+ * dell'admin). Su Railway monta UN volume su /app/data: copre entrambi.
  */
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.resolve(__dirname, '../../../data');
 const profiles = new ProfileStore(path.join(DATA_DIR, 'boggle.db'));
 
 // pulizia periodica delle stanze vuote/terminate

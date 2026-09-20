@@ -53,8 +53,8 @@ COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
 # Frontend statico (opzionale: serve per il monolite same-origin)
 COPY --from=builder /app/apps/web/dist ./apps/web/dist
 
-# Catalogo schede: le base versionate. (Le schede aggiunte dall'admin vivono in
-# SCHEDE_EXTRA_DIR: per conservarle tra i deploy, monta un volume anche lì.)
+# Catalogo schede di base (versionate). Le schede aggiunte dall'admin vivono in
+# DATA_DIR/schede-extra: stesso volume dei profili, quindi un solo mount basta.
 COPY --from=builder /app/packages/shared/schede ./packages/shared/schede
 
 # Dizionario (serve ancora al server per validare in multiplayer e per generare
@@ -64,11 +64,17 @@ COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary
 COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 
-# Profili SQLite: il DB vive in DATA_DIR.
+# Dati persistenti: DB profili + schede generate dall'admin (`schede-extra/`).
 #
-# NOTA: qui NON si usa `VOLUME` — Railway (e altri PaaS) non lo supportano e
-# rifiutano il Dockerfile. Il volume si configura dalla piattaforma montandolo
-# su /app/data; senza volume i profili si perdono a ogni nuovo deploy.
+# UN SOLO volume basta per entrambi: i PaaS (Railway) consentono un volume per
+# servizio, quindi teniamo tutto sotto /app/data.
+#
+# NOTA: qui NON si usa `VOLUME` — Railway non lo supporta e rifiuta il
+# Dockerfile. Il volume si configura dalla piattaforma su /app/data.
+#
+# ATTENZIONE ai permessi: Railway monta i volumi come root, ma il container gira
+# come `node`. Su Railway imposta `RAILWAY_RUN_UID=0`, altrimenti il DB non e'
+# scrivibile. Vedi docs/DEPLOY.md.
 ENV DATA_DIR=/app/data
 RUN mkdir -p /app/data && chown -R node:node /app/data
 

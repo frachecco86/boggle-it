@@ -3,9 +3,12 @@
  *
  * Le schede base stanno in `packages/shared/schede/` (versionate, generate con
  * `pnpm gen:schede`). L'admin può aggiungerne altre, che vengono salvate in
- * `schede-extra/` (default `packages/shared/schede-extra`, sovrascrivibile con
- * `SCHEDE_EXTRA_DIR`): così un deploy non le cancella e restano separabili da
- * quelle di base.
+ * **`DATA_DIR/schede-extra/`**: così finiscono sullo stesso volume dei profili
+ * e un solo volume basta a rendere persistenti entrambi.
+ *
+ * Perché sotto `DATA_DIR`: Railway (e i PaaS in genere) consente UN solo volume
+ * per servizio. Tenendo profili e schede admin nella stessa cartella, non serve
+ * un secondo volume. Sovrascrivibile con `SCHEDE_EXTRA_DIR`.
  *
  * Il catalogo è tenuto in memoria: sono ~1.4 MB di JSON, trascurabili, e così le
  * richieste (anche /schede/random) sono O(1).
@@ -25,13 +28,22 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/** Cartella dei dati persistenti (stesso volume dei profili). */
+export const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.resolve(__dirname, '../../../data');
+
 export const BASE_SCHEDE_DIR = process.env.SCHEDE_DIR
   ? path.resolve(process.env.SCHEDE_DIR)
   : path.resolve(__dirname, '../../../packages/shared/schede');
 
+/**
+ * Schede generate dall'admin. Di default vivono in `DATA_DIR/schede-extra`, così
+ * un solo volume (`/app/data` su Railway) conserva profili e schede insieme.
+ */
 export const EXTRA_SCHEDE_DIR = process.env.SCHEDE_EXTRA_DIR
   ? path.resolve(process.env.SCHEDE_EXTRA_DIR)
-  : path.resolve(__dirname, '../../../packages/shared/schede-extra');
+  : path.join(DATA_DIR, 'schede-extra');
 
 /** Metadati di una scheda, senza l'elenco completo delle parole. */
 export interface SchedaMeta {
@@ -64,7 +76,7 @@ export class SchedaCatalog {
     const base = catalog.loadDir(BASE_SCHEDE_DIR);
     const extra = catalog.loadDir(EXTRA_SCHEDE_DIR);
     console.log(
-      `✓ Schede caricate: ${catalog.size} (base ${base}, extra ${extra}) da ${BASE_SCHEDE_DIR}`,
+      `✓ Schede caricate: ${catalog.size} (base ${base} da ${path.relative(process.cwd(), BASE_SCHEDE_DIR)}, extra ${extra} da ${path.relative(process.cwd(), EXTRA_SCHEDE_DIR)})`,
     );
     return catalog;
   }
