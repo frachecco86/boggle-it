@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.13.0';
+export const APP_VERSION = '0.14.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,43 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.14.0',
+    date: '2026-09-21',
+    title: 'Vocabolario molto più ampio e notifiche degli avversari',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Notifiche degli avversari**: quando un altro giocatore trova una parola compare in basso una scheda con la sua **foto (o avatar)**, il nome, la lunghezza della parola e i punti, che **sfuma dopo pochi secondi**. Insieme al suono, rende immediato capire chi sta segnando senza guardare la classifica.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Il vocabolario passa da 389.000 a 500.000 parole** (+110.000). Mancavano **sostantivi comunissimi** come `anta`, `broccoli`, `spinaci`, `aspirapolvere`, `abaco`: non erano componibili nelle griglie. La causa era la fonte principale, Morph-it, che è un **analizzatore morfologico** (391.000 forme verbali ma solo 35.000 sostantivi): copriva benissimo i verbi e male i nomi concreti. Aggiunta una terza lista di parole. Nelle schede le parole distinte crescono del **30%** (24.020 → 31.252).',
+          '**Rimosse le volgarità** dal dizionario: erano 85, ora **0**. Il gioco è per famiglie e una parola in griglia la vedono tutti. La lista di esclusione (`blocked-words.txt`) è versionata e modificabile.',
+          '**L\'esultanza degli avversari ora si sente davvero**: era a volume 0.35×, che moltiplicato per il volume degli effetti (~0.6) scendeva a ~0.04 — impercettibile su un telefono. Portata a 0.7×: distinta ma udibile.',
+          '**L\'anteprima della parola ha altezza fissa** (64px): prima cresceva quando si iniziava a comporre e, con le parole lunghe, andava a capo su due righe, spostando la griglia verso il basso proprio mentre si gioca. Ora il carattere si rimpicciolisce per le parole lunghe e la griglia non si muove mai (verificato: posizione invariata con 7 lettere).',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          'Corretto un difetto introdotto nella versione precedente: la vibrazione del telefono era dentro il ramo della clip audio personale, quindi **non scattava** per chi non aveva registrato suoni propri.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il filtro delle volgarità agisce in fase di **build**, non a runtime: una parola bloccata non entra proprio nel dizionario né nelle schede. Nessun costo a giocare.',
+          'Le schede sono state **rigenerate** con il nuovo dizionario. Verificato che tutte le 360 siano valide: griglia coerente con la dimensione, parole di almeno 3 lettere, parola più lunga corretta, 0 volgarità.',
+          'La lista estesa (3 MB) non è versionata: serve solo a rigenerare il dizionario con `pnpm fetch` + `build:full`, mentre le sue parole sono già dentro `words.br`, che è versionato e rende i deploy riproducibili offline.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.13.0',
     date: '2026-09-21',

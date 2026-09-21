@@ -94,6 +94,10 @@ export interface OpponentEvent {
   id: number;
   playerId: string;
   nickname: string;
+  /** Avatar emoji dell'avversario (mostrato nella notifica in basso). */
+  avatar: string;
+  /** Foto profilo dell'avversario, se ne ha una pubblica. */
+  photoUrl?: string;
   points: number;
   wordLength: number;
   at: number;
@@ -797,6 +801,7 @@ export function bindSocketEvents(): () => void {
   const onPlayerWord = (p: {
     playerId: string;
     nickname: string;
+    avatar: string;
     word: string;
     wordLength: number;
     points: number;
@@ -823,6 +828,10 @@ export function bindSocketEvents(): () => void {
           id: Date.now() + Math.random(),
           playerId: p.playerId,
           nickname: p.nickname,
+          avatar: p.avatar,
+          // La foto è un URL pubblico servito dal server: la notifica mostra la
+          // stessa immagine che si vede in classifica.
+          photoUrl: s.room?.players.find((pl) => pl.id === p.playerId)?.photoUrl,
           points: p.points,
           wordLength: p.wordLength,
           at: Date.now(),

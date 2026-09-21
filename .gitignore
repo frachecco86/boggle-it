@@ -11,10 +11,16 @@ dist/
 .env.local
 
 # Dati dizionario: fonti grezze e output non compresso (words.br E' versionato:
-# e' il dizionario compresso, 616 KB, e rende i deploy riproducibili).
+# e' il dizionario compresso, ~830 KB, e rende i deploy riproducibili).
 # 60000_parole_italiane.txt È versionato (MIT, ~556 KB): serve al generatore schede
 # per i livelli facili e rende il build Docker riproducibile offline.
 packages/dictionary/data/morph-it_048.txt
+# Lista estesa (280k): serve SOLO a rigenerare words.txt (`build:full`). Le sue
+# parole sono già dentro words.br, quindi il deploy non ne ha bisogno. 3 MB nel
+# repo per una fonte che si scarica con `pnpm --filter @boggle/dictionary fetch`
+# non vale il peso. `blocked-words.txt` È invece versionato: e' un file di policy
+# (5 KB) e deve restare leggibile e modificabile nel repository.
+packages/dictionary/data/280000_parole_italiane.txt
 packages/dictionary/data/current_version/
 packages/dictionary/data/words.txt
 packages/dictionary/data/.sources.json

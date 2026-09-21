@@ -4,6 +4,7 @@ import { isValidPath, pathMatchesWord, scoreForWord, wordFromPath } from '@boggl
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { FoundCounter } from '../components/FoundCounter.js';
+import { OpponentFeed } from '../components/OpponentFeed.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useAppStore } from '../state/store.js';
@@ -221,6 +222,9 @@ export function MultiplayerGameScreen() {
           <p className="scoreboard__hint">Sei da solo per ora: condividi il codice {roomCode}.</p>
         )}
       </section>
+
+      {/* Notifiche degli avversari: profilo + punti, in basso, che sfumano. */}
+      <OpponentFeed events={opponentEvents} now={now} />
 
       {feedback && (
         <div className={`toast ${toastClass}`} key={feedback.text}>

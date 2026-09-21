@@ -120,9 +120,17 @@ describe('AudioEngine — volume delle esultanze', () => {
 
     expect(own).toBeGreaterThan(0);
     expect(opponent).toBeGreaterThan(0);
-    // L'avversario si sente, ma chiaramente più piano: circa un terzo.
+    /*
+     * L'avversario si sente, ma più piano.
+     *
+     * Il rapporto era 0.35 ma era TROPPO basso: il picco scendeva a ~0.066 e,
+     * moltiplicato per il volume degli effetti (~0.6), diventava ~0.04 —
+     * impercettibile su un telefono. A 0.7 resta distinto ma udibile.
+     */
     expect(opponent).toBeLessThan(own);
-    expect(opponent / own).toBeCloseTo(0.35, 2);
+    expect(opponent / own).toBeCloseTo(0.7, 2);
+    // Verifica che il volume assoluto sia udibile, non solo "più basso".
+    expect(opponent).toBeGreaterThan(0.08);
   });
 
   it('la differenza vale per tutte le lunghezze di parola', async () => {

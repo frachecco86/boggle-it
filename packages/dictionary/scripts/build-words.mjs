@@ -4,11 +4,20 @@
 // Fonti:
 //  - Morph-it! 0.48 (UniBO)   — forme flesse incl. coniugazioni verbali — CC BY-SA 2.0 / LGPL
 //  - paroleitaliane (napolux) — lessico comune per colmare lacune di Morph-it
+//  - 280k parole italiane     — sostantivi e aggettivi che Morph-it NON copre
 //  - abbreviazioni.txt        — abbreviazioni da dizionario (Wikizionario, CC BY-SA 3.0)
+//
+// PERCHÉ SERVONO TRE LISTE DI PAROLE (e non due)
+// Morph-it è un ANALIZZATORE MORFOLOGICO: delle sue 505k righe, 391k sono forme
+// verbali e solo 35k sono sostantivi. Copre benissimo la coniugazione ma gli
+// mancano i nomi concreti di uso quotidiano — `anta`, `broccoli`, `spinaci`,
+// `aspirapolvere`, `abaco` — che non stanno nemmeno nei 60k (lista di frequenza).
+// Senza la terza lista quelle parole non erano componibili nelle griglie.
 //
 // Regole di normalizzazione:
 //  - minuscolo, accenti -> vocale base, rimozione apostrofi/simboli
 //  - accettate solo [a-z]{3,16}
+//  - escluse le voci di `blocked-words.txt` (volgarità: il gioco è per famiglie)
 import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { brotliCompressSync, constants } from 'node:zlib';
@@ -30,6 +39,23 @@ export function normalizeWord(raw) {
     .replace(/[òóôö]/g, 'o')
     .replace(/[ùúûü]/g, 'u')
     .replace(/[^a-z]/g, '');
+}
+
+/**
+ * Voci escluse dal dizionario.
+ *
+ * Perché: il gioco è per famiglie e le liste pubbliche contengono volgarità.
+ * La lista è curata (una voce per riga) e non è negoziabile dal gioco.
+ */
+async function loadBlocked() {
+  const file = path.join(DATA, 'blocked-words.txt');
+  if (!existsSync(file)) return new Set();
+  const set = new Set();
+  for (const line of (await readFile(file, 'utf8')).split('\n')) {
+    const w = normalizeWord(line.trim());
+    if (w) set.add(w);
+  }
+  return set;
 }
 
 const isUsable = (w) => w.length >= MIN_LEN && w.length <= MAX_LEN;
@@ -95,6 +121,10 @@ async function main() {
   }
 
   const words = new Set();
+  const blocked = await loadBlocked();
+
+  /** true se la parola può entrare nel dizionario. */
+  const accepted = (w) => isUsable(w) && !blocked.has(w);
 
   /*
    * 1. Morph-it: la prima colonna e' la forma flessa.
@@ -111,7 +141,7 @@ async function main() {
     const form = line.split('\t')[0];
     if (!form) continue;
     const w = normalizeWord(form);
-    if (isUsable(w)) {
+    if (accepted(w)) {
       words.add(w);
       morphCount++;
     }
@@ -124,13 +154,37 @@ async function main() {
     const commonRaw = await readFile(commonPath, 'utf8');
     for (const line of commonRaw.split('\n')) {
       const w = normalizeWord(line.trim());
-      if (isUsable(w)) {
+      if (accepted(w)) {
         if (!words.has(w)) commonCount++;
         words.add(w);
       }
     }
   } else {
     console.warn('⚠ 60000_parole_italiane.txt assente: salto l\'integrazione');
+  }
+
+  /*
+   * 2b. Lista estesa (280k): sostantivi e aggettivi che Morph-it non copre.
+   *
+   * È la fonte che risolve `anta`, `broccoli`, `spinaci`, `aspirapolvere`,
+   * `abaco`. Non sostituisce le altre: le completa. Essendo una lista piatta
+   * (senza analisi grammaticale) contiene anche termini rari o tecnici, ma in un
+   * gioco di parole trovarne di rado uno ricercato è accettabile — molto peggio
+   * era NON poter comporre parole comuni.
+   */
+  const extendedPath = path.join(DATA, '280000_parole_italiane.txt');
+  let extendedCount = 0;
+  if (existsSync(extendedPath)) {
+    const extendedRaw = await readFile(extendedPath, 'utf8');
+    for (const line of extendedRaw.split('\n')) {
+      const w = normalizeWord(line.trim());
+      if (accepted(w)) {
+        if (!words.has(w)) extendedCount++;
+        words.add(w);
+      }
+    }
+  } else {
+    console.warn('⚠ 280000_parole_italiane.txt assente: sostantivi comuni limitati');
   }
 
   /*
@@ -148,7 +202,7 @@ async function main() {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       const w = normalizeWord(trimmed);
-      if (isUsable(w)) {
+      if (accepted(w)) {
         if (!words.has(w)) modernCount++;
         words.add(w);
       }
@@ -164,7 +218,7 @@ async function main() {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
       const w = normalizeWord(trimmed);
-      if (isUsable(w)) {
+      if (accepted(w)) {
         if (!words.has(w)) abbrCount++;
         words.add(w);
       }
@@ -179,6 +233,7 @@ async function main() {
   console.log(`✓ words.br   ${kb(br.length)}  (ratio ${((br.length / txt.length) * 100).toFixed(1)}%)`);
   console.log(`  da Morph-it: ${morphCount.toLocaleString('it-IT')}`);
   console.log(`  da comuni:   +${commonCount.toLocaleString('it-IT')}`);
+  console.log(`  lista estesa: +${extendedCount.toLocaleString('it-IT')}`);
   console.log(`  abbreviazioni: +${abbrCount}`);
   console.log(`  composti e neologismi: +${modernCount}`);
 }

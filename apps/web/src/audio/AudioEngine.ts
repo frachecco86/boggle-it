@@ -88,10 +88,13 @@ export class AudioEngine {
   /**
    * Volume con cui si sentono le esultanze degli AVVERSARI.
    *
-   * Più basso del proprio: serve a percepire che qualcuno sta andando bene
-   * senza coprire i propri effetti né diventare fastidioso.
+   * Più basso del proprio (per non confonderle con le proprie), ma non troppo:
+   * con 0.35 il picco scendeva a ~0.066, che moltiplicato per il volume degli
+   * effetti (~0.6) diventa ~0.04 — praticamente impercettibile su un telefono.
+   * A 0.7 si sente chiaramente che qualcuno ha trovato una parola, restando
+   * chiaramente sotto al proprio suono.
    */
-  private static readonly OPPONENT_VOLUME_SCALE = 0.35;
+  private static readonly OPPONENT_VOLUME_SCALE = 0.7;
   /** Traccia attualmente caricata (per capire quando cambiarla). */
   private loadedTrack: MusicChoice | null = null;
   /** Catalogo corrente: tracce incluse + quelle caricate dall'admin. */

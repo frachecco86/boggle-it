@@ -9,14 +9,18 @@ interface CurrentWordProps {
  * Come nel Boggle originale: mentre scorri le lettere vedi il testo che si sta
  * formando, così sai cosa stai per inviare. Le lettere appaiono con una piccola
  * animazione per dare l'idea di composizione.
+ *
+ * ALTEZZA COSTANTE: il contenitore ha altezza fissa in CSS e il testo non va mai
+ * a capo (`white-space: nowrap`). Il carattere si riduce al crescere della
+ * parola, così la griglia sotto non si sposta di un pixel durante il gioco.
  */
 export function CurrentWord({ word }: CurrentWordProps) {
-  const long = word.length >= 5;
+  // Soglie progressive: oltre le 8 lettere il testo si rimpicciolisce, oltre le
+  // 12 ancora. Servono perché con l'altezza fissa una parola lunga uscirebbe.
+  const sizeClass = word.length > 12 ? ' current-word-banner--xlong' : word.length >= 8 ? ' current-word-banner--long' : '';
   return (
     <div
-      className={`current-word-banner${word.length > 0 ? ' current-word-banner--active' : ''}${
-        long ? ' current-word-banner--long' : ''
-      }`}
+      className={`current-word-banner${word.length > 0 ? ' current-word-banner--active' : ''}${sizeClass}`}
       aria-live="polite"
       aria-atomic="true"
     >

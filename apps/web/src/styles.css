@@ -808,12 +808,26 @@ body {
 
 .current-word-banner {
   grid-column: 1 / -1;
-  min-height: 56px;
+  /*
+   * Altezza FISSA (non `min-height`) e contenuto che non va a capo.
+   *
+   * Prima: `min-height: 56px` con il placeholder a 0.95rem e le lettere a 1.8rem.
+   * Il banner cambiava altezza quando si iniziava a comporre (la riga cresceva)
+   * e, con parole lunghe, andava a capo su due righe: la griglia si spostava
+   * verso il basso proprio mentre si gioca.
+   *
+   * Con `height` fissa il banner non si muove mai: le lettere in eccesso
+   * scorrono in orizzontale invece di andare a capo.
+   */
+  height: 64px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 10px 16px;
+  padding: 0 16px;
+  overflow: hidden;
+  white-space: nowrap;
   border-radius: var(--radius-lg);
   border: 1px dashed var(--border);
   background: color-mix(in srgb, var(--surface) 70%, transparent);
@@ -830,11 +844,29 @@ body {
   border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
 }
 
+/*
+ * Le lettere si riducono da sole quando la parola è lunga.
+ *
+ * Con l'altezza fissa e `white-space: nowrap`, una parola di 12 lettere a 1.8rem
+ * uscirebbe dal banner. `clamp` con `cqw` (container query) non serve: basta
+ * scalare in base alla lunghezza via classi progressive, che è prevedibile e
+ * non richiede misure a runtime.
+ */
 .current-word-banner--long {
   color: #fff;
   border-color: var(--primary);
   background: linear-gradient(150deg, var(--primary), var(--primary-soft));
   box-shadow: 0 6px 22px color-mix(in srgb, var(--primary) 38%, transparent);
+  font-size: 1.6rem;
+}
+
+.current-word-banner--xlong {
+  color: #fff;
+  border-color: var(--primary);
+  background: linear-gradient(150deg, var(--primary), var(--primary-soft));
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--primary) 38%, transparent);
+  font-size: 1.25rem;
+  letter-spacing: 2px;
 }
 
 .current-word-banner__placeholder {
@@ -3863,5 +3895,118 @@ body {
 
   .history-row__words {
     display: none;
+  }
+}
+
+/* ---------- Notifiche avversari (in basso durante il multiplayer) ---------- */
+
+.opponent-feed {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  /*
+   * Sopra al bordo inferiore ma sotto ai controlli audio, e sopra la safe area
+   * dei telefoni con gesture bar. Il toast delle proprie parole sta più in basso:
+   * così i due non si sovrappongono mai.
+   */
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  pointer-events: none;
+  width: min(340px, calc(100vw - 170px));
+}
+
+.opponent-feed__card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+  /* Entra scivolando dal basso e sfuma verso l'alto. */
+  animation: opponent-slide 3.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes opponent-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+.opponent-feed__avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.opponent-feed__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.opponent-feed__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.opponent-feed__name {
+  font-weight: 700;
+  font-size: 0.86rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opponent-feed__detail {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.opponent-feed__points {
+  font-weight: 900;
+  font-size: 0.95rem;
+  color: var(--success);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opponent-feed__card {
+    animation: opponent-fade 3.2s ease both;
+  }
+  @keyframes opponent-fade {
+    0%, 100% { opacity: 0; }
+    10%, 85% { opacity: 1; }
   }
 }
