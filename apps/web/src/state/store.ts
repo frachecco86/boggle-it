@@ -808,8 +808,15 @@ export function bindSocketEvents(): () => void {
         { playerId: p.playerId, nickname: p.nickname, word: p.word, points: p.points, wordLength: p.wordLength },
       ];
       if (p.self) return { liveWords };
-      // Avversario: aggiungi una notifica "+N" accanto al nome e suona un ding discreto.
-      audio.play('opponent');
+      /*
+       * Avversario: notifica "+N" accanto al nome.
+       *
+       * Suono: l'ESULTANZA COMPLETA della parola trovata, ma a volume ridotto
+       * (vedi `playOpponentWord`). Prima era un ding generico: sentire il motivo
+       * vero — più lungo per le parole lunghe — fa capire a colpo d'orecchio se
+       * l'avversario sta trovando parole lunghe o solo parole corte.
+       */
+      audio.playOpponentWord(p.wordLength);
       const opponentEvents = [
         ...s.opponentEvents,
         {

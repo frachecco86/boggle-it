@@ -8,8 +8,12 @@ import { MusicPicker } from '../components/MusicPicker.js';
 import type { Avatar } from '../avatars.js';
 
 /**
- * Il mio profilo: foto (con filtri locali), suoni personali per lunghezza
- * parola e musica preferita. Tutto sincronizzato sul server.
+ * Il mio profilo: foto, suoni personali per lunghezza parola e musica preferita.
+ * Tutto sincronizzato sul server.
+ *
+ * La foto viene solo ritagliata al centro (256×256) nel browser: niente filtri
+ * né stili AI, che sono stati rimossi perché aggiungevano complessità e un
+ * modello da 8 MB per un risultato che non serviva al gioco.
  */
 export function ProfileScreen() {
   const {

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
-import { WordList } from '../components/WordList.js';
+import { FoundCounter } from '../components/FoundCounter.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useSoloGame } from '../game/useSoloGame.js';
@@ -140,10 +140,9 @@ export function SoloGameScreen() {
             <span className="score-chip__value">{game.totalScore}</span>
             <span className="score-chip__label">punti</span>
           </div>
-          {/* Durante la partita mostriamo solo QUANTE parole hai trovato, non
-              quali: l'elenco completo rivela le soluzioni e toglie la sorpresa.
-              Il conteggio serve come feedback di avanzamento. */}
-          <WordList words={state.found} currentWord={state.currentWord} showItems={false} />
+          {/* Solo il NUMERO di parole trovate: l'elenco rivelerebbe le soluzioni.
+              Altezza fissa, così non sposta nulla mentre si gioca. */}
+          <FoundCounter count={state.found.length} />
         </aside>
       </div>
 

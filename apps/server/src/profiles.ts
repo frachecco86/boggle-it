@@ -19,6 +19,7 @@ import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'no
 import {
   DEFAULT_MUSIC_ID,
   LEADERBOARD_LIMIT,
+  STATS_HISTORY_LIMIT,
   isMusicChoice,
   SFX_SLOTS,
   type Difficulty,
@@ -26,6 +27,7 @@ import {
   type GridSize,
   type LeaderboardEntry,
   type LeaderboardFilters,
+  type ModeStats,
   type MusicChoice,
   type PlayerStats,
   type ProfilePrivate,
@@ -137,6 +139,31 @@ export class ProfileStore {
       CREATE INDEX IF NOT EXISTS idx_games_profile ON games(profile_id);
       CREATE INDEX IF NOT EXISTS idx_games_filter ON games(grid_size, difficulty, mode);
       CREATE INDEX IF NOT EXISTS idx_games_longest ON games(length(longest) DESC);
+
+      /*
+       * Parole trovate in ogni partita.
+       *
+       * Perché una tabella separata e non una colonna JSON in games: le
+       * statistiche personali devono elencare le parole raggruppate per lunghezza
+       * e cercare la parola più lunga. Con una tabella indicizzata queste query
+       * restano SQL normale, senza deserializzare JSON a ogni lettura.
+       *
+       * word è normalizzata (minuscolo): l'indice su (profile_id, word) rende
+       * economico il conteggio delle parole distinte.
+       *
+       * NOTA: niente backtick in questo commento — la stringa SQL è un template
+       * literal, quindi un backtick la chiuderebbe a metà.
+       */
+      CREATE TABLE IF NOT EXISTS game_words (
+        game_id    TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+        profile_id TEXT NOT NULL,
+        word       TEXT NOT NULL,
+        points     INTEGER NOT NULL DEFAULT 0,
+        length     INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_game_words_profile ON game_words(profile_id);
+      CREATE INDEX IF NOT EXISTS idx_game_words_game ON game_words(game_id);
+      CREATE INDEX IF NOT EXISTS idx_game_words_profile_word ON game_words(profile_id, word);
     `);
   }
 
@@ -391,6 +418,28 @@ export class ProfileStore {
         payload.schedaId ?? null,
         Date.now(),
       );
+
+    /*
+     * Parole trovate: salvate nella tabella dedicata.
+     *
+     * Prima si salvava solo il NUMERO di parole, quindi le statistiche personali
+     * non potevano mostrare quali parole erano state trovate. Le parole ripetute
+     * nella stessa partita vengono deduplicate (una parola vale una volta sola) e
+     * il testo è normalizzato come nel resto del gioco.
+     */
+    const found = payload.foundWords ?? [];
+    if (found.length > 0) {
+      const insert = this.db.prepare(
+        'INSERT INTO game_words (game_id, profile_id, word, points, length) VALUES (?, ?, ?, ?, ?)',
+      );
+      const seen = new Set<string>();
+      for (const item of found) {
+        const word = item.word.trim().toLowerCase();
+        if (!word || seen.has(word)) continue;
+        seen.add(word);
+        insert.run(id, profileId, word, Math.round(item.points), word.length);
+      }
+    }
     return id;
   }
 
@@ -521,31 +570,82 @@ export class ProfileStore {
     return { entries, gamesConsidered };
   }
 
-  /** Statistiche personali di un profilo. */
+  /** Statistiche personali di un profilo, separate per modalità. */
   playerStats(profileId: string): PlayerStats {
-    const agg = this.db
+    /*
+     * Aggregato per modalità.
+     *
+     * Tenere separati single player e multiplayer è una scelta di leggibilità:
+     * una partita in otto dipende dagli avversari, quindi una "media punti"
+     * calcolata su entrambe non descrive né l'una né l'altra.
+     */
+    const rows = this.db
       .prepare(
-        `SELECT COUNT(*) AS games,
+        `SELECT mode,
+                COUNT(*) AS games,
                 COALESCE(MAX(score), 0) AS best,
                 COALESCE(SUM(score), 0) AS total,
                 COALESCE(SUM(words), 0) AS words
-           FROM games WHERE profile_id = ?`,
+           FROM games WHERE profile_id = ? GROUP BY mode`,
       )
-      .get(profileId) as { games: number; best: number; total: number; words: number } | undefined;
+      .all(profileId) as Array<{
+      mode: string;
+      games: number;
+      best: number;
+      total: number;
+      words: number;
+    }>;
 
+    const empty = (): ModeStats => ({ games: 0, bestScore: 0, totalScore: 0, totalWords: 0, avgScore: 0 });
+    const toModeStats = (row: {
+      games: number;
+      best: number;
+      total: number;
+      words: number;
+    }): ModeStats => ({
+      games: row.games,
+      bestScore: row.best,
+      totalScore: row.total,
+      totalWords: row.words,
+      avgScore: row.games > 0 ? Math.round(row.total / row.games) : 0,
+    });
+
+    const soloRow = rows.find((r) => r.mode === 'solo');
+    const multiRow = rows.find((r) => r.mode === 'multi');
+    const solo = soloRow ? toModeStats(soloRow) : empty();
+    const multi = multiRow ? toModeStats(multiRow) : empty();
+
+    const games = solo.games + multi.games;
+    const totalScore = solo.totalScore + multi.totalScore;
+    const totalWords = solo.totalWords + multi.totalWords;
+    const bestScore = Math.max(solo.bestScore, multi.bestScore);
+
+    /*
+     * La parola più lunga si prende dalla TABELLA PAROLE, non dalla colonna
+     * `longest` di `games`.
+     *
+     * Perché: `longest` è una singola parola scelta dal client a fine partita,
+     * mentre `game_words` contiene tutto ciò che è stato trovato. Se il client non
+     * ha valorizzato `longest` (o i dati vecchi non lo avevano), la colonna è
+     * vuota pur avendo le parole. La tabella è la fonte affidabile; la colonna
+     * resta come fallback per le partite registrate prima di questa modifica.
+     */
     const longestRow = this.db
+      .prepare(
+        `SELECT word FROM game_words WHERE profile_id = ? ORDER BY length DESC, word ASC LIMIT 1`,
+      )
+      .get(profileId) as { word: string } | undefined;
+    const legacyLongest = this.db
       .prepare(
         `SELECT longest FROM games
           WHERE profile_id = ? AND longest <> ''
           ORDER BY LENGTH(longest) DESC LIMIT 1`,
       )
       .get(profileId) as { longest: string } | undefined;
+    const longest = longestRow?.word ?? legacyLongest?.longest ?? '';
 
-    const games = agg?.games ?? 0;
-    const bestScore = agg?.best ?? 0;
-
-    // Posizione nella classifica globale: quanti giocatori DISTINTI hanno un
-    // miglior punteggio superiore, più uno.
+    // Posizione globale: quanti giocatori DISTINTI hanno un miglior punteggio
+    // superiore, più uno.
     let bestRank = 0;
     if (games > 0) {
       const row = this.db
@@ -558,14 +658,71 @@ export class ProfileStore {
       bestRank = (row?.n ?? 0) + 1;
     }
 
+    /*
+     * Tutte le parole trovate, raggruppate per lunghezza.
+     *
+     * `DISTINCT` perché la stessa parola può essere stata trovata in partite
+     * diverse: nell'elenco delle statistiche ha senso vederla una volta sola.
+     * Le lunghezze arrivano ordinate CRESCENTI e, dentro ogni gruppo, le parole
+     * per numero di lettere e poi alfabeticamente.
+     */
+    const wordRows = this.db
+      .prepare(
+        `SELECT DISTINCT word, length FROM game_words WHERE profile_id = ? ORDER BY length ASC, word ASC`,
+      )
+      .all(profileId) as Array<{ word: string; length: number }>;
+
+    const byLength = new Map<number, string[]>();
+    for (const row of wordRows) {
+      const list = byLength.get(row.length) ?? [];
+      list.push(row.word);
+      byLength.set(row.length, list);
+    }
+    const wordsByLength = [...byLength.entries()]
+      .map(([length, words]) => ({ length, words }))
+      .sort((a, b) => a.length - b.length);
+
+    // Storico partite, dalla più recente.
+    const history = this.db
+      .prepare(
+        `SELECT id, score, words, word_count, longest, difficulty, grid_size, mode, played_at
+           FROM games WHERE profile_id = ?
+          ORDER BY played_at DESC LIMIT ?`,
+      )
+      .all(profileId, STATS_HISTORY_LIMIT) as Array<{
+      id: string;
+      score: number;
+      words: number;
+      word_count: number;
+      longest: string;
+      difficulty: string;
+      grid_size: number;
+      mode: string;
+      played_at: number;
+    }>;
+
     return {
       games,
       bestScore,
-      totalScore: agg?.total ?? 0,
-      totalWords: agg?.words ?? 0,
-      avgScore: games > 0 ? Math.round((agg?.total ?? 0) / games) : 0,
-      longest: longestRow?.longest ?? '',
+      totalScore,
+      totalWords,
+      avgScore: games > 0 ? Math.round(totalScore / games) : 0,
+      longest,
       bestRank,
+      solo,
+      multi,
+      wordsByLength,
+      history: history.map((g) => ({
+        id: g.id,
+        score: g.score,
+        words: g.words,
+        wordCount: g.word_count,
+        longest: g.longest,
+        difficulty: g.difficulty as Difficulty,
+        gridSize: g.grid_size as GridSize,
+        mode: g.mode as GameMode,
+        playedAt: g.played_at,
+      })),
     };
   }
 
@@ -631,6 +788,8 @@ export class ProfileStore {
       score: number;
       words: number;
       longest: string;
+      /** Parole trovate, per le statistiche personali. */
+      foundWords?: Array<{ word: string; points: number }>;
     }>,
     meta: { difficulty: Difficulty; gridSize: GridSize; schedaId: string | null },
   ): number {
@@ -650,6 +809,7 @@ export class ProfileStore {
         gridSize: meta.gridSize,
         mode: 'multi',
         schedaId: meta.schedaId,
+        foundWords: entry.foundWords,
       });
       saved++;
     }

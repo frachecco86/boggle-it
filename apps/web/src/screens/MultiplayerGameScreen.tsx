@@ -3,7 +3,7 @@ import type { FoundWord } from '@boggle/shared';
 import { isValidPath, pathMatchesWord, scoreForWord, wordFromPath } from '@boggle/shared';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
-import { WordList } from '../components/WordList.js';
+import { FoundCounter } from '../components/FoundCounter.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useAppStore } from '../state/store.js';
@@ -185,9 +185,9 @@ export function MultiplayerGameScreen() {
             <span className="score-chip__value">{score}</span>
             <span className="score-chip__label">tuo round</span>
           </div>
-          {/* Solo il conteggio durante il round: l'elenco si vede nel riepilogo.
-              Mostrare le parole qui non aggiunge nulla e le espone agli altri. */}
-          <WordList words={myWords} currentWord={currentWord} showItems={false} />
+          {/* Solo il numero: l'elenco si vede nel riepilogo di fine round.
+              Altezza fissa per non spostare la pagina durante il gioco. */}
+          <FoundCounter count={myWords.length} />
         </aside>
       </div>
 

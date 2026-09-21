@@ -67,6 +67,15 @@ body,
   margin: 0;
   min-height: 100%;
   height: 100%;
+  /*
+   * `stable` riserva SEMPRE lo spazio della scrollbar verticale.
+   *
+   * Perché conta qui: durante la partita l'altezza del contenuto cambia (un
+   * banner che compare, un messaggio che appare). Senza questo, la comparsa e
+   * sparizione della scrollbar sposta TUTTO il contenuto di lato di ~15px: è il
+   * "movimento della finestra" che si nota giocando.
+   */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -697,61 +706,48 @@ body {
   letter-spacing: 1px;
 }
 
-.word-list {
+
+/*
+ * Contatore parole (durante la partita).
+ *
+ * Altezza FISSA e contenuto che non va a capo: la vecchia card delle parole
+ * cresceva a ogni parola trovata, allungando la pagina. Il risultato era uno
+ * spostamento della finestra (scrollbar che compare/scompare) proprio mentre si
+ * gioca, che distrae e fa perdere il segno sulla griglia.
+ */
+.found-counter {
+  height: 96px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
   background: var(--bg-soft);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 160px;
 }
 
-.current-word {
-  min-height: 44px;
-  display: grid;
-  place-content: center;
-  font-size: 1.35rem;
+.found-counter__value {
+  font-size: 2rem;
   font-weight: 800;
-  letter-spacing: 3px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.found-counter__label {
   color: var(--text-dim);
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px dashed var(--border);
-  transition: all 0.18s;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  white-space: nowrap;
 }
 
-.current-word--ready {
-  color: #fff;
-  border-style: solid;
-  border-color: var(--primary);
-  box-shadow: 0 0 16px rgba(124, 92, 255, 0.35);
-}
 
-.word-list__items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-height: 320px;
-  overflow-y: auto;
-}
 
-.word-list__item {
-  display: flex;
-  justify-content: space-between;
-  padding: 7px 11px;
-  background: var(--surface);
-  border-radius: 9px;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
 
-.word-list__points {
-  color: var(--success);
-}
+
 
 /* ---------- Toast ---------- */
 
@@ -864,22 +860,7 @@ body {
 
 /* ---------- Pannello parole: titolo ---------- */
 
-.word-list__title {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1.4px;
-  color: var(--text-dim);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 
-.word-list__count {
-  font-size: 0.9rem;
-  color: var(--text);
-}
 
 /* ---------- Controlli audio rapidi (in basso a sinistra) ---------- */
 
@@ -3643,4 +3624,244 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.6px;
   vertical-align: middle;
+}
+
+/* ---------- Statistiche personali: sezioni ricche ---------- */
+
+.my-stats__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.my-stats__rank {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.my-stats__subtitle {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.my-stats__count {
+  color: var(--primary);
+  font-size: 0.95rem;
+}
+
+/* Split single player / multiplayer */
+.my-stats__modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mode-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mode-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mode-card__title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.mode-card__hint {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+.mode-card__empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.mode-card__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.mode-card__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  background: var(--surface-2);
+  border-radius: 9px;
+}
+
+.mode-card__value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.mode-card__label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* Elenco parole per lunghezza */
+.my-stats__words {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.my-stats__lengths {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.my-stats__word-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.my-stats__word {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.my-stats__word-len {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--text-dim) 18%, transparent);
+  border-radius: 999px;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* Storico partite */
+.my-stats__history {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font-size: 0.8rem;
+}
+
+.history-row__mode {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.history-row__mode--solo {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--primary);
+}
+
+.history-row__mode--multi {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+
+.history-row__meta {
+  color: var(--text-dim);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.history-row__date {
+  opacity: 0.75;
+}
+
+.history-row__words {
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.history-row__score {
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .history-row {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .history-row__words {
+    display: none;
+  }
 }

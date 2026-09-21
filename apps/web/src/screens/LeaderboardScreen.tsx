@@ -11,11 +11,18 @@ import {
 } from '@boggle/shared';
 import { activeToken } from '../game/profileStore.js';
 import { BackHome } from '../components/BackHome.js';
+import { MyStats } from '../components/MyStats.js';
 import { fetchLeaderboard, fetchMyStats } from '../game/statsClient.js';
 
 const KINDS: { id: LeaderboardKind; label: string; hint: string }[] = [
   { id: 'best', label: 'Migliori', hint: 'Punteggio più alto in una partita' },
-  { id: 'total', label: 'Totali', hint: 'Somma dei punti di tutte le partite' },
+  /*
+   * "Somma dei punti" conta solo il SINGLE PLAYER: in multiplayer il punteggio
+   * dipende dagli avversari (e dal numero di giocatori), quindi sommarlo a quello
+   * di una partita in solitaria non darebbe un numero confrontabile. L'hint lo
+   * dice esplicitamente, altrimenti la voce sembra un totale generale.
+   */
+  { id: 'total', label: 'Totali', hint: 'Somma dei punti delle partite in single player' },
   { id: 'longest', label: 'Parole lunghe', hint: 'La parola più lunga trovata' },
 ];
 
@@ -119,37 +126,9 @@ export function LeaderboardScreen() {
         <p className="screen__hint">{activeKind.hint}</p>
       </header>
 
-      {myStats && myStats.games > 0 && (
-        <section className="my-stats">
-          <h3 className="summary__label">Le tue statistiche</h3>
-          <div className="my-stats__grid">
-            <div className="my-stats__item">
-              <span className="my-stats__value">{myStats.bestScore}</span>
-              <span className="my-stats__label">miglior punteggio</span>
-            </div>
-            <div className="my-stats__item">
-              <span className="my-stats__value">{myStats.games}</span>
-              <span className="my-stats__label">partite</span>
-            </div>
-            <div className="my-stats__item">
-              <span className="my-stats__value">{myStats.avgScore}</span>
-              <span className="my-stats__label">media punti</span>
-            </div>
-            <div className="my-stats__item">
-              <span className="my-stats__value">{myStats.bestRank > 0 ? `#${myStats.bestRank}` : '—'}</span>
-              <span className="my-stats__label">posizione</span>
-            </div>
-            {myStats.longest && (
-              <div className="my-stats__item my-stats__item--wide">
-                <span className="my-stats__value my-stats__value--word">
-                  {myStats.longest.toUpperCase()}
-                </span>
-                <span className="my-stats__label">la tua parola più lunga</span>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      {/* Statistiche personali complete: parole per lunghezza, split solo/multi
+          e storico partite. Componente a parte perché è una sezione ricca. */}
+      {myStats && myStats.games > 0 && <MyStats stats={myStats} />}
 
       {!token && (
         <p className="leaderboard__note">

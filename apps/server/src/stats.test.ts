@@ -445,3 +445,115 @@ describe('partite multiplayer: salvate per la classifica', () => {
     expect(store.getById(a)).not.toBeNull();
   });
 });
+
+describe('statistiche personali: parole, modalità e storico', () => {
+  /*
+   * Regressione: prima il database salvava solo il NUMERO di parole trovate.
+   * Le statistiche personali non potevano quindi mostrare QUALI parole erano
+   * state trovate; questo blocco verifica che ora vengano salvate e aggregate.
+   */
+  const withWords = (words: Array<[string, number]>, over = {}) =>
+    game({
+      words: words.length,
+      foundWords: words.map(([word, points]) => ({ word, points })),
+      ...over,
+    });
+
+  it('salva le parole della partita e le raggruppa per lunghezza (ordine crescente)', async () => {
+    const a = await profile('Anna');
+    store.recordGame(
+      a,
+      withWords([
+        ['casa', 2],
+        ['sole', 2],
+        ['albero', 4],
+        ['montagna', 6],
+        ['strada', 4],
+      ]),
+    );
+
+    const stats = store.playerStats(a);
+    // 4, 6, 8 lettere: gruppi ordinati crescenti.
+    expect(stats.wordsByLength.map((g) => g.length)).toEqual([4, 6, 8]);
+    expect(stats.wordsByLength[0]!.words).toEqual(['casa', 'sole']);
+    expect(stats.wordsByLength[2]!.words).toEqual(['montagna']);
+  });
+
+  it('deduplica le parole ripetute nella stessa partita e fra partite', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, withWords([['casa', 2], ['casa', 2], ['sole', 2]]));
+    store.recordGame(a, withWords([['casa', 2]]));
+
+    const flat = store.playerStats(a).wordsByLength.flatMap((g) => g.words);
+    expect(flat.filter((w) => w === 'casa')).toHaveLength(1);
+    // I gruppi restano coerenti.
+    expect(flat.sort()).toEqual(['casa', 'sole']);
+  });
+
+  it('la parola più lunga viene dalle parole salvate, non dalla colonna longest', async () => {
+    const a = await profile('Anna');
+    // `longest` volutamente vuoto: i dati vecchi o un client che non lo manda.
+    store.recordGame(a, withWords([['casa', 2], ['costituzionale', 12]], { longest: '' }));
+    expect(store.playerStats(a).longest).toBe('costituzionale');
+  });
+
+  it('separa le statistiche fra single player e multiplayer', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 100, words: 10, mode: 'solo' }));
+    store.recordGame(a, game({ score: 300, words: 30, mode: 'solo' }));
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 50, words: 5, longest: 'casa' }],
+      { difficulty: 'normale', gridSize: 5, schedaId: null },
+    );
+
+    const stats = store.playerStats(a);
+    expect(stats.solo.games).toBe(2);
+    expect(stats.solo.bestScore).toBe(300);
+    expect(stats.solo.totalWords).toBe(40);
+    expect(stats.multi.games).toBe(1);
+    expect(stats.multi.bestScore).toBe(50);
+    // I totali complessivi restano la somma.
+    expect(stats.games).toBe(3);
+    expect(stats.bestScore).toBe(300);
+  });
+
+  it('lo storico elenca le partite dalla più recente, con modalità e parole', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 10, words: 3, mode: 'solo', gridSize: 4 }));
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 40, words: 7, longest: 'albero' }],
+      { difficulty: 'facile', gridSize: 5, schedaId: null },
+    );
+
+    const history = store.playerStats(a).history;
+    expect(history).toHaveLength(2);
+    // La multi è stata inserita dopo: deve comparire per prima.
+    expect(history[0]!.mode).toBe('multi');
+    expect(history[0]!.score).toBe(40);
+    expect(history[1]!.mode).toBe('solo');
+    expect(history[0]!.gridSize).toBe(5);
+  });
+
+  it('senza partite le statistiche sono vuote ma ben formate', async () => {
+    const a = await profile('Anna');
+    const stats = store.playerStats(a);
+    expect(stats.games).toBe(0);
+    expect(stats.solo.games).toBe(0);
+    expect(stats.multi.games).toBe(0);
+    expect(stats.wordsByLength).toEqual([]);
+    expect(stats.history).toEqual([]);
+    expect(stats.longest).toBe('');
+  });
+
+  it('le partite vecchie senza parole restano leggibili (retro-compatibilità)', async () => {
+    const a = await profile('Anna');
+    // Partita registrata come faceva il client vecchio: nessun foundWords.
+    store.recordGame(a, game({ score: 80, words: 8, longest: 'rinnovai' }));
+    const stats = store.playerStats(a);
+    expect(stats.games).toBe(1);
+    // La parola più lunga ricade sulla colonna `longest`.
+    expect(stats.longest).toBe('rinnovai');
+    // Nessuna parola dettagliata: è normale per i dati storici.
+    expect(stats.wordsByLength).toEqual([]);
+  });
+});

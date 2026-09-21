@@ -950,15 +950,24 @@ function recordMultiplayerGames(room: Room): void {
   // partita potrebbe essere scritta due volte.
   room.gamesPersisted = true;
 
-  const entries: Array<{ profileId: string; score: number; words: number; longest: string }> = [];
+  const entries: Array<{
+    profileId: string;
+    score: number;
+    words: number;
+    longest: string;
+    foundWords: Array<{ word: string; points: number }>;
+  }> = [];
   for (const p of room.players.values()) {
     if (!p.profileId) continue;
-    const words = p.words.map((w) => w.word);
+    // Le parole della partita sono per-round: `p.words` accumula TUTTI i round,
+    // quindi è già il totale della partita.
+    const foundWords = p.words.map((w) => ({ word: w.word, points: w.points }));
     entries.push({
       profileId: p.profileId,
       score: p.totalScore,
-      words: words.length,
-      longest: words.reduce((best, w) => (w.length > best.length ? w : best), ''),
+      words: foundWords.length,
+      longest: foundWords.reduce((best, w) => (w.word.length > best.length ? w.word : best), ''),
+      foundWords,
     });
   }
   if (entries.length === 0) return;

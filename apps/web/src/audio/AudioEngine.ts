@@ -30,7 +30,6 @@ export type SfxKind =
   | 'already-found'
   | 'invalid'
   | 'tap'
-  | 'opponent'
   /* Countdown di inizio round: tre… due… uno… via! */
   | 'countdown-tick'
   | 'countdown-go';
@@ -62,10 +61,7 @@ const DEFAULT_SETTINGS: AudioSettings = {
  * 3 → nota singola, 4 → intervallo, 5 → arpeggio, 6 → accordo, 7+ → accordo + sparkle.
  */
 const SUCCESS_MOTIFS: Record<
-  Exclude<
-    SfxKind,
-    'already-found' | 'invalid' | 'tap' | 'opponent' | 'countdown-tick' | 'countdown-go'
-  >,
+  Exclude<SfxKind, 'already-found' | 'invalid' | 'tap' | 'countdown-tick' | 'countdown-go'>,
   number[]
 > = {
   'word-3': [523.25],                       // C5
@@ -89,6 +85,13 @@ export class AudioEngine {
   private unlocked = false;
   /** Clip personali del profilo, indicizzate per fascia di lunghezza. */
   private readonly personalSfx = new PersonalSfx();
+  /**
+   * Volume con cui si sentono le esultanze degli AVVERSARI.
+   *
+   * Più basso del proprio: serve a percepire che qualcuno sta andando bene
+   * senza coprire i propri effetti né diventare fastidioso.
+   */
+  private static readonly OPPONENT_VOLUME_SCALE = 0.35;
   /** Traccia attualmente caricata (per capire quando cambiarla). */
   private loadedTrack: MusicChoice | null = null;
   /** Catalogo corrente: tracce incluse + quelle caricate dall'admin. */
@@ -267,9 +270,6 @@ export class AudioEngine {
       case 'tap':
         this.playTap();
         break;
-      case 'opponent':
-        this.playOpponent();
-        break;
       case 'countdown-tick':
         this.playCountdownTick();
         break;
@@ -283,20 +283,52 @@ export class AudioEngine {
    * Sceglie l'effetto per una parola trovata.
    * Se il profilo ha registrato una clip per quella fascia, suona quella;
    * altrimenti usa il motivo sintetizzato.
+   *
+   * `volumeScale` permette di suonare lo STESSO motivo a volume ridotto: serve
+   * alle parole degli avversari in multiplayer (vedi `playOpponentWord`).
    */
-  playWordFound(length: number): void {
-    if (this.settings.sfxEnabled) {
-      const slot = slotForLength(length);
-      if (this.personalSfx.play(slot, this.settings.sfxVolume)) {
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
-        return;
-      }
+  playWordFound(length: number, volumeScale = 1): void {
+    if (!this.settings.sfxEnabled) return;
+    /*
+     * Vibrazione solo per le parole PROPRIE: vibrare anche per quelle degli
+     * avversari renderebbe impossibile distinguere i due eventi al tatto.
+     */
+    if (volumeScale === 1 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate?.(30);
     }
-    if (length >= 7) return this.play('word-7plus');
-    if (length === 6) return this.play('word-6');
-    if (length === 5) return this.play('word-5');
-    if (length === 4) return this.play('word-4');
-    return this.play('word-3');
+    // Con una clip personale registrata per questa fascia si suona quella,
+    // scalando il volume: così anche la clip personale "rispetta" il volume
+    // ridotto quando è l'avversario a trovare la parola (se mai sarà possibile).
+    const slot = slotForLength(length);
+    if (this.personalSfx.play(slot, this.settings.sfxVolume * volumeScale)) {
+      return;
+    }
+    // I motivi sono per lunghezza: si sceglie quello e si scala il volume.
+    const motif =
+      length >= 7
+        ? SUCCESS_MOTIFS['word-7plus']
+        : length === 6
+          ? SUCCESS_MOTIFS['word-6']
+          : length === 5
+            ? SUCCESS_MOTIFS['word-5']
+            : length === 4
+              ? SUCCESS_MOTIFS['word-4']
+              : SUCCESS_MOTIFS['word-3'];
+    if (!this.unlocked || !this.ctx) return;
+    this.playSuccess(motif, length >= 7 && volumeScale === 1, volumeScale);
+  }
+
+  /**
+   * Esultanza di un AVVERSARIO: lo stesso motivo della parola trovata, ma a
+   * volume ridotto.
+   *
+   * Perché: sentire le esultanze degli altri fa capire come sta andando la
+   * partita ("stanno trovando parole lunghe") senza guardare la classifica.
+   * Le clip PERSONALI degli altri non sono disponibili (sono private, ognuno
+   * sente le proprie), quindi qui si usa sempre il motivo sintetizzato.
+   */
+  playOpponentWord(length: number): void {
+    this.playWordFound(length, AudioEngine.OPPONENT_VOLUME_SCALE);
   }
 
   /** Nota singola breve: selezione di una lettera. */
@@ -317,18 +349,20 @@ export class AudioEngine {
   }
 
   /** Motivo ascendente per la parola corretta. */
-  private playSuccess(freqs: number[], sparkle: boolean): void {
+  private playSuccess(freqs: number[], sparkle: boolean, volumeScale = 1): void {
     if (!this.ctx || !this.sfxGain) return;
     const noteMs = 85;
     freqs.forEach((freq, i) => {
       const start = this.ctx!.currentTime + (i * noteMs) / 1000;
-      this.blip(freq, start, noteMs / 1000, 'triangle', 0.19);
+      this.blip(freq, start, noteMs / 1000, 'triangle', 0.19 * volumeScale);
       // Armonica leggera: rende il suono più "pieno" senza alzare il volume.
-      this.blip(freq * 2, start, (noteMs / 1000) * 0.7, 'sine', 0.06);
+      this.blip(freq * 2, start, (noteMs / 1000) * 0.7, 'sine', 0.06 * volumeScale);
     });
     if (sparkle) {
       const base = this.ctx.currentTime + (freqs.length * noteMs) / 1000;
-      [1567.98, 2093.0].forEach((f, i) => this.blip(f, base + i * 0.07, 0.22, 'sine', 0.07));
+      [1567.98, 2093.0].forEach((f, i) =>
+        this.blip(f, base + i * 0.07, 0.22, 'sine', 0.07 * volumeScale),
+      );
     }
   }
 
@@ -362,13 +396,6 @@ export class AudioEngine {
     osc.connect(filter).connect(gain).connect(this.sfxGain);
     osc.start(now);
     osc.stop(now + 0.3);
-  }
-
-  /** Piccolo "ding" quando un avversario trova una parola. */
-  private playOpponent(): void {
-    if (!this.ctx || !this.sfxGain) return;
-    const now = this.ctx.currentTime;
-    [1046.5, 1318.5].forEach((freq, i) => this.blip(freq, now + i * 0.06, 0.16, 'sine', 0.09));
   }
 
   /**

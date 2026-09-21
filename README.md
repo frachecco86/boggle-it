@@ -33,9 +33,9 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Profili persistenti** (opzionali): più profili salvati sul dispositivo con switch rapido,
   registrazione/acceso con nickname e password (scrypt, SQLite). Il profilo porta con sé
   avatar, **foto** e **suoni personali**.
-- **Foto profilo con effetti AI**: stili **AnimeGANv2** (Hayao/Shinkai/Paprika) eseguiti nel
-  browser con onnxruntime-web — vera rete neurale, non un filtro grafico. Più filtri rapidi
-  in canvas. La foto originale non lascia il dispositivo: si carica solo il risultato 256×256.
+- **Foto profilo**: si sceglie un'immagine e viene **ritagliata al centro** a 256×256
+direttamente nel browser. La foto originale non lascia il dispositivo: si carica solo il
+risultato. Niente filtri né stili AI.
 - **Suoni personali delle parole**: registri una clip per 5 fasce di lunghezza (3/4/5/6/7+);
   le senti tu quando trovi una parola. Se non registri nulla, si usa il suono sintetizzato.
 - **Musica di sottofondo reale** (non generata): 6 tracce **CC0** incluse nel bundle

@@ -263,7 +263,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
       return;
     }
 
-    const words = foundRef.current.map((f) => f.word);
+    const found = foundRef.current;
+    const words = found.map((f) => f.word);
     const longest = words.reduce((best, w) => (w.length > best.length ? w : best), '');
     setSaveStatus('saving');
     void submitGame(
@@ -277,6 +278,9 @@ export function useSoloGame(options: UseSoloGameOptions) {
         gridSize,
         mode: 'solo',
         schedaId: schedaRef.current?.id ?? null,
+        // Elenco completo: senza, il server sapeva solo QUANTE parole erano state
+        // trovate e le statistiche personali non potevano mostrarle.
+        foundWords: found.map((f) => ({ word: f.word, points: f.points })),
       },
       token,
     ).then((res) => {

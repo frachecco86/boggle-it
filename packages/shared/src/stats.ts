@@ -48,6 +48,21 @@ export interface SubmitGamePayload {
   gridSize: GridSize;
   mode: GameMode;
   schedaId?: string | null;
+  /**
+   * Parole trovate, con i punti di ciascuna.
+   *
+   * Perché vengono inviate: senza di esse il database sapeva solo QUANTE parole
+   * erano state trovate, non QUALI. Le statistiche personali non potevano quindi
+   * mostrare l'elenco delle parole per lunghezza.
+   * Opzionale per retro-compatibilità con i client vecchi.
+   */
+  foundWords?: FoundWordPayload[];
+}
+
+/** Una parola trovata, come inviata dal client. */
+export interface FoundWordPayload {
+  word: string;
+  points: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -106,6 +121,30 @@ export interface LeaderboardResponse {
   myRank?: number;
 }
 
+/** Statistiche di gioco, separate per modalità. */
+export interface ModeStats {
+  games: number;
+  bestScore: number;
+  totalScore: number;
+  totalWords: number;
+  avgScore: number;
+}
+
+/** Una voce dello storico partite. */
+export interface GameHistoryEntry {
+  id: string;
+  score: number;
+  /** Parole trovate in quella partita. */
+  words: number;
+  /** Parole totali della scheda (0 se non nota). */
+  wordCount: number;
+  longest: string;
+  difficulty: Difficulty;
+  gridSize: GridSize;
+  mode: GameMode;
+  playedAt: number;
+}
+
 /** Statistiche personali del giocatore. */
 export interface PlayerStats {
   games: number;
@@ -117,9 +156,46 @@ export interface PlayerStats {
   longest: string;
   /** Posizione nella classifica "migliori" globale (0 = non classificato). */
   bestRank: number;
+  /*
+   * Statistiche separate per modalità.
+   *
+   * Perché non un unico totale: una partita multiplayer dipende dagli avversari,
+   * quindi mescolarla con il single player rende i numeri poco leggibili ("media
+   * punti" fra una partita da soli e una in otto non significa nulla).
+   */
+  solo: ModeStats;
+  multi: ModeStats;
+  /**
+   * TUTTE le parole trovate dal giocatore, raggruppate per lunghezza e ordinate.
+   * Alimenta l'elenco delle statistiche personali.
+   */
+  wordsByLength: Array<{ length: number; words: string[] }>;
+  /** Storico delle partite, dalla più recente. */
+  history: GameHistoryEntry[];
 }
 
 export const LEADERBOARD_LIMIT = 50;
+
+/** Quante partite restituisce lo storico delle statistiche personali. */
+export const STATS_HISTORY_LIMIT = 50;
+
+/** Numero massimo di parole salvate per una singola partita. */
+export const MAX_GAME_WORDS = 1500;
+
+/** Valida una singola parola trovata inviata dal client. */
+export function isFoundWordPayload(value: unknown): value is FoundWordPayload {
+  if (!value || typeof value !== 'object') return false;
+  const w = value as Record<string, unknown>;
+  return (
+    typeof w.word === 'string' &&
+    w.word.length > 0 &&
+    w.word.length <= 32 &&
+    typeof w.points === 'number' &&
+    Number.isFinite(w.points) &&
+    w.points >= 0 &&
+    w.points <= 100
+  );
+}
 
 /** Valida un payload di partita ricevuto dal client. */
 export function isSubmitGamePayload(value: unknown): value is SubmitGamePayload {
@@ -136,7 +212,13 @@ export function isSubmitGamePayload(value: unknown): value is SubmitGamePayload 
     typeof p.gridSize === 'number' &&
     (p.gridSize === 4 || p.gridSize === 5 || p.gridSize === 6) &&
     (p.mode === 'solo' || p.mode === 'multi') &&
-    (p.schedaId === undefined || p.schedaId === null || typeof p.schedaId === 'string')
+    (p.schedaId === undefined || p.schedaId === null || typeof p.schedaId === 'string') &&
+    // Elenco parole: opzionale (client vecchi non lo mandano), ma se presente
+    // ogni voce deve essere valida e il numero complessivo limitato.
+    (p.foundWords === undefined ||
+      (Array.isArray(p.foundWords) &&
+        p.foundWords.length <= MAX_GAME_WORDS &&
+        p.foundWords.every(isFoundWordPayload)))
   );
 }
 

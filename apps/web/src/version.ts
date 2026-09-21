@@ -41,6 +41,7 @@ export const RELEASES: ReleaseEntry[] = [
           '**I collegamenti sono frecce**, come nel Boggle originale: piccoli segmenti tra una lettera e la successiva, con una punta proporzionata. Prima era un\'unica linea luminosa che passava sopra le lettere.',
           '**La parola in composizione appare sopra la griglia** mentre la scrivi, come nel Boggle: vedi in tempo reale cosa stai per inviare.',
           'I **messaggi delle parole durano di più** (~2.6s) e compaiono con uno **slide up/down** invece di un pop istantaneo.',
+          '**Niente più movimenti della pagina durante il gioco**: l\'elenco delle parole trovate è stato sostituito da un **contatore ad altezza fissa**. Prima la card cresceva a ogni parola trovata, allungando la pagina e facendo comparire/sparire la barra di scorrimento proprio mentre si gioca.',
         ],
       },
       {
@@ -50,7 +51,8 @@ export const RELEASES: ReleaseEntry[] = [
           '**Tasto Home in ogni schermata**, in alto a sinistra. Durante una partita o in una stanza chiede conferma prima di uscire, per non perdere i progressi.',
           '**Tre icone audio in basso a sinistra**, sempre disponibili: effetti sonori on/off, musica on/off e **traccia successiva** (se la musica era spenta, la riattiva).',
           '**L\'admin può caricare MP3** dal pannello: le tracce vanno sul server e compaiono nella playlist di **tutti** i giocatori, insieme a quelle incluse.',
-          '**Le statistiche della classifica** mostrano anche le partite multiplayer, con la modalità salvata.',
+          '**Le statistiche personali sono complete**: l\'elenco di **tutte le parole trovate** raggruppate per lunghezza, i numeri **separati fra single player e multiplayer** (una partita in otto dipende dagli avversari: mescolarla con quella in solitaria rende i numeri poco leggibili) e lo **storico delle partite recenti**.',
+          '**Le esultanze degli altri giocatori si sentono** in multiplayer, a **volume ridotto**: quando un avversario trova una parola senti il suo motivo — più lungo per le parole lunghe. Così capisci come sta andando la partita a colpo d\'orecchio, senza guardare la classifica.',
         ],
       },
       {
@@ -59,6 +61,7 @@ export const RELEASES: ReleaseEntry[] = [
           '**Le registrazioni audio ora si sovrascrivono davvero**: una riregistrazione poteva lasciare attiva la clip vecchia. La causa era una combinazione di blob URL non revocati e risposte in cache; ora il vecchio blob viene liberato e la nuova clip ha un URL versionato. In più, al salvataggio compare una conferma "✓ salvato" e, se qualcosa va storto, il motivo reale.',
           '**Non si vedono più le parole trovate mentre si gioca**: l\'elenco rivelava le soluzioni (e in multiplayer le esponeva). Durante il round si vede solo il **numero** di parole trovate; l\'elenco completo arriva nel riepilogo di fine round.',
           '**Il salvataggio della partita non fallisce più in silenzio**: a fine partita il riepilogo dice se la partita è entrata in classifica, se serve un profilo o se il server non ha risposto.',
+          '**Foto profilo semplificata**: rimossi gli stili AI e i filtri. Si scegli un\'immagine e viene ritagliata al centro a 256×256. Erano opzioni che non servivano al gioco e pesavano **8 MB** di modello scaricato dal dispositivo.',
         ],
       },
       {
@@ -68,6 +71,8 @@ export const RELEASES: ReleaseEntry[] = [
           'Il catalogo musicale è diventato **dinamico**: le tracce dell\'admin hanno id `up-…` e sono servite da `/music/:id/file` (gli id non sono più un elenco chiuso nel codice).',
           'La leaderboard "totali" continua a contare **solo il single player**: i punteggi multiplayer non sono confrontabili perché dipendono dagli avversari.',
           'Nuovo `POST /admin/games/reset` per azzerare la classifica senza toccare profili e schede.',
+          'Rimosso `onnxruntime-web`: il bundle JavaScript passa da **754 KB a 335 KB** e non si scarica più nessun modello AI. Eliminati anche i file `.wasm` e il plugin di build che li scartava.',
+          '**Le parole trovate ora vengono salvate** in una tabella dedicata (`game_words`): prima il database registrava solo il NUMERO di parole, quindi le statistiche non potevano elencarle. La migrazione è automatica e non tocca i dati esistenti; per le partite già registrate la parola più lunga continua a leggersi dalla colonna `longest`.',
         ],
       },
     ],
