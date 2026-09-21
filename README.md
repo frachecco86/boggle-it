@@ -37,7 +37,8 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 direttamente nel browser. La foto originale non lascia il dispositivo: si carica solo il
 risultato. Niente filtri né stili AI.
 - **Suoni personali delle parole**: registri una clip per 5 fasce di lunghezza (3/4/5/6/7+);
-  le senti tu quando trovi una parola. Se non registri nulla, si usa il suono sintetizzato.
+  le senti tu quando trovi una parola, e **in multiplayer gli avversari sentono la tua** (a metà
+  volume) quando la trovi tu. Se non registri nulla, si usa il suono sintetizzato.
 - **Musica di sottofondo reale** (non generata): 6 tracce **CC0** incluse nel bundle
   (OpenGameArt). L'host scegle la traccia della stanza; ognuno può sceglere la propria per
   il single player.
@@ -46,7 +47,8 @@ risultato. Niente filtri né stili AI.
 - **Single player**: partita multi-round con riepilogo parole trovate e mancate.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
-  nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto.
+  nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
+  clip audio personale, se ne hanno registrata una, a metà volume.
 - **4 difficoltà** (molto facile / facile / normale / difficile) con tema visivo dedicato.
   La difficoltà controlla la composizione della griglia; la dimensione è una scelta separata.
 - **Anteprima reale**: il server pesca una scheda di esempio dal catalogo con le impostazioni
@@ -264,3 +266,20 @@ I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quin
 Il codice del gioco è da definire (proposta: MIT).
 I **dati del dizionario derivati da Morph-it!** restano distribuiti sotto **CC BY-SA 2.0**:
 l'attribuzione è mostrata nella home dell'app e va mantenuta in ogni opera derivata.
+
+### Verifica delle schede
+
+I criteri di qualità delle schede (lessico, quantità, lunghezza, rarità, banda di
+punteggio) vivono in `packages/shared/src/schedaGen.ts`. Per controllare che le
+schede generate li rispettino:
+
+```bash
+pnpm --filter @boggle/server verify:schede                    # schede su disco
+pnpm --filter @boggle/server verify:schede -- --measure 200   # 200 griglie fresche
+pnpm --filter @boggle/server verify:schede -- --verbose       # dettaglio violazioni
+pnpm --filter @boggle/server verify:schede -- --size 5 --difficolta facile
+```
+
+Esce con codice 1 se trova violazioni, quindi è utilizzabile in CI. Se una soglia
+è troppo stretta, si regola in `schedaGen.ts` e si rigenera con
+`pnpm gen:schede -- --n 50`.

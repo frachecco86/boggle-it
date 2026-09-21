@@ -5,8 +5,10 @@
  * `audio/mp4` su Safari). A 32 kbps una clip da 3 secondi pesa ~12 KB, quindi
  * cinque clip stanno tranquillamente sotto i 100 KB.
  *
- * Le clip sono PERSONALI: ognuno registra e sente le proprie. Il server le
- * conserva per il proprietario e non le espone agli altri.
+ * Le clip sono PERSONALI: ognuno registra le proprie. Il server le conserva per
+ * il proprietario e, in multiplayer, le condivide con chi gioca nella stessa
+ * stanza: quando un avversario trova una parola si sente la SUA clip (a volume
+ * ridotto). Fuori dalla stanza restano inaccessibili.
  */
 import type { SfxSlot } from '@boggle/shared';
 
@@ -134,7 +136,8 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 /**
  * Suona una clip personale, con fallback sull'effetto sintetizzato.
- * Usata al posto dell'SFX quando il giocatore ha registrato quella fascia.
+ * Usata per le clip del proprietario e per quelle degli avversari (banche
+ * separate, vedi `AudioEngine.opponentSfx`).
  */
 export class PersonalSfx {
   private readonly cache = new Map<string, HTMLAudioElement>();

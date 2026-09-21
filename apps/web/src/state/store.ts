@@ -20,14 +20,119 @@ import { getSocket, SERVER_BASE } from '../net/socket.js';
  * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
  *
  * Perche' non un semplice `<audio src>`: l'endpoint `/profiles/:id/sfx/:slot` è
- * protetto (le clip sono private), e un tag `<audio>` NON invia l'header
- * `Authorization`. Risultato: 401 e silenzio, senza alcun errore visibile.
- * Con fetch + blob il token viaggia nell'header e la clip diventa locale.
+ * protetto (le clip sono accessibili al proprietario e a chi condivide la stanza),
+ * e un tag `<audio>` NON invia l'header `Authorization`. Risultato: 401 e
+ * silenzio, senza alcun errore visibile. Con fetch + blob il token viaggia
+ * nell'header e la clip diventa locale.
  */
 async function fetchClipBlobUrl(url: string, token: string): Promise<string> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Clip non disponibile (${res.status})`);
   return URL.createObjectURL(await res.blob());
+}
+
+/*
+ * Clip audio degli AVVERSARI (una cache per id giocatore della stanza).
+ *
+ * Perché una cache a parte: le clip del profilo attivo vivono in `sfxUrls` e
+ * vengono suonate quando troviamo una parola; queste servono quando la parola
+ * la trova un avversario. Tenerle separate evita che le une sovrascrivano le
+ * altre (era il bug: si sentiva sempre la propria registrazione).
+ *
+ * I blob vanno revocati quando si esce dalla stanza o un giocatore se ne va.
+ */
+const opponentClipUrls = new Map<string, Map<SfxSlot, string>>();
+
+function clearOpponentClipCache(): void {
+  for (const bank of opponentClipUrls.values()) {
+    for (const url of bank.values()) URL.revokeObjectURL(url);
+  }
+  opponentClipUrls.clear();
+  audio.clearAllOpponentClips();
+}
+
+/**
+ * Scarica le clip degli avversari presenti in stanza e le registra nel motore audio.
+ *
+ * Chiamata a ogni `room:update` (quindi già in lobby): le clip sono piccole
+ * (~12 KB l'una) e averle pronte all'inizio del round evita un silenzio nei
+ * primi secondi di gioco. Chi ha già le clip in cache non viene ri-scaricato.
+ * Chi non ha profilo o non ha registrato nulla usa il suono sintetizzato.
+ */
+async function syncOpponentClips(
+  room: RoomState | null,
+  selfPlayerId: string | null,
+  token: string | null,
+): Promise<void> {
+  if (!room) {
+    clearOpponentClipCache();
+    return;
+  }
+  if (!token) return;
+
+  const present = new Set<string>();
+  const jobs: Promise<void>[] = [];
+  for (const p of room.players) {
+    if (p.id === selfPlayerId) continue;
+    /*
+     * Nessuna clip registrata (o profilo assente): non è un avversario da
+     * scaricare. Le sue eventuali clip in cache vengono liberate più sotto,
+     * perché non rientra in `present`.
+     */
+    if (!p.profileId || !p.sfxSlots || p.sfxSlots.length === 0) continue;
+    present.add(p.id);
+    const cached = opponentClipUrls.get(p.id);
+    const wanted = new Set<SfxSlot>(p.sfxSlots);
+    /*
+     * Cache completa E allineata: niente da fare. Il controllo sulle fasce
+     * mancanti evita di ri-scaricare tutto a ogni `room:update`; quello sulle
+     * fasce NON più desiderate libera i blob di clip cancellate dall'avversario
+     * (senza, resterebbe attiva per tutta la sessione).
+     */
+    if (cached && p.sfxSlots.every((slot) => cached.has(slot)) && cached.size === wanted.size) {
+      continue;
+    }
+    const bank = cached ?? new Map<SfxSlot, string>();
+    if (!cached) opponentClipUrls.set(p.id, bank);
+    jobs.push(
+      (async () => {
+        // Fasce rimosse dal profilo: dimentica la clip e libera il blob.
+        for (const [slot, url] of [...bank]) {
+          if (wanted.has(slot)) continue;
+          URL.revokeObjectURL(url);
+          bank.delete(slot);
+        }
+        for (const slot of p.sfxSlots!) {
+          if (bank.has(slot)) continue;
+          try {
+            const url = await fetchClipBlobUrl(
+              `${SERVER_BASE}/profiles/${p.profileId}/sfx/${slot}`,
+              token,
+            );
+            bank.set(slot, url);
+          } catch {
+            // Clip non disponibile (offline, token scaduto): per QUESTA fascia
+            // si sentirà il suono sintetizzato, sempre a volume ridotto. Le
+            // altre clip già in cache restano valide.
+          }
+        }
+        audio.setOpponentClips(
+          p.id,
+          [...bank.entries()].map(([slot, url]) => ({ slot, url })),
+        );
+      })(),
+    );
+  }
+
+  // Avversari usciti dalla stanza: dimentica le loro clip e libera i blob.
+  for (const [playerId, bank] of [...opponentClipUrls]) {
+    if (present.has(playerId)) continue;
+    for (const url of bank.values()) URL.revokeObjectURL(url);
+    opponentClipUrls.delete(playerId);
+    audio.clearOpponentClips(playerId);
+  }
+
+  await Promise.all(jobs);
 }
 
 /**
@@ -738,6 +843,9 @@ export const useAppStore = create<AppState>()(
       leaveRoom: () => {
         const code = get().roomCode;
         if (code) getSocket().emit('room:leave', { code });
+        // Uscendo si dimenticano gli avversari: le loro clip non servono più e i
+        // blob vanno liberati (altrimenti restano in memoria per la sessione).
+        clearOpponentClipCache();
         set({
           roomCode: null,
           room: null,
@@ -784,6 +892,12 @@ export function bindSocketEvents(): () => void {
       useAppStore.setState({ audioSettings: audio.getSettings() });
     }
     set({ room });
+    // Scarica in lobby le clip degli avversari: quando trovano una parola deve
+    // sentirsi la LORO registrazione, non quella di chi ascolta (vedi
+    // `playOpponentWord`). Il download è idempotente: le clip già in cache
+    // non vengono richieste di nuovo.
+    const st = useAppStore.getState();
+    void syncOpponentClips(room, st.playerId, activeToken());
   };
   const onRoundStart = (p: { grid: Grid; endsAt: number; durationMs: number; schedaId?: string }) =>
     set({
@@ -821,7 +935,7 @@ export function bindSocketEvents(): () => void {
        * vero — più lungo per le parole lunghe — fa capire a colpo d'orecchio se
        * l'avversario sta trovando parole lunghe o solo parole corte.
        */
-      audio.playOpponentWord(p.wordLength);
+      audio.playOpponentWord(p.wordLength, p.playerId);
       const opponentEvents = [
         ...s.opponentEvents,
         {

@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.14.0';
+export const APP_VERSION = '0.14.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,33 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.14.1',
+    date: '2026-09-21',
+    title: 'In multiplayer si sente il suono personale dell\'avversario',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Corretto**: quando un avversario trovava una parola si sentiva sempre la registrazione del profilo **loggato su quel dispositivo**, mai la sua. Ora si sente la **clip audio dell\'avversario**, a **metà volume**: la sua voce personale resta riconoscibile e distinta dalla tua.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**Le clip audio personali viaggiano con la partita**: entrando in una stanza il dispositivo scarica le registrazioni degli altri giocatori (una volta sola, ~12 KB per fascia) e le tiene pronte. Chi non ha registrato nulla continua a far sentire il suono sintetizzato.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le registrazioni restano **private**: il server le espone solo a chi condivide la stanza con il proprietario, non a chi conosce l\'id del profilo. In `PlayerPublic` viaggia solo l\'elenco delle fasce registrate (`sfxSlots`), non il contenuto.',
+          'Il motore audio tiene due banche separate, le clip del profilo attivo e quelle degli avversari: il fallback — quando l\'avversario non ha registrato quella fascia — usa il motivo sintetizzato e **mai** la clip di chi ascolta.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.14.0',
     date: '2026-09-21',

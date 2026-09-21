@@ -58,3 +58,12 @@ dist-android/*
 !dist-android/README.md
 !dist-android/*.apk
 !dist-android/*.aab
+
+# Indice lessicale (parola -> categoria grammaticale + voce Wikizionario):
+# DERIVATO, si rigenera con `pnpm --filter @boggle/dictionary build:full`
+# (~800 KB, troppo per essere versionato: il build di deploy lo salta e la
+# pagina Parole funziona anche senza tag).
+packages/dictionary/data/word-index.br
+packages/dictionary/data/word-index.txt
+# Dump grezzo di Wikizionario (40 MB): solo per rigenerare gli headword.
+packages/dictionary/data/itwiktionary.jsonl.gz

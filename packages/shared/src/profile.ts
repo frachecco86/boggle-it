@@ -8,8 +8,11 @@
  *  - fino a 5 CLIP AUDIO personali, una per fascia di lunghezza parola;
  *  - la preferenza musicale.
  *
- * Foto e audio sono **privati**: il server li tiene per il proprietario e non
- * li mostra agli altri. L'avatar emoji è invece pubblico e appare in classifica.
+ * Foto e audio sono **privati** nel senso che non sono indicizzati pubblicamente:
+ * il server li tiene per il proprietario e non li mostra a chi non gioca con lui.
+ * In MULTIPLAYER, però, le clip audio sono condivise con chi è nella stessa stanza:
+ * quando un avversario trova una parola si sente la SUA registrazione (a volume
+ * ridotto), non quella di chi ascolta. L'avatar emoji è invece sempre pubblico.
  */
 import type { MusicChoice } from './music.js';
 

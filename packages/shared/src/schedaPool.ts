@@ -114,6 +114,9 @@ export class SchedaPool {
    * Genera `count` schede di qualità per una coppia dimensione/difficoltà.
    * Gli id seguono `size-difficulty-NNN`; `startIndex` permette di continuare
    * una numerazione esistente quando l'admin aggiunge schede.
+   *
+   * `isRare` viene passato al generatore: alimenta il criterio di rarità che nei
+   * livelli facili limita le parole fuori dal lessico comune.
    */
   generate(
     size: GridSize,
@@ -135,6 +138,7 @@ export class SchedaPool {
         tries: this.tries,
         rng: options.rng,
         id,
+        isRare: (w) => !this.isCommon(w),
       });
       if (scheda) {
         out.push(scheda);

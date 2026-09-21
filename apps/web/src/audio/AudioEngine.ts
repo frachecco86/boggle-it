@@ -7,6 +7,9 @@
  *
  * Clip personali: se il profilo ha registrato un suono per la fascia di
  * lunghezza, `playWordFound` lo usa al posto della sintesi (vedi PersonalSfx).
+ * In multiplayer si sente anche la clip dell'AVVERSARIO che ha trovato la
+ * parola, a metà volume: le sue registrazioni vengono scaricate all'ingresso
+ * in stanza e tenute in una banca separata (`setOpponentClips`).
  *
  * Tutto e' "lazy": l'AudioContext viene creato al primo gesto utente (policy dei browser),
  * e nulla suona finche' l'utente non interagisce.
@@ -86,15 +89,22 @@ export class AudioEngine {
   /** Clip personali del profilo, indicizzate per fascia di lunghezza. */
   private readonly personalSfx = new PersonalSfx();
   /**
-   * Volume con cui si sentono le esultanze degli AVVERSARI.
+   * Clip audio degli AVVERSARI, indicizzate per id giocatore della stanza.
    *
-   * Più basso del proprio (per non confonderle con le proprie), ma non troppo:
-   * con 0.35 il picco scendeva a ~0.066, che moltiplicato per il volume degli
-   * effetti (~0.6) diventa ~0.04 — praticamente impercettibile su un telefono.
-   * A 0.7 si sente chiaramente che qualcuno ha trovato una parola, restando
-   * chiaramente sotto al proprio suono.
+   * In multiplayer si sente la registrazione di chi ha trovato la parola, non la
+   * propria: il client scarica le clip dei compagni di stanza (vedi store) e le
+   * registra qui. Restano separate da `personalSfx` per non sovrascrivere mai le
+   * proprie con quelle di un altro giocatore.
    */
-  private static readonly OPPONENT_VOLUME_SCALE = 0.7;
+  private readonly opponentSfx = new Map<string, PersonalSfx>();
+  /**
+   * Volume con cui si sentono le esultanze degli AVVERSARI: metà del proprio.
+   *
+   * Si applica sia alla clip registrata dall'avversario sia al motivo
+   * sintetizzato quando l'avversario non ha registrato quella fascia. Così le
+   * parole degli altri si distinguono a colpo d'orecchio dalle proprie.
+   */
+  private static readonly OPPONENT_VOLUME_SCALE = 0.5;
   /** Traccia attualmente caricata (per capire quando cambiarla). */
   private loadedTrack: MusicChoice | null = null;
   /** Catalogo corrente: tracce incluse + quelle caricate dall'admin. */
@@ -155,6 +165,29 @@ export class AudioEngine {
 
   clearPersonalClip(slot: Parameters<PersonalSfx['set']>[0]): void {
     this.personalSfx.clear(slot);
+  }
+
+  /**
+   * Registra le clip di un AVVERSARIO (o le aggiorna tutte se già presenti).
+   * Chiamare con un elenco vuoto equivale a rimuoverle.
+   */
+  setOpponentClips(
+    playerId: string,
+    clips: Array<{ slot: Parameters<PersonalSfx['set']>[0]; url: string }>,
+  ): void {
+    const bank = new PersonalSfx();
+    for (const clip of clips) bank.set(clip.slot, clip.url);
+    this.opponentSfx.set(playerId, bank);
+  }
+
+  /** Dimentica le clip di un avversario (uscito dalla stanza). */
+  clearOpponentClips(playerId: string): void {
+    this.opponentSfx.delete(playerId);
+  }
+
+  /** Dimentica tutti gli avversari (uscita dalla stanza, cambio profilo). */
+  clearAllOpponentClips(): void {
+    this.opponentSfx.clear();
   }
 
   setSettings(next: Partial<AudioSettings>): void {
@@ -283,29 +316,52 @@ export class AudioEngine {
   }
 
   /**
-   * Sceglie l'effetto per una parola trovata.
+   * Sceglie l'effetto per una parola trovata dal GIOCATORE STESSO.
    * Se il profilo ha registrato una clip per quella fascia, suona quella;
    * altrimenti usa il motivo sintetizzato.
-   *
-   * `volumeScale` permette di suonare lo STESSO motivo a volume ridotto: serve
-   * alle parole degli avversari in multiplayer (vedi `playOpponentWord`).
    */
-  playWordFound(length: number, volumeScale = 1): void {
+  playWordFound(length: number): void {
     if (!this.settings.sfxEnabled) return;
-    /*
-     * Vibrazione solo per le parole PROPRIE: vibrare anche per quelle degli
-     * avversari renderebbe impossibile distinguere i due eventi al tatto.
-     */
-    if (volumeScale === 1 && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    // La vibrazione accompagna solo le parole proprie: vibrare anche per quelle
+    // degli avversari renderebbe impossibile distinguere i due eventi al tatto.
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate?.(30);
     }
-    // Con una clip personale registrata per questa fascia si suona quella,
-    // scalando il volume: così anche la clip personale "rispetta" il volume
-    // ridotto quando è l'avversario a trovare la parola (se mai sarà possibile).
     const slot = slotForLength(length);
-    if (this.personalSfx.play(slot, this.settings.sfxVolume * volumeScale)) {
-      return;
+    if (this.personalSfx.play(slot, this.settings.sfxVolume)) return;
+    this.playSuccessMotif(length, 1);
+  }
+
+  /**
+   * Esultanza di un AVVERSARIO, a volume ridotto (metà del proprio).
+   *
+   * Con `playerId` si suona la SUA clip registrata, per la fascia della parola
+   * trovata; se non l'ha registrata (o non è ancora stata scaricata) si ricade
+   * sul motivo sintetizzato. In entrambi i casi il volume è dimezzato, così le
+   * parole degli altri non si confondono con le proprie.
+   *
+   * IMPORTANTE: mai la clip di chi ascolta. Era il bug: l'avversario trovava una
+   * parola e si sentiva la PROPRIA registrazione, perché il fallback passava da
+   * `playWordFound` (che suona le clip del profilo attivo).
+   */
+  playOpponentWord(length: number, playerId?: string): void {
+    if (!this.settings.sfxEnabled) return;
+    const scale = AudioEngine.OPPONENT_VOLUME_SCALE;
+    const slot = slotForLength(length);
+    if (playerId) {
+      const bank = this.opponentSfx.get(playerId);
+      // La clip dell'avversario suona solo se ESISTE: altrimenti si passa al
+      // motivo sintetizzato, sempre a volume ridotto.
+      if (bank?.play(slot, this.settings.sfxVolume * scale)) return;
     }
+    this.playSuccessMotif(length, scale);
+  }
+
+  /**
+   * Motivo sintetizzato per una parola trovata, per fascia di lunghezza.
+   * `volumeScale` riduce il volume (0.5 per le parole degli avversari).
+   */
+  private playSuccessMotif(length: number, volumeScale: number): void {
     // I motivi sono per lunghezza: si sceglie quello e si scala il volume.
     const motif =
       length >= 7
@@ -318,20 +374,8 @@ export class AudioEngine {
               ? SUCCESS_MOTIFS['word-4']
               : SUCCESS_MOTIFS['word-3'];
     if (!this.unlocked || !this.ctx) return;
+    // Lo sparkle finale (parole da 7+ lettere) solo per le parole proprie.
     this.playSuccess(motif, length >= 7 && volumeScale === 1, volumeScale);
-  }
-
-  /**
-   * Esultanza di un AVVERSARIO: lo stesso motivo della parola trovata, ma a
-   * volume ridotto.
-   *
-   * Perché: sentire le esultanze degli altri fa capire come sta andando la
-   * partita ("stanno trovando parole lunghe") senza guardare la classifica.
-   * Le clip PERSONALI degli altri non sono disponibili (sono private, ognuno
-   * sente le proprie), quindi qui si usa sempre il motivo sintetizzato.
-   */
-  playOpponentWord(length: number): void {
-    this.playWordFound(length, AudioEngine.OPPONENT_VOLUME_SCALE);
   }
 
   /** Nota singola breve: selezione di una lettera. */

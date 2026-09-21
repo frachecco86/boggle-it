@@ -21,6 +21,7 @@ import {
   type LeaderboardPeriod,
   type WordCatalogQuery,
   type SchedaStats,
+  type SfxSlot,
   schedaWordPoints,
   WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
@@ -250,6 +251,8 @@ app.get('/words', (req, res) => {
     gridSize,
     difficulty,
     schedaId: typeof req.query.schedaId === 'string' ? req.query.schedaId : undefined,
+    pos: typeof req.query.pos === 'string' ? req.query.pos : undefined,
+    onlyWithEntry: req.query.onlyWithEntry === '1' || req.query.onlyWithEntry === 'true',
     sort,
     direction,
     limit,
@@ -569,16 +572,32 @@ app.delete('/me/sfx/:slot', (req, res) => {
 });
 
 /**
- * Clip audio di un profilo. Richiede il token del PROPRIETARIO: le registrazioni
- * sono private (l'utente sente solo i propri suoni).
+ * Clip audio di un profilo.
+ *
+ * Le registrazioni restano PRIVATE nella loro sostanza, ma in multiplayer gli
+ * avversari della stessa stanza devono poterle sentire: quando un altro trova una
+ * parola, sul tuo dispositivo suona la SUA clip (a volume ridotto), non la tua.
+ * Quindi l'accesso è consentito al proprietario e a chi condivide la stanza con
+ * lui. Tutti gli altri ricevono 403.
  */
 app.get('/profiles/:id/sfx/:slot', (req, res) => {
-  const profile = requireProfile(req, res);
-  if (!profile) return;
-  if (profile.id !== String(req.params.id)) return res.status(403).json({ error: 'Clip non tua' });
+  const token = bearerToken(req);
+  const me = token ? profiles.getByToken(token) : null;
+  if (!me) return res.status(401).json({ error: 'Accesso richiesto' });
+  const ownerId = String(req.params.id);
+  /*
+   * Clip audio: PRIVATE al proprietario, ma condivise con chi gioca NELLA STESSA
+   * STANZA. Serve al multiplayer: quando un avversario trova una parola si sente
+   * la SUA registrazione (a volume ridotto), non quella di chi ascolta.
+   * L'elenco delle fasce è pubblico in stanza (`PlayerPublic.sfxSlots`), il
+   * contenuto no: si scarica solo se i due profili condividono una partita.
+   */
+  if (me.id !== ownerId && !registry.sharesRoomWith(me.id, ownerId)) {
+    return res.status(403).json({ error: 'Clip non disponibile' });
+  }
   const slot = String(req.params.slot);
   if (!isSfxSlot(slot)) return res.status(400).json({ error: 'Fascia non valida' });
-  const sfx = profiles.getSfx(profile.id, slot);
+  const sfx = profiles.getSfx(ownerId, slot);
   if (!sfx) return res.status(404).end();
   res.setHeader('Content-Type', sfx.mime);
   res.setHeader('Cache-Control', 'private, max-age=60');
@@ -919,6 +938,26 @@ function photoUrlFor(profile: { id: string; hasPhoto: boolean; photoUpdatedAt: n
 }
 
 /**
+ * Riferimenti pubblici di un profilo per la stanza: id, foto e FASCE audio.
+ *
+ * Perché anche le fasce: in multiplayer gli avversari devono sapere se il
+ * giocatore ha una clip registrata per una certa lunghezza di parola, così
+ * possono scaricarla e suonarla (a volume ridotto) quando trova una parola.
+ * Il CONTENUTO delle clip resta protetto: l'elenco delle fasce non lo rivela.
+ */
+function profileRefFor(profile: {
+  id: string;
+  hasPhoto: boolean;
+  photoUpdatedAt: number | null;
+}): { id: string; photoUrl: string | null; sfxSlots: SfxSlot[] } {
+  return {
+    id: profile.id,
+    photoUrl: photoUrlFor(profile),
+    sfxSlots: profiles.listSfx(profile.id).map((s) => s.slot),
+  };
+}
+
+/**
  * Tetto di parole enumerate in una scheda generata dall'admin.
  * Le schede normali ne hanno molte meno; il tetto difende da griglie patologiche.
  */
@@ -1023,7 +1062,7 @@ io.on('connection', (socket) => {
         playerId,
         profile?.nickname ?? payload?.nickname ?? 'Host',
         profile?.avatar ?? payload?.avatar,
-        profile ? { id: profile.id, photoUrl: photoUrlFor(profile) } : null,
+        profile ? profileRefFor(profile) : null,
       );
       player.socketId = socket.id;
       socket.join(room.code);
@@ -1057,7 +1096,7 @@ io.on('connection', (socket) => {
         playerId,
         profile?.nickname ?? payload?.nickname ?? 'Giocatore',
         profile?.avatar ?? payload?.avatar,
-        profile ? { id: profile.id, photoUrl: photoUrlFor(profile) } : null,
+        profile ? profileRefFor(profile) : null,
       );
       player.socketId = socket.id;
     }

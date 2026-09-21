@@ -17,6 +17,7 @@ import {
   type PlayerPublic,
   type RoomState,
   type Scheda,
+  type SfxSlot,
 } from '@boggle/shared';
 import type { Dictionary } from './dictionary.js';
 
@@ -58,6 +59,12 @@ export interface Player {
   profileId: string | null;
   /** Foto profilo pubblica (mostrata in stanza al posto dell'emoji). */
   photoUrl: string | null;
+  /**
+   * Fasce di lunghezza per cui il giocatore ha una clip audio registrata.
+   * Il contenuto delle clip non è pubblico: chi è in stanza scarica le clip
+   * del proprietario solo mentre la partita è in corso (vedi `index.ts`).
+   */
+  sfxSlots: SfxSlot[];
   totalScore: number;
   roundScore: number;
   words: FoundWord[];
@@ -151,7 +158,7 @@ export class Room {
     id: string,
     nickname: string,
     avatar = '🐱',
-    profile?: { id: string; photoUrl: string | null } | null,
+    profile?: { id: string; photoUrl: string | null; sfxSlots?: SfxSlot[] } | null,
   ): Player {
     const player: Player = {
       id,
@@ -160,6 +167,7 @@ export class Room {
       avatar: String(avatar || '🐱').slice(0, 8),
       profileId: profile?.id ?? null,
       photoUrl: profile?.photoUrl ?? null,
+      sfxSlots: profile?.sfxSlots ?? [],
       totalScore: 0,
       roundScore: 0,
       words: [],
@@ -199,6 +207,8 @@ export class Room {
       nickname: p.nickname,
       avatar: p.avatar,
       photoUrl: p.photoUrl ?? undefined,
+      profileId: p.profileId ?? undefined,
+      sfxSlots: p.sfxSlots.length > 0 ? p.sfxSlots : undefined,
       score: p.totalScore,
       connected: p.connected,
       isHost: p.id === this.hostId,
@@ -388,6 +398,28 @@ export class RoomRegistry {
 
   get(code: string): Room | undefined {
     return this.rooms.get(code.toUpperCase());
+  }
+
+  /**
+   * true se `profileId` sta giocando in una stanza INSIEME a `otherProfileId`.
+   *
+   * Serve per l'accesso alle clip audio: le registrazioni restano private, ma
+   * chi condivide la partita con il proprietario può sentirle (a volume ridotto)
+   * quando l'altro trova una parola. Basta essere nella stessa stanza, in
+   * qualsiasi fase: l'host le scarica già in lobby.
+   */
+  sharesRoomWith(profileId: string, otherProfileId: string): boolean {
+    if (profileId === otherProfileId) return true;
+    for (const room of this.rooms.values()) {
+      const players = [...room.players.values()];
+      if (
+        players.some((p) => p.profileId === profileId) &&
+        players.some((p) => p.profileId === otherProfileId)
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   delete(code: string): void {

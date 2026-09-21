@@ -16,6 +16,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadWordIndex, type WordIndex } from './wordIndex.js';
 import {
   schedaFileName,
   schedaKey,
@@ -49,6 +50,14 @@ export const EXTRA_SCHEDE_DIR = process.env.SCHEDE_EXTRA_DIR
   ? path.resolve(process.env.SCHEDE_EXTRA_DIR)
   : path.join(DATA_DIR, 'schede-extra');
 
+/**
+ * Cartella del dizionario: contiene `words.txt` e `word-index.br`.
+ * Sovrascrivibile con `DICTIONARY_DIR` (come per le fonti del build).
+ */
+export const DICTIONARY_DATA_DIR = process.env.DICTIONARY_DIR
+  ? path.resolve(process.env.DICTIONARY_DIR)
+  : path.resolve(__dirname, '../../../packages/dictionary/data');
+
 /** Metadati di una scheda, senza l'elenco completo delle parole. */
 export interface SchedaMeta {
   id: string;
@@ -75,6 +84,18 @@ export class SchedaCatalog {
   private readonly byKey = new Map<string, Scheda[]>();
   /** Indice parola -> occorrenze, costruito pigramente per il catalogo parole. */
   private wordIndex: { words: Map<string, { occurrences: number; schedaIds: string[] }> } | null = null;
+  /**
+   * Categoria grammaticale e voce Wikizionario per le parole del dizionario.
+   * Arriva da `word-index.br`; se assente la pagina Parole resta senza tag.
+   */
+  private lexical: WordIndex = loadWordIndex(path.join(DICTIONARY_DATA_DIR, 'word-index.br'));
+
+  /**
+   * Sostituisce l'indice lessicale (usato dai test e dopo una rigenerazione).
+   */
+  setWordIndex(index: WordIndex): void {
+    this.lexical = index;
+  }
 
   /** Carica schede base + extra. */
   static load(): SchedaCatalog {
@@ -183,6 +204,8 @@ export class SchedaCatalog {
     const search = query.search?.trim().toLowerCase() ?? '';
     const entries: WordCatalogEntry[] = [];
     const byLengthAll = new Map<number, number>();
+    const byPosAll = new Map<string, number>();
+    let withEntryAll = 0;
 
     for (const [word, entry] of index.words) {
       // distribuzione per lunghezza sull'intero catalogo filtrato (prima della paginazione)
@@ -196,7 +219,14 @@ export class SchedaCatalog {
       if (query.maxLength !== undefined && word.length > query.maxLength) continue;
       if (search && !word.includes(search)) continue;
 
+      const pos = this.lexical.pos.get(word) ?? 'n.c.';
+      if (query.pos && query.pos !== 'all' && pos !== query.pos) continue;
+      const hasEntry = this.lexical.hasEntry.has(word);
+      if (query.onlyWithEntry && !hasEntry) continue;
+
       byLengthAll.set(word.length, (byLengthAll.get(word.length) ?? 0) + 1);
+      byPosAll.set(pos, (byPosAll.get(pos) ?? 0) + 1);
+      if (hasEntry) withEntryAll++;
       entries.push({
         word,
         length: word.length,
@@ -204,6 +234,9 @@ export class SchedaCatalog {
         // Formula CENTRALIZZATA: una copia hardcoded resterebbe indietro se
         // cambiassimo il punteggio (è già successo con la validazione difficoltà).
         points: schedaWordPoints(word.length),
+        pos,
+        hasEntry,
+        display: this.lexical.display.get(word),
       });
     }
 
@@ -224,7 +257,19 @@ export class SchedaCatalog {
       .map(([length, words]) => ({ length, words }))
       .sort((a, b) => a.length - b.length);
 
-    return { entries: page, total, byLength, offset: query.offset, limit: query.limit };
+    const byPos = [...byPosAll.entries()]
+      .map(([pos, words]) => ({ pos, words }))
+      .sort((a, b) => b.words - a.words);
+
+    return {
+      entries: page,
+      total,
+      byLength,
+      byPos,
+      withEntry: withEntryAll,
+      offset: query.offset,
+      limit: query.limit,
+    };
   }
 
   /** Indice parole, costruito alla prima richiesta e riusato. */

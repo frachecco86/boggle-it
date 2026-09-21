@@ -18,16 +18,43 @@ function pool() {
 }
 
 describe('generatore schede', () => {
-  it('TUTTI i livelli risolvono contro il dizionario completo', () => {
-    // Scelta di prodotto: il lessico comune (60k) aveva lacune sui verbi —
-    // 'vota', 'votare', 'cliccare', 'condividere' mancavano del tutto, quindi
-    // parole comunissime non erano componibili. Ora si usa il dizionario completo
-    // (387k forme) filtrato per troncamenti e parole funzionali.
-    expect(solvingTrieFor('molto-facile')).toBe('full');
-    expect(solvingTrieFor('facile')).toBe('full');
+  it('i livelli facili risolvono sul lessico comune, gli altri sul completo', () => {
+    /*
+     * Scelta di prodotto (v0.15): la difficoltà è data dal LESSICO oltre che dalla
+     * griglia. Nei livelli facili devono uscire solo parole di uso quotidiano
+     * (`casa`, `testa`), non forme astruse (`contumace`, `sbrecciare`): per questo
+     * `molto-facile` e `facile` risolvono contro il lessico comune. Da `normale`
+     * in su si usa il dizionario completo, con la banda di punteggio e la rarità a
+     * controllare la qualità.
+     */
+    expect(solvingTrieFor('molto-facile')).toBe('common');
+    expect(solvingTrieFor('facile')).toBe('common');
     expect(solvingTrieFor('normale')).toBe('full');
     expect(solvingTrieFor('difficile')).toBe('full');
     expect(solvingTrieFor('estremo')).toBe('full');
+  });
+
+  it('la rarità viene applicata: senza il predicato nessuna parola è rara', () => {
+    const p = pool();
+    const tries = {
+      full: buildTrie(FULL, { maxLength: 12 }),
+      common: buildTrie(COMMON, { maxLength: 12 }),
+    };
+    // Con un budget di rarità pari a zero, una scheda 4×4 normale può ancora
+    // esistere (il criterio fa scattare il ripiego), ma non deve contenere
+    // parole rare in quantità: il predicato conta davvero.
+    const scheda = generateScheda({
+      size: 4,
+      difficulty: 'normale',
+      tries,
+      id: 'rare-001',
+      maxAttempts: 200,
+      isRare: (w) => !COMMON.includes(w),
+    });
+    if (!scheda) return;
+    const rare = scheda.words.filter((w) => !COMMON.includes(w)).length;
+    // Il budget per 4×4 normale è floor(18 × 0.7) = 12.
+    expect(rare).toBeLessThanOrEqual(12);
   });
 
   it('genera una scheda coerente con la sua griglia', () => {

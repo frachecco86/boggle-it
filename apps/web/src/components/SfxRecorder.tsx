@@ -13,7 +13,8 @@ interface Props {
 
 /**
  * Registratore delle 5 fasce audio. Ogni fascia è opzionale: se manca, si usa
- * l'effetto sintetizzato. Le clip sono personali (il server le tiene private).
+ * l'effetto sintetizzato. In multiplayer gli avversari sentono la clip del
+ * giocatore che ha trovato la parola (a volume ridotto): vedi `AudioEngine`.
  */
 export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
   const supported = isRecordingSupported();

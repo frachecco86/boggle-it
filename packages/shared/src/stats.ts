@@ -239,6 +239,21 @@ export interface WordCatalogEntry {
   occurrences: number;
   /** Punteggio che vale (lunghezza - 2, come nel Boggle). */
   points: number;
+  /**
+   * Categoria grammaticale abbreviata (`sost`, `verb`, `agg`, …) da Morph-it o
+   * Wikizionario; `n.c.` se non classificata (~1% con il filtro headword).
+   */
+  pos: string;
+  /**
+   * true se esiste una voce di Wikizionario per questa parola: la UI mostra il
+   * link alla definizione. Disponibile per i soli headword (~45k parole).
+   */
+  hasEntry: boolean;
+  /**
+   * Forma accentata per il link (`citta` → `città`). Assente quando la parola
+   * normalizzata coincide col titolo della voce.
+   */
+  display?: string;
 }
 
 /** Filtri del catalogo parole. */
@@ -260,6 +275,10 @@ export interface WordCatalogQuery {
    * Serve a rispondere a "questa parola vale nella scheda che sto giocando?".
    */
   schedaId?: string;
+  /** Categoria grammaticale, o `'all'`/assente per tutte. */
+  pos?: string;
+  /** true = solo parole con voce di Wikizionario (definizione disponibile). */
+  onlyWithEntry?: boolean;
   sort: 'word' | 'length' | 'occurrences';
   direction: 'asc' | 'desc';
   limit: number;
@@ -272,6 +291,14 @@ export interface WordCatalogResponse {
   total: number;
   /** Distribuzione per lunghezza sull'INTERO catalogo filtrato. */
   byLength: Array<{ length: number; words: number }>;
+  /**
+   * Categorie grammaticali presenti sull'INTERO catalogo filtrato, con il numero
+   * di parole. Alimenta il selettore "categoria" senza che il client debba
+   * conoscerle in anticipo.
+   */
+  byPos: Array<{ pos: string; words: number }>;
+  /** Quante parole hanno una voce di Wikizionario (definizione disponibile). */
+  withEntry: number;
   offset: number;
   limit: number;
 }

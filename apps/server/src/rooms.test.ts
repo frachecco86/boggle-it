@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createDictionary } from '@boggle/dictionary';
 import type { Grid } from '@boggle/shared';
-import { Room, clampDuration } from './rooms.js';
+import { Room, RoomRegistry, clampDuration } from './rooms.js';
 
 /** Griglia fissa di test: tutte le lettere note, layout 4x4. */
 function fixedGrid(letters: string[]): Grid {
@@ -238,5 +238,42 @@ describe('Numero massimo di giocatori', () => {
     expect(room.isFull).toBe(true);
     // Un nuovo ingresso non è possibile.
     expect(room.isFull).toBe(true);
+  });
+});
+
+describe('Clip audio condivise in stanza', () => {
+  it('addPlayer conserva le fasce audio del profilo e le espone in publicPlayers', () => {
+    const room = new Room('SFX01', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice', '🐱', {
+      id: 'profile-a',
+      photoUrl: null,
+      sfxSlots: ['3', '5'],
+    });
+    const [pub] = room.publicState().players;
+    expect(pub!.profileId).toBe('profile-a');
+    expect(pub!.sfxSlots).toEqual(['3', '5']);
+  });
+
+  it('chi non ha registrato clip non espone fasce', () => {
+    const room = new Room('SFX02', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice', '🐱', { id: 'profile-a', photoUrl: null, sfxSlots: [] });
+    const [pub] = room.publicState().players;
+    expect(pub!.sfxSlots).toBeUndefined();
+  });
+
+  it('registry.sharesRoomWith consente solo a chi è nella stessa stanza', () => {
+    const registry = new RoomRegistry(DICT);
+    const room = registry.create(4, 1, 'normale', 60_000);
+    room.addPlayer('p1', 'Alice', '🐱', { id: 'profile-a', photoUrl: null, sfxSlots: ['3'] });
+    room.addPlayer('p2', 'Bob', '🐶', { id: 'profile-b', photoUrl: null, sfxSlots: ['4'] });
+
+    // Stessa stanza: le clip dell'uno sono udibili dall'altro.
+    expect(registry.sharesRoomWith('profile-a', 'profile-b')).toBe(true);
+    expect(registry.sharesRoomWith('profile-b', 'profile-a')).toBe(true);
+    // Se stessi: sempre consentito (è il proprietario).
+    expect(registry.sharesRoomWith('profile-a', 'profile-a')).toBe(true);
+    // Estraneo: nessuna condivisione.
+    expect(registry.sharesRoomWith('profile-c', 'profile-a')).toBe(false);
+    expect(registry.sharesRoomWith('profile-a', 'profile-c')).toBe(false);
   });
 });

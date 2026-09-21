@@ -121,16 +121,16 @@ describe('AudioEngine — volume delle esultanze', () => {
     expect(own).toBeGreaterThan(0);
     expect(opponent).toBeGreaterThan(0);
     /*
-     * L'avversario si sente, ma più piano.
+     * L'avversario si sente, ma a METÀ volume.
      *
-     * Il rapporto era 0.35 ma era TROPPO basso: il picco scendeva a ~0.066 e,
-     * moltiplicato per il volume degli effetti (~0.6), diventava ~0.04 —
-     * impercettibile su un telefono. A 0.7 resta distinto ma udibile.
+     * Mezzo volume (0.5) è il compromesso scelto: la parola dell'altro si sente
+     * chiaramente ma resta distinta dalla propria, anche con una clip registrata
+     * al posto del motivo sintetizzato.
      */
     expect(opponent).toBeLessThan(own);
-    expect(opponent / own).toBeCloseTo(0.7, 2);
+    expect(opponent / own).toBeCloseTo(0.5, 2);
     // Verifica che il volume assoluto sia udibile, non solo "più basso".
-    expect(opponent).toBeGreaterThan(0.08);
+    expect(opponent).toBeGreaterThan(0.05);
   });
 
   it('la differenza vale per tutte le lunghezze di parola', async () => {
@@ -165,5 +165,56 @@ describe('AudioEngine — volume delle esultanze', () => {
     engine.playOpponentWord(5);
     engine.playWordFound(5);
     expect(peaks).toHaveLength(0);
+  });
+
+  it('suona la clip PERSONALE dell\'avversario, non quella di chi ascolta', async () => {
+    const engine = await makeEngine();
+    /*
+     * Scenario del bug: sono loggato con il mio profilo e ho una clip per la
+     * fascia 5; anche l'avversario ne ha una. Quando TROVA LUI, deve sentirsi la
+     * SUA clip e non la mia. Le due clip sono distinguibili perché hanno volumi
+     * diversi: quella dell'avversario entra dall'elemento audio (audio.volume),
+     * mentre i motivi sintetizzati scrivono sui gain (peaks).
+     */
+    const played: Array<{ src: string; volume: number }> = [];
+    vi.stubGlobal(
+      'Audio',
+      class {
+        loop = false;
+        preload = '';
+        crossOrigin = '';
+        volume = 1;
+        paused = true;
+        currentTime = 0;
+        constructor(public src = '') {}
+        play() {
+          played.push({ src: this.src, volume: this.volume });
+          return Promise.resolve();
+        }
+        pause() {}
+      },
+    );
+
+    engine.setPersonalClips([{ slot: '5', url: 'blob:mine' }]);
+    engine.setOpponentClips('p2', [{ slot: '5', url: 'blob:opponent' }]);
+
+    engine.playWordFound(5);
+    expect(played.at(-1)).toEqual({ src: 'blob:mine', volume: expect.any(Number) });
+
+    engine.playOpponentWord(5, 'p2');
+    expect(played.at(-1)?.src).toBe('blob:opponent');
+    // La clip dell'avversario suona a metà del proprio volume.
+    const ownClipVolume = played[0]!.volume;
+    expect(played.at(-1)!.volume).toBeCloseTo(ownClipVolume * 0.5, 5);
+  });
+
+  it('senza clip dell\'avversario ricade sul motivo sintetizzato', async () => {
+    const engine = await makeEngine();
+    engine.setPersonalClips([{ slot: '4', url: 'blob:mine' }]);
+    // Nessuna clip registrata per p2: la propria NON deve essere usata al suo posto.
+    engine.setOpponentClips('p2', []);
+    peaks = [];
+    engine.playOpponentWord(4, 'p2');
+    expect(peaks.length).toBeGreaterThan(0);
   });
 });

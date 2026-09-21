@@ -5,6 +5,7 @@
 
 import type { Difficulty } from './difficulty.js';
 import type { MusicChoice } from './music.js';
+import type { SfxSlot } from './profile.js';
 
 export type GridSize = 4 | 5 | 6;
 
@@ -38,6 +39,18 @@ export interface PlayerPublic {
    * dell'avatar, solo più personale).
    */
   photoUrl?: string;
+  /**
+   * Id del profiles persistente, se il giocatore è loggato.
+   * Serve a scaricare le clip audio condivise in stanza: le registrazioni
+   * restano private, ma chi gioca nella stessa partita può sentirle.
+   */
+  profileId?: string;
+  /**
+   * Fasce di lunghezza per cui il giocatore ha una clip audio registrata.
+   * Il contenuto NON è qui: gli avversari scaricano le clip solo se sono
+   * nella stessa stanza (vedi `GET /profiles/:id/sfx/:slot`).
+   */
+  sfxSlots?: SfxSlot[];
   score: number;
   connected: boolean;
   isHost: boolean;
