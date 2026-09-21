@@ -12,9 +12,59 @@ interface GridBoardProps {
   flashError?: boolean;
 }
 
+/** Segmento con freccia: linea + punta, in coordinate locali all'SVG del trail. */
+interface TrailArrow {
+  /** Linea dal bordo della cella di partenza al bordo di quella di arrivo. */
+  line: { x1: number; y1: number; x2: number; y2: number };
+  /** Path della punta (triangolo pieno) orientata verso la cella di arrivo. */
+  head: string;
+}
+
 /**
- * Griglia con swipe. Il percorso è renderizzato come trailer SVG luminoso
- * che collega i centri delle celle selezionate.
+ * Costruisce la catena di frecce del trail.
+ *
+ * Perché non una polilinea continua come prima: nel Boggle originale i
+ * collegamenti sono frecce corte tra una lettera e la successiva. Qui ogni
+ * segmento è accorciato di un margine (così non copre le lettere) e termina con
+ * una punta piccola, proporzionata alla lunghezza del segmento.
+ */
+function buildArrows(points: { x: number; y: number }[]): TrailArrow[] {
+  const arrows: TrailArrow[] = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 1) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    // Margine dal centro di ciascuna cella: la freccia vive nel "corridoio" tra
+    // le due lettere. 0.3 * lunghezza ≈ il bordo della cella.
+    const inset = len * 0.3;
+    const x1 = a.x + ux * inset;
+    const y1 = a.y + uy * inset;
+    const x2 = b.x - ux * inset;
+    const y2 = b.y - uy * inset;
+    // Punta: piccola, mai più lunga del 30% del segmento.
+    const headLen = Math.min(len * 0.26, 11);
+    const headHalf = Math.min(len * 0.2, 5.5);
+    // Perpendicolare unitaria.
+    const px = -uy;
+    const py = ux;
+    const baseX = x2 - ux * headLen;
+    const baseY = y2 - uy * headLen;
+    arrows.push({
+      line: { x1, y1, x2, y2 },
+      head: `M ${x2} ${y2} L ${baseX + px * headHalf} ${baseY + py * headHalf} L ${baseX - px * headHalf} ${baseY - py * headHalf} Z`,
+    });
+  }
+  return arrows;
+}
+
+/**
+ * Griglia con swipe. Il percorso è renderizzato come catena di frecce luminose
+ * che collegano le celle selezionate (stile Boggle).
  *
  * Il riconoscimento delle celle è delegato a `SwipeController`
  * (settori angolari + deadzone + isteresi): vedi `game/cellTracker.ts`.
@@ -133,7 +183,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       .map((p) => ({ x: p.x - dx, y: p.y - dy }));
   }, [selectedPath, centers]);
 
-  const polyPoints = trailPoints.map((p) => `${p.x},${p.y}`).join(' ');
+  const arrows = useMemo(() => buildArrows(trailPoints), [trailPoints]);
 
   return (
     <div
@@ -143,12 +193,25 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       onContextMenu={(e) => e.preventDefault()}
     >
       <svg ref={trailSvgRef} className="grid-trail" aria-hidden>
-        {polyPoints && (
-          <>
-            <polyline className="grid-trail__glow" points={polyPoints} />
-            <polyline className="grid-trail__line" points={polyPoints} />
-          </>
-        )}
+        {arrows.map((arrow, i) => (
+          <g key={i}>
+            <line
+              className="grid-trail__glow"
+              x1={arrow.line.x1}
+              y1={arrow.line.y1}
+              x2={arrow.line.x2}
+              y2={arrow.line.y2}
+            />
+            <line
+              className="grid-trail__line"
+              x1={arrow.line.x1}
+              y1={arrow.line.y1}
+              x2={arrow.line.x2}
+              y2={arrow.line.y2}
+            />
+            <path className="grid-trail__head" d={arrow.head} />
+          </g>
+        ))}
       </svg>
       <div className="grid-cells" style={{ gridTemplateColumns: `repeat(${grid.size}, 1fr)` }}>
         {grid.tiles.map((tile) => {

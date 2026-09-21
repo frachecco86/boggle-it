@@ -9,6 +9,7 @@ import {
   type WordCatalogResponse,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 import { fetchWordCatalog } from '../game/statsClient.js';
 
 type SortField = WordCatalogQuery['sort'];
@@ -29,7 +30,6 @@ const PAGE_SIZE = 100;
  * Una parola presente in molte schede è più facile da incontrare.
  */
 export function WordsScreen() {
-  const setScreen = useAppStore((s) => s.setScreen);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortField>('occurrences');
   const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
@@ -100,9 +100,7 @@ export function WordsScreen() {
 
   return (
     <div className="screen words">
-      <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-        ← Home
-      </button>
+      <BackHome />
 
       <header className="words__head">
         <h2 className="screen__title">Parole</h2>

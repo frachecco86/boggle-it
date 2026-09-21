@@ -8,6 +8,7 @@ import {
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { GridPreview } from '../components/GridPreview.js';
+import { BackHome } from '../components/BackHome.js';
 
 const SIZES: { size: GridSize; label: string; hint: string }[] = [
   { size: 4, label: '4 × 4', hint: 'Classica · 16 lettere' },
@@ -23,7 +24,6 @@ export function SoloSetupScreen({ onStart }: { onStart: () => void }) {
     soloRounds,
     soloRoundDurationMs,
     setSoloSetup,
-    setScreen,
   } = useAppStore();
 
   const [size, setSize] = useState<GridSize>(soloGridSize);
@@ -35,9 +35,7 @@ export function SoloSetupScreen({ onStart }: { onStart: () => void }) {
 
   return (
     <div className="screen setup">
-      <button className="btn btn--ghost setup__back" onClick={() => setScreen('home')}>
-        ← Indietro
-      </button>
+      <BackHome />
       <h2 className="screen__title">Partita singola</h2>
 
       <section className="setup__section">

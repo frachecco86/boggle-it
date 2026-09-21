@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { scoreForWord, type Scheda } from '@boggle/shared';
 import { loadCatalog, loadScheda, type CatalogInfo } from '../game/schedeLoader.js';
 import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 
 /**
  * Pagina scheda: griglia e TUTTE le parole trovabili.
@@ -10,7 +11,7 @@ import { useAppStore } from '../state/store.js';
  * a studiare le griglie. L'elenco è raggruppato per lunghezza, con i punti.
  */
 export function SchedaScreen() {
-  const { schedaId, setSchedaId, setScreen } = useAppStore();
+  const { schedaId, setSchedaId } = useAppStore();
   const [scheda, setScheda] = useState<Scheda | null>(null);
   const [catalog, setCatalog] = useState<CatalogInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -69,9 +70,7 @@ export function SchedaScreen() {
   return (
     <div className="screen scheda">
       <div className="scheda__topbar">
-        <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-          ← Home
-        </button>
+        <BackHome />
         <div className="scheda__picker">
           <label className="field__label" htmlFor="scheda-select">
             Scheda

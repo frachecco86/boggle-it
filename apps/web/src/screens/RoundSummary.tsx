@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { BackHome } from '../components/BackHome.js';
 
 interface RoundSummaryProps {
   round: number;
@@ -14,6 +15,12 @@ interface RoundSummaryProps {
   allWords?: string[];
   onNext: () => void;
   onExit: () => void;
+  /**
+   * Esito della registrazione della partita in classifica (solo a fine partita).
+   * Trasformare un fallimento silenzioso in un messaggio esplicito è il modo più
+   * diretto per non far credere che la partita sia salvata quando non lo è.
+   */
+  saveStatus?: 'idle' | 'anonymous' | 'saving' | 'saved' | 'failed';
 }
 
 /**
@@ -25,9 +32,8 @@ interface RoundSummaryProps {
  * di quanto c'era ancora da scoprire.
  */
 export function RoundSummary(props: RoundSummaryProps) {
-  const { round, rounds, score, totalScore, words, missedWords, isGameOver, allWords, onNext, onExit } =
-    props;
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { round, rounds, score, totalScore, words, missedWords, isGameOver, allWords, onNext, onExit, saveStatus } =
+    props;  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [filterLength, setFilterLength] = useState<number | 'all'>('all');
   /** Mostra/nasconde le parole mancate (l'elenco completo può essere lungo). */
   const [showMissed, setShowMissed] = useState(true);
@@ -122,6 +128,7 @@ export function RoundSummary(props: RoundSummaryProps) {
 
   return (
     <div className="screen summary">
+      <BackHome confirm={!isGameOver} />
       <canvas ref={canvasRef} className="summary__confetti" aria-hidden />
       <h2 className="screen__title">
         {isGameOver ? 'Partita finita' : `Fine round ${round} di ${rounds}`}
@@ -135,6 +142,15 @@ export function RoundSummary(props: RoundSummaryProps) {
       <p className="summary__total">
         Totale: <strong>{totalScore}</strong>
       </p>
+
+      {isGameOver && saveStatus && saveStatus !== 'idle' && (
+        <p className={`summary__save summary__save--${saveStatus}`}>
+          {saveStatus === 'saving' && 'Salvo la partita in classifica…'}
+          {saveStatus === 'saved' && '✓ Partita salvata in classifica.'}
+          {saveStatus === 'anonymous' && 'Gioca con un profilo per entrare in classifica.'}
+          {saveStatus === 'failed' && '⚠ Non sono riuscito a salvare la partita in classifica (server irraggiungibile).'}
+        </p>
+      )}
 
       {/* Riassunto: quante trovate su quante possibili. */}
       <p className="summary__ratio">

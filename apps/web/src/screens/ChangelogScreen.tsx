@@ -1,18 +1,14 @@
 import { APP_VERSION, CHANGE_LABELS, RELEASES } from '../version.js';
-import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 
 /**
  * Pagina delle novità: ogni versione con le funzionalità introdotte.
  * Le voci sono in linguaggio tecnico ma leggibile: cosa è cambiato e perché.
  */
 export function ChangelogScreen() {
-  const setScreen = useAppStore((s) => s.setScreen);
-
   return (
     <div className="screen changelog">
-      <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-        ← Home
-      </button>
+      <BackHome />
       <header className="changelog__head">
         <h2 className="screen__title">Novità</h2>
         <p className="screen__hint">

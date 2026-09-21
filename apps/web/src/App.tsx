@@ -11,6 +11,7 @@ import { LeaderboardScreen } from './screens/LeaderboardScreen.js';
 import { WordsScreen } from './screens/WordsScreen.js';
 import { VersionBar } from './components/VersionBar.js';
 import { ThemeToggle } from './components/ThemeToggle.js';
+import { FloatingControls } from './components/FloatingControls.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
@@ -34,6 +35,14 @@ export function App() {
 
   // Collega gli eventi Socket.IO allo store.
   useEffect(() => bindSocketEvents(), []);
+
+  /**
+   * Carica il catalogo musicale dal server (tracce incluse + MP3 dell'admin).
+   * Se il server non risponde si usano comunque le tracce incluse nel bundle.
+   */
+  useEffect(() => {
+    void useAppStore.getState().refreshMusicCatalog();
+  }, []);
 
   /**
    * Idrata il profilo attivo all'avvio.
@@ -71,6 +80,7 @@ export function App() {
     <div className="app">
       <ThemeToggle />
       <VersionBar />
+      <FloatingControls />
       {screen === 'home' && <HomeScreen />}
       {screen === 'solo-setup' && <SoloSetupScreen onStart={() => setScreen('solo-game')} />}
       {screen === 'solo-game' && <SoloGameScreen />}

@@ -22,6 +22,9 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [busySlot, setBusySlot] = useState<SfxSlot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Fascia appena salvata: mostra una conferma breve, poi sparisce. */
+  const [savedSlot, setSavedSlot] = useState<SfxSlot | null>(null);
+  const savedTimer = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
 
   // Pulizia: microfono mai lasciato aperto.
@@ -29,6 +32,7 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
     return () => {
       recorderRef.current?.cancel();
       if (tickRef.current !== null) window.clearInterval(tickRef.current);
+      if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
     };
   }, []);
 
@@ -68,6 +72,18 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
       try {
         const clip = await recorder.stop();
         await onSave(slot, clip.dataUrl, clip.durationMs);
+        /*
+         * Conferma esplicita di avvenuto salvataggio.
+         *
+         * Prima l'unico segnale era il passaggio della riga a "registrato": se
+         * il salvataggio falliva in modo silenzioso (o la clip veniva
+         * sovrascritta con la vecchia) l'utente non aveva modo di accorgersene.
+         * Ora c'è un messaggio verde per qualche secondo.
+         */
+        setError(null);
+        setSavedSlot(slot);
+        if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
+        savedTimer.current = window.setTimeout(() => setSavedSlot(null), 3000);
       } catch (err) {
         // Mostra il motivo reale (es. errore del server) invece di un messaggio
         // generico: senza, ogni problema appare come "registrazione non riuscita".
@@ -116,6 +132,8 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
 
               {recording ? (
                 <span className="sfx-row__elapsed">{(elapsedMs / 1000).toFixed(1)}s</span>
+              ) : savedSlot === slot ? (
+                <span className="sfx-row__saved">✓ salvato</span>
               ) : hasClip ? (
                 <span className="sfx-row__ok">registrato</span>
               ) : (
@@ -129,7 +147,9 @@ export function SfxRecorder({ clips, onSave, onDelete, maxDurationMs }: Props) {
                     className="btn btn--tiny"
                     onClick={() => {
                       const url = clips[slot];
-                      if (url) void new Audio(url).play().catch(() => undefined);
+                      // `?t=` evita che il browser serva una copia in cache della
+                      // clip precedente dopo una riregistrazione.
+                      if (url) void new Audio(`${url}#t=${Date.now()}`).play().catch(() => undefined);
                     }}
                   >
                     ▶

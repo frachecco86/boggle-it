@@ -1,4 +1,5 @@
 import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 
 /** Riepilogo multiplayer: classifica finale o di round + parole per giocatore. */
 export function MultiplayerSummaryScreen() {
@@ -11,6 +12,7 @@ export function MultiplayerSummaryScreen() {
 
   return (
     <div className="screen summary">
+      <BackHome onLeave={leaveRoom} />
       <h2 className="screen__title">{isFinal ? 'Classifica finale' : `Fine round ${room?.currentRound ?? ''}`}</h2>
 
       <ul className="results-list">

@@ -4,7 +4,8 @@ import type {
   Difficulty,
   Grid,
   GridSize,
-  MusicId,
+  MusicChoice,
+  MusicTrackMeta,
   PlayerPublic,
   ProfilePrivate,
   RoomState,
@@ -27,6 +28,36 @@ async function fetchClipBlobUrl(url: string, token: string): Promise<string> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) throw new Error(`Clip non disponibile (${res.status})`);
   return URL.createObjectURL(await res.blob());
+}
+
+/**
+ * Scarica il catalogo musicale dal server (tracce incluse + MP3 dell'admin).
+ * In caso di errore il client usa comunque le tracce incluse nel bundle: la
+ * musica non deve mai impedire di giocare.
+ */
+/**
+ * Log di diagnosi per le clip audio, attivo solo con `localStorage.sboobleDebug = '1'`.
+ *
+ * Serve perché i problemi di audio sono "silenziosi": se una clip non viene
+ * sovrascritta l'utente non vede un errore, sente solo il suono vecchio.
+ */
+function emitSfxDebug(message: string, data: unknown): void {
+  try {
+    if (localStorage.getItem('sboobleDebug') === '1') console.info(`[sfx] ${message}`, data);
+  } catch {
+    /* storage non disponibile */
+  }
+}
+
+async function loadMusicCatalog(): Promise<MusicTrackMeta[] | null> {
+  try {
+    const res = await fetch(`${SERVER_BASE}/music`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { tracks?: MusicTrackMeta[] };
+    return Array.isArray(body.tracks) && body.tracks.length > 0 ? body.tracks : null;
+  } catch {
+    return null;
+  }
 }
 import {
   activeToken,
@@ -124,7 +155,16 @@ interface AppState {
   saveProfilePhoto: (dataUrl: string | null) => Promise<void>;
   saveProfileSfx: (slot: SfxSlot, dataUrl: string, durationMs: number) => Promise<void>;
   deleteProfileSfx: (slot: SfxSlot) => Promise<void>;
-  setProfileMusic: (musicId: MusicId | 'none') => Promise<void>;
+  setProfileMusic: (musicId: MusicChoice) => Promise<void>;
+  /** Passa alla traccia successiva e, se era spenta, riattiva la musica. */
+  nextMusicTrack: () => MusicChoice;
+  /**
+   * Catalogo musicale (tracce incluse + MP3 caricati dall'admin).
+   * Caricato all'avvio e aggiornabile dal pannello admin.
+   */
+  musicCatalog: MusicTrackMeta[];
+  /** Ricarica il catalogo dal server (dopo un upload/rimozione dell'admin). */
+  refreshMusicCatalog: () => Promise<void>;
   /** Scheda da mostrare nella pagina scheda (id dal catalogo). */
   schedaId: string | null;
   setSchedaId: (id: string | null) => void;
@@ -151,7 +191,7 @@ interface AppState {
     difficulty: Difficulty,
     rounds: number,
     roundDurationMs: number,
-    musicId?: MusicId | 'none',
+    musicId?: MusicChoice,
     maxPlayers?: number,
   ) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
@@ -186,6 +226,7 @@ export const useAppStore = create<AppState>()(
       finalScores: null,
       errorMessage: null,
       schedaId: null,
+      musicCatalog: audio.getCatalog(),
       adminToken: '',
       profiles: listProfiles(),
       activeProfileId: getActiveProfile()?.id ?? null,
@@ -459,15 +500,35 @@ export const useAppStore = create<AppState>()(
             const profile = (await me.json()) as ProfilePrivate;
             const clip = profile.sfx.find((c) => c.slot === slot);
             if (clip) {
-              // Blob autenticato: `<audio src>` non può mandare l'header.
-              const blobUrl = await fetchClipBlobUrl(`${SERVER_BASE}${clip.url}`, token);
+              /*
+               * SOVRASCRITTURA di una clip esistente.
+               *
+               * Due accortezze che mancavano e facevano sì che dopo una
+               * riregistrazione si continuasse a sentire (o a vedere) la VECCHIA
+               * registrazione:
+               *  1. il blob URL precedente va revocato: senza, restava vivo e
+               *     `sfxUrls[slot]` poteva puntare ancora al vecchio blob;
+               *  2. l'URL di download deve essere unico per versione, altrimenti
+               *     il browser (e il proxy) possono servire la risposta in cache
+               *     dell'endpoint precedente.
+               */
+              const previous = get().sfxUrls[slot];
+              // Cache-busting con la versione della clip aggiornata dal server.
+              const versioned = `${clip.url}?v=${clip.updatedAt}`;
+              const blobUrl = await fetchClipBlobUrl(`${SERVER_BASE}${versioned}`, token);
+              emitSfxDebug('clip riregistrata', { slot, versioned, bytes: blobUrl.length });
+              if (previous) URL.revokeObjectURL(previous);
               const sfxUrls: Partial<Record<SfxSlot, string>> = {
                 ...get().sfxUrls,
                 [slot]: blobUrl,
               };
               audio.setPersonalClip(slot, blobUrl);
               updateSavedProfile(id, { profile });
-              set({ profile, sfxUrls });
+              set({ profile, sfxUrls, profileError: null });
+            } else {
+              // Il server non riporta la clip appena salvata: senza questo
+              // avviso l'utente crede di averla registrata ma non suonerà.
+              throw new Error('La clip non risulta salvata: riprova');
             }
           }
         } catch (err) {
@@ -489,6 +550,10 @@ export const useAppStore = create<AppState>()(
             headers: { Authorization: `Bearer ${token}` },
           });
           audio.clearPersonalClip(slot);
+          // Revoca il blob: senza, l'oggetto resta in memoria anche dopo aver
+          // rimosso la clip (e il pulsante ▶ continuerebbe a puntarci).
+          const previous = get().sfxUrls[slot];
+          if (previous) URL.revokeObjectURL(previous);
           const me = await fetch(`${SERVER_BASE}/me`, {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -526,6 +591,26 @@ export const useAppStore = create<AppState>()(
         } catch {
           // La preferenza è già applicata localmente: il salvataggio può attendere.
         }
+      },
+
+      /**
+       * Tasto ⏭: passa alla traccia successiva.
+       *
+       * Oltre a cambiare la musica locale, la salva sulla preferenza del profilo
+       * (come `setProfileMusic`), così la scelta sopravvive al reload.
+       */
+      nextMusicTrack: () => {
+        const trackId = audio.nextMusicTrack();
+        set({ audioSettings: audio.getSettings() });
+        void get().setProfileMusic(trackId);
+        return trackId;
+      },
+
+      refreshMusicCatalog: async () => {
+        const tracks = await loadMusicCatalog();
+        if (!tracks) return;
+        audio.setMusicCatalog(tracks);
+        set({ musicCatalog: tracks, audioSettings: audio.getSettings() });
       },
 
       setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),

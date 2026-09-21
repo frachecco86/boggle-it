@@ -64,7 +64,8 @@ COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary
 COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 
-# Dati persistenti: DB profili + schede generate dall'admin (`schede-extra/`).
+# Dati persistenti: DB profili + schede generate dall'admin (`schede-extra/`)
+# + MP3 caricati dall'admin (`music/`).
 #
 # UN SOLO volume basta per entrambi: i PaaS (Railway) consentono un volume per
 # servizio, quindi teniamo tutto sotto /app/data.

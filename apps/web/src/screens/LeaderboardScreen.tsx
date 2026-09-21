@@ -9,8 +9,8 @@ import {
   type LeaderboardPeriod,
   type PlayerStats,
 } from '@boggle/shared';
-import { useAppStore } from '../state/store.js';
 import { activeToken } from '../game/profileStore.js';
+import { BackHome } from '../components/BackHome.js';
 import { fetchLeaderboard, fetchMyStats } from '../game/statsClient.js';
 
 const KINDS: { id: LeaderboardKind; label: string; hint: string }[] = [
@@ -36,7 +36,6 @@ const SIZES: (GridSize | 'all')[] = ['all', 4, 5, 6];
  * rendere i confronti onesti.
  */
 export function LeaderboardScreen() {
-  const setScreen = useAppStore((s) => s.setScreen);
   // Il token vive nel profileStore, non nello store di navigazione.
   const token = activeToken();
   const [kind, setKind] = useState<LeaderboardKind>('best');
@@ -113,9 +112,7 @@ export function LeaderboardScreen() {
 
   return (
     <div className="screen leaderboard">
-      <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-        ← Home
-      </button>
+      <BackHome />
 
       <header className="leaderboard__head">
         <h2 className="screen__title">Classifica</h2>

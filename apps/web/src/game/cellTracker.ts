@@ -22,11 +22,23 @@ export interface TrackerHooks {
 }
 
 export interface TrackerTuning {
-  /** Distanza minima dal centro (in passi) per cambiare cella. */
+  /**
+   * Distanza minima dal centro (in passi) per cambiare cella.
+   *
+   * Era 0.28 (poco più di un quarto di cella): bastava sfiorare il bordo per
+   * attivare la lettera accanto. 0.42 impone di arrivare quasi a metà cella,
+   * così una passata veloce non "accende" le celle che si sfiorano soltanto.
+   */
   deadZone: number;
   /** Distanza minima per annullare l'ultimo passo (undo), più alta per non farlo per sbaglio. */
   backDeadZone: number;
-  /** Sotto questo rapporto min/max il movimento è considerato diagonale. */
+  /**
+   * Sotto questo rapporto min/max il movimento è considerato diagonale.
+   *
+   * Un valore PIÙ BASSO allarga i settori diagonali: 0.36 corrisponde a una
+   * diagonale accettata entro ~±25° dai 45°, quindi il gesto diagonale non
+   * scivola più sulla cella ortogonale quando il dito devia un po'.
+   */
   diagonalRatio: number;
   /** coseno minimo fra vettore del dito e direzione scelta. */
   alignMin: number;
@@ -37,11 +49,11 @@ export interface TrackerTuning {
 }
 
 export const DEFAULT_TUNING: TrackerTuning = {
-  deadZone: 0.28,
-  backDeadZone: 0.36,
-  diagonalRatio: 0.44,
-  alignMin: 0.8,
-  alignSwitch: 0.93,
+  deadZone: 0.42,
+  backDeadZone: 0.52,
+  diagonalRatio: 0.36,
+  alignMin: 0.86,
+  alignSwitch: 0.95,
   maxChain: 10,
 };
 
@@ -142,7 +154,15 @@ export class CellPathTracker {
     let changed = false;
     for (let s = 1; s <= steps; s++) {
       const t = s / steps;
-      if (this.step({ x: from.x + dx * t, y: from.y + dy * t }, layout, pitch)) {
+      // L'undo è valutato SOLO sull'ultimo campione del segmento.
+      //
+      // Perché: interpolando, i campioni intermedi possono cadere "indietro"
+      // rispetto al centro appena aggiunto. Valutando l'undo anche lì, la cella
+      // veniva aggiunta e tolta più volte nella stessa chiamata (l'oscillazione
+      // faceva dipendere il risultato dalla parità dei campioni). Ora il passo
+      // avanti resta avanti e l'indietro si considera solo sul punto reale del dito.
+      const isLastSample = s === steps;
+      if (this.step({ x: from.x + dx * t, y: from.y + dy * t }, layout, pitch, isLastSample)) {
         changed = true;
       }
     }
@@ -170,7 +190,7 @@ export class CellPathTracker {
   }
 
   /** Un singolo passo greedy: applica deadzone, settore angolare e isteresi. */
-  private step(point: Point, layout: Layout, pitch: number): boolean {
+  private step(point: Point, layout: Layout, pitch: number, allowUndo: boolean): boolean {
     const size = layout.size;
     let changed = false;
 
@@ -215,7 +235,9 @@ export class CellPathTracker {
       const switching = this.committedDir !== null && (this.committedDir.dx !== gx || this.committedDir.dy !== gy);
 
       if (target === penultimo) {
-        // Undo: serve un movimento più deciso, così non si annulla per tremolio.
+        // Undo: solo su un campione reale (non interpolato) e con movimento deciso,
+        // così non si annulla per tremolio né durante un passo in avanti.
+        if (!allowUndo) break;
         if (maxAxis < pitch * this.tuning.backDeadZone) break;
         if (align < this.tuning.alignSwitch) break;
         this.path.pop();

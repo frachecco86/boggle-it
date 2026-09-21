@@ -1,6 +1,7 @@
-import { PROFILE_LIMITS, type MusicChoice } from '@boggle/shared';
+import { PROFILE_LIMITS } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
+import { BackHome } from '../components/BackHome.js';
 import { PhotoEditor } from '../components/PhotoEditor.js';
 import { SfxRecorder } from '../components/SfxRecorder.js';
 import { MusicPicker } from '../components/MusicPicker.js';
@@ -39,9 +40,7 @@ export function ProfileScreen() {
 
   return (
     <div className="screen profile">
-      <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-        ← Home
-      </button>
+      <BackHome />
 
       <header className="profile__head">
         <h2 className="screen__title">{profile.nickname}</h2>
@@ -77,7 +76,7 @@ export function ProfileScreen() {
       />
 
       <MusicPicker
-        value={profile.musicId as MusicChoice}
+        value={profile.musicId}
         onChange={(choice) => void setProfileMusic(choice)}
         title="La mia musica"
         hint="La tua preferenza per il single player. In multiplayer la musica la scegle l'host."

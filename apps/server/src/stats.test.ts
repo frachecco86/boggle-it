@@ -370,3 +370,78 @@ describe('anteprima scheda: la soluzione non trapela', () => {
     expect(JSON.stringify(anteprima)).not.toContain('boscaioli');
   });
 });
+
+describe('partite multiplayer: salvate per la classifica', () => {
+  /*
+   * Regressione: prima il multiplayer non entrava MAI in classifica.
+   * Solo il single player chiamava `POST /games`, quindi giocare con gli amici
+   * non produceva né partite né statistiche. Ora il server registra a fine
+   * partita una riga per ogni giocatore con profilo.
+   */
+  it('registra una riga per giocatore, con punteggio autoritativo e modalità multi', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    const saved = store.recordMultiplayerGames(
+      [
+        { profileId: a, score: 120, words: 14, longest: 'bellissimo' },
+        { profileId: b, score: 80, words: 11, longest: 'casetta' },
+      ],
+      { difficulty: 'normale', gridSize: 5, schedaId: 'scheda-1' },
+    );
+    expect(saved).toBe(2);
+
+    const board = store.leaderboard({ kind: 'best', period: 'all' });
+    expect(board.entries.map((e) => e.nickname)).toEqual(['Anna', 'Bruno']);
+    expect(board.entries[0]!.value).toBe(120);
+    expect(board.entries[0]!.longest).toBe('bellissimo');
+    expect(board.entries[0]!.gridSize).toBe(5);
+
+    // Le partite multiplayer devono comparire anche nelle statistiche personali.
+    const stats = store.playerStats(a);
+    expect(stats.games).toBe(1);
+    expect(stats.bestScore).toBe(120);
+  });
+
+  it('salta i giocatori senza profilo (non classificabili)', async () => {
+    const a = await profile('Anna');
+    const saved = store.recordMultiplayerGames(
+      [{ profileId: a, score: 50, words: 5, longest: 'casa' }],
+      { difficulty: 'facile', gridSize: 4, schedaId: null },
+    );
+    expect(saved).toBe(1);
+  });
+
+  it('le partite multi NON entrano nella classifica "totali" (punteggi non confrontabili)', async () => {
+    const a = await profile('Anna');
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 300, words: 20, longest: 'casa' }],
+      { difficulty: 'normale', gridSize: 4, schedaId: null },
+    );
+    store.recordGame(a, game({ score: 10 }));
+    // "total": solo single player, per non confrontare punteggi che dipendono dagli avversari.
+    const total = store.leaderboard({ kind: 'total', period: 'all' });
+    expect(total.entries).toHaveLength(1);
+    expect(total.entries[0]!.value).toBe(10);
+    // "best" invece le include entrambe: 300 vince.
+    const best = store.leaderboard({ kind: 'best', period: 'all' });
+    expect(best.entries[0]!.value).toBe(300);
+  });
+
+  it('sanifica punteggi fuori scala invece di scriverli', async () => {
+    const a = await profile('Anna');
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 999_999, words: 5, longest: 'casa' }],
+      { difficulty: 'normale', gridSize: 4, schedaId: null },
+    );
+    expect(store.playerStats(a).bestScore).toBe(5000);
+  });
+
+  it('clearAllGames azzera la classifica senza toccare i profili', async () => {
+    const a = await profile('Anna');
+    store.recordGame(a, game({ score: 100 }));
+    expect(store.clearAllGames()).toBe(1);
+    expect(store.leaderboard({ kind: 'best', period: 'all' }).entries).toHaveLength(0);
+    // Il profilo esiste ancora: si può ripartire da zero senza perdere gli account.
+    expect(store.getById(a)).not.toBeNull();
+  });
+});

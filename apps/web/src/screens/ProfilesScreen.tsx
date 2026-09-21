@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 
 /**
  * Gestione profili sul dispositivo: elenco, switch rapido, aggiunta (login o
@@ -101,9 +102,7 @@ export function ProfilesScreen() {
 
   return (
     <div className="screen profiles">
-      <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-        ← Home
-      </button>
+      <BackHome />
       <h2 className="screen__title">Chi gioca?</h2>
       <p className="screen__hint">
         Più profili sullo stesso dispositivo: passa da uno all'altro senza reinserire la password.

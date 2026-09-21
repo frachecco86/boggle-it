@@ -19,14 +19,14 @@ import { randomBytes, randomUUID, scrypt as scryptCb, timingSafeEqual } from 'no
 import {
   DEFAULT_MUSIC_ID,
   LEADERBOARD_LIMIT,
-  MUSIC_IDS,
+  isMusicChoice,
   SFX_SLOTS,
   type Difficulty,
   type GameMode,
   type GridSize,
   type LeaderboardEntry,
   type LeaderboardFilters,
-  type MusicId,
+  type MusicChoice,
   type PlayerStats,
   type ProfilePrivate,
   type ProfileSfx,
@@ -44,7 +44,7 @@ export interface StoredProfile {
   avatar: string;
   hasPhoto: boolean;
   photoUpdatedAt: number | null;
-  musicId: MusicId | 'none';
+  musicId: MusicChoice;
   createdAt: number;
 }
 
@@ -228,12 +228,15 @@ export class ProfileStore {
   }
 
   /** Aggiorna avatar e/o musica. */
-  update(id: string, patch: { avatar?: string; musicId?: MusicId | 'none' }): StoredProfile | null {
+  update(id: string, patch: { avatar?: string; musicId?: MusicChoice }): StoredProfile | null {
     if (patch.avatar !== undefined) {
       this.db.prepare('UPDATE profiles SET avatar = ? WHERE id = ?').run(patch.avatar, id);
     }
     if (patch.musicId !== undefined) {
-      const music = patch.musicId === 'none' || MUSIC_IDS.includes(patch.musicId) ? patch.musicId : DEFAULT_MUSIC_ID;
+      // Accettiamo qualsiasi id ben formato: il catalogo può contenere tracce
+      // caricate dall'admin a runtime, quindi non esiste un elenco fisso di id
+      // validi. `isMusicChoice` valida la FORMA ('none' o stringa breve).
+      const music = isMusicChoice(patch.musicId) ? patch.musicId : DEFAULT_MUSIC_ID;
       this.db.prepare('UPDATE profiles SET music_id = ? WHERE id = ?').run(music, id);
     }
     return this.getById(id);
@@ -320,7 +323,7 @@ export class ProfileStore {
       avatar: row.avatar,
       hasPhoto: row.photo !== null,
       photoUpdatedAt: row.photo_updated_at,
-      musicId: (row.music_id as MusicId | 'none') ?? DEFAULT_MUSIC_ID,
+      musicId: (row.music_id as MusicChoice) ?? DEFAULT_MUSIC_ID,
       createdAt: row.created_at,
     };
   }
@@ -605,6 +608,52 @@ export class ProfileStore {
   clearGames(profileId: string): number {
     const res = this.db.prepare('DELETE FROM games WHERE profile_id = ?').run(profileId);
     return Number(res.changes ?? 0);
+  }
+
+  /** Cancella TUTTE le partite (es. pulizia della classifica dall'admin). */
+  clearAllGames(): number {
+    const res = this.db.prepare('DELETE FROM games').run();
+    return Number(res.changes ?? 0);
+  }
+
+  /**
+   * Registra le partite di UNA partita multiplayer, una riga per giocatore
+   * con profilo.
+   *
+   * Perché sul server e non nel client: il punteggio autoritativo e la parola
+   * più lunga vivono qui, e così basta una sola chiamata per l'intera partita.
+   * Le parole sono per-round e vengono azzerate a ogni `startRound`, quindi la
+   * somma delle parole è il totale della partita.
+   */
+  recordMultiplayerGames(
+    entries: Array<{
+      profileId: string;
+      score: number;
+      words: number;
+      longest: string;
+    }>,
+    meta: { difficulty: Difficulty; gridSize: GridSize; schedaId: string | null },
+  ): number {
+    let saved = 0;
+    for (const entry of entries) {
+      const profile = this.getById(entry.profileId);
+      // Profilo eliminato nel frattempo: la partita non è attribuibile, la saltiamo.
+      if (!profile) continue;
+      this.recordGame(entry.profileId, {
+        score: Math.min(Math.max(0, Math.round(entry.score)), 5000),
+        words: Math.min(Math.max(0, Math.round(entry.words)), 1000),
+        // Il numero di parole possibili sulla scheda non è disponibile qui:
+        // 0 significa "non noto" e non influisce sulla classifica.
+        wordCount: 0,
+        longest: entry.longest.slice(0, 32),
+        difficulty: meta.difficulty,
+        gridSize: meta.gridSize,
+        mode: 'multi',
+        schedaId: meta.schedaId,
+      });
+      saved++;
+    }
+    return saved;
   }
 
   checkpoint(): void {

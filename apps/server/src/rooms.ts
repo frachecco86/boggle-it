@@ -2,6 +2,7 @@ import {
   DEFAULT_MUSIC_ID,
   generateGrid,
   generateRoomCode,
+  isBuiltInMusicId,
   isMusicChoice,
   isValidPath,
   pathMatchesWord,
@@ -12,7 +13,7 @@ import {
   type FoundWord,
   type Grid,
   type GridSize,
-  type MusicId,
+  type MusicChoice,
   type PlayerPublic,
   type RoomState,
   type Scheda,
@@ -87,8 +88,16 @@ export class Room {
    * Musica di sottofondo scelta dall'HOST, valida per tutta la stanza.
    * In lobby la cambia l'host; durante la partita resta quella scelta.
    */
-  musicId: MusicId | 'none' = DEFAULT_MUSIC_ID;
+  musicId: MusicChoice = DEFAULT_MUSIC_ID;
   roundEndsAt = 0;
+
+  /**
+   * true quando la partita è conclusa ma le partite NON sono ancora state
+   * registrate per la classifica. Serve a salvare anche chi abbandona la stanza
+   * durante la pausa tra l'ultimo round e la schermata finale (dove la UI mostra
+   * già i risultati, ma il timer del server non ha ancora scritto sul database).
+   */
+  gamesPersisted = false;
   players = new Map<string, Player>();
   /** Tutte le parole valide trovate nel round corrente (per il riepilogo mancate). */
   roundFoundWords = new Set<string>();
@@ -329,8 +338,21 @@ export class Room {
       .sort((a, b) => b.totalScore - a.totalScore || a.nickname.localeCompare(b.nickname));
   }
   /** Imposta la musica di tutta la stanza (chiamata solo per l'host). */
-  setMusic(choice: MusicId | 'none'): void {
+  setMusic(choice: MusicChoice): void {
     if (isMusicChoice(choice)) this.musicId = choice;
+  }
+
+  /**
+   * true se la traccia scelta esiste ancora nel catalogo.
+   *
+   * Serve perché l'admin può CANCELLARE una traccia caricata: una stanza che la
+   * stava usando resterebbe con un id non più valido e il client non troverebbe
+   * il file. In quel caso si torna alla traccia predefinita.
+   */
+  ensureMusicExists(exists: (id: string) => boolean): void {
+    if (this.musicId === 'none') return;
+    if (isBuiltInMusicId(this.musicId) || exists(this.musicId)) return;
+    this.musicId = DEFAULT_MUSIC_ID;
   }
 
   removePlayer(playerId: string): void {

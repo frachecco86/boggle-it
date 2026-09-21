@@ -10,6 +10,7 @@ import {
   isDifficulty,
   isSfxSlot,
   isSubmitGamePayload,
+  isBuiltInMusicId,
   LEADERBOARD_KINDS,
   PROFILE_LIMITS,
   type ClientToServerEvents,
@@ -26,6 +27,7 @@ import {
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
 import { DATA_DIR, EXTRA_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
+import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 
@@ -69,12 +71,16 @@ const schede = SchedaCatalog.load();
 const DB_FILE = 'boggle.db';
 const profiles = new ProfileStore(path.join(DATA_DIR, DB_FILE));
 
+/** Playlist musicale: tracce incluse + MP3 caricati dall'admin (condivisi). */
+const musicLibrary = new MusicLibrary();
+
 // pulizia periodica delle stanze vuote/terminate
 setInterval(() => registry.cleanup(), 60_000).unref();
 
 const app = express();
 app.use(cors({ origin: corsOrigin }));
 // Limite alto: foto e clip audio viaggiano come base64 nel JSON.
+// Gli MP3 dell'admin NON passano di qui: usano un body binario grezzo (vedi /admin/music).
 app.use(express.json({ limit: '4mb' }));
 
 app.get('/health', (_req, res) => {
@@ -104,6 +110,30 @@ app.get('/dictionary/words.txt', (req, res) => {
   res.type('text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.sendFile(path.join(DICT_DIR, 'words.txt'));
+});
+
+/* ---------------- Musica (playlist condivisa) ---------------- */
+
+/**
+ * Catalogo musicale: tracce incluse nel bundle + MP3 caricati dall'admin.
+ *
+ * È PUBBLICO: serve al client per mostrare le scelte possibili e per
+ * risolvere il file di una traccia scelta dall'host in stanza.
+ */
+app.get('/music', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ tracks: musicLibrary.list() });
+});
+
+/** File audio di una traccia caricata dall'admin. Pubblico (la musica è condivisa). */
+app.get('/music/:id/file', (req, res) => {
+  const file = musicLibrary.fileOf(String(req.params.id));
+  if (!file) return res.status(404).json({ error: 'Traccia non trovata' });
+  // `sendFile` imposta Content-Type dal file; forziamo il mime con cui è stato
+  // caricato, più affidabile dell'estensione per i formati meno comuni.
+  res.type(file.mime);
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(file.path);
 });
 
 // In produzione il server puo' servire anche il build statico del frontend
@@ -778,6 +808,81 @@ app.post('/admin/db/checkpoint', (req, res) => {
   res.json({ ok: true, ...profiles.stats() });
 });
 
+/* ------------------------------------------------------------------ */
+/* Admin musica                                                        */
+/* ------------------------------------------------------------------ */
+
+/** Elenco delle tracce caricate (le incluse sono già note al client). */
+app.get('/admin/music', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ uploaded: musicLibrary.listUploaded(), all: musicLibrary.list() });
+});
+
+/**
+ * Upload di un MP3.
+ *
+ * POST /admin/music?label=Titolo&credits=Fonte
+ * Content-Type: audio/mpeg
+ * Body: byte grezzi del file.
+ *
+ * Perché binario e non base64 nel JSON: un MP3 da 5 MB diventerebbe ~6,7 MB di
+ * base64 e verrebbe riletto in memoria come stringa. Con il body grezzo e
+ * `express.raw` il file resta un Buffer da 5 MB. Il limite del parser JSON (4 MB)
+ * non si applica qui.
+ */
+app.post(
+  '/admin/music',
+  express.raw({ type: ['audio/*', 'application/octet-stream'], limit: MUSIC_MAX_BYTES + 1024 }),
+  (req, res) => {
+    if (!requireAdmin(req, res)) return;
+    const data = req.body;
+    if (!Buffer.isBuffer(data) || data.length === 0) {
+      return res.status(400).json({ error: 'File audio vuoto o formato non valido' });
+    }
+    if (data.length > MUSIC_MAX_BYTES) {
+      return res.status(413).json({
+        error: `File troppo grande (max ${Math.round(MUSIC_MAX_BYTES / 1024 / 1024)} MB)`,
+      });
+    }
+    const mime = String(req.headers['content-type'] ?? 'audio/mpeg').split(';')[0]!.trim();
+    const label = String(req.query.label ?? '').trim();
+    const credits = String(req.query.credits ?? '').trim();
+    try {
+      const track = musicLibrary.add({ label, credits, data, mime });
+      console.log(`✓ Admin: caricata traccia "${track.label}" (${track.id}, ${Math.round(data.length / 1024)} KB)`);
+      res.status(201).json({ track, tracks: musicLibrary.list() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`✗ Admin: caricamento musica fallito: ${message}`);
+      res.status(500).json({ error: `Caricamento fallito: ${message}` });
+    }
+  },
+);
+
+/** Rimuove una traccia caricata dall'admin. */
+app.delete('/admin/music/:id', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const id = String(req.params.id);
+  if (!musicLibrary.remove(id)) return res.status(404).json({ error: 'Traccia non trovata' });
+  console.log(`✓ Admin: rimossa traccia ${id}`);
+  res.json({ ok: true, tracks: musicLibrary.list() });
+});
+
+/**
+ * Elimina TUTTE le partite e le statistiche (per ripartire da zero).
+ *
+ * Non tocca profili né schede: azzera solo la classifica. Utile quando il
+ * database contiene partite di prova e si vuole pubblicare una classifica
+ * pulita senza cancellare gli account.
+ */
+app.post('/admin/games/reset', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const removed = profiles.clearAllGames();
+  console.log(`✓ Admin: azzerate ${removed} partite dalla classifica`);
+  res.json({ ok: true, removed });
+});
+
 // Fallback SPA e asset statici: DOPO tutte le rotte API (schede, preview, admin,
 // auth, profili, dizionario, health) per non oscurarle.
 if (servesWeb) {
@@ -820,7 +925,53 @@ function photoUrlFor(profile: { id: string; hasPhoto: boolean; photoUpdatedAt: n
 const MAX_SCHEDA_WORDS = 6000;
 
 function broadcastState(room: Room): void {
+  // Una traccia caricata dall'admin può essere stata cancellata mentre la stanza
+  // la usava: in quel caso si ricade sulla predefinita, così nessun client
+  // resta puntato a un file che non esiste più.
+  room.ensureMusicExists((id) => musicLibrary.has(id));
   io.to(room.code).emit('room:update', room.publicState());
+}
+
+/**
+ * Registra TUTTE le partite multiplayer concluse nella stanza.
+ *
+ * Perché sul server e non nel client: il punteggio autoritativo e la parola più
+ * lunga vivono qui, e in questo modo basta UNA scrittura per l'intera partita.
+ * Prima le partite multiplayer non entravano mai in classifica: solo il single
+ * player chiamava `POST /games`.
+ *
+ * Si salva una riga per giocatore con un profilo; chi gioca senza profilo non è
+ * classificabile (stessa regola del single player).
+ */
+function recordMultiplayerGames(room: Room): void {
+  if (room.gamesPersisted) return;
+  // Marchiamo SUBITO: la funzione è chiamata dal timer di fine partita e da
+  // `handleLeave` (abbandono durante la pausa finale). Senza questa guardia una
+  // partita potrebbe essere scritta due volte.
+  room.gamesPersisted = true;
+
+  const entries: Array<{ profileId: string; score: number; words: number; longest: string }> = [];
+  for (const p of room.players.values()) {
+    if (!p.profileId) continue;
+    const words = p.words.map((w) => w.word);
+    entries.push({
+      profileId: p.profileId,
+      score: p.totalScore,
+      words: words.length,
+      longest: words.reduce((best, w) => (w.length > best.length ? w : best), ''),
+    });
+  }
+  if (entries.length === 0) return;
+  try {
+    const saved = profiles.recordMultiplayerGames(entries, {
+      difficulty: room.difficulty,
+      gridSize: room.gridSize,
+      schedaId: room.schedaId,
+    });
+    console.log(`✓ Multiplayer: salvate ${saved} partite su ${entries.length} giocatori con profilo`);
+  } catch (err) {
+    console.error('✗ Multiplayer: salvataggio partite fallito:', err);
+  }
 }
 
 function isValidGridSize(n: unknown): n is GridSize {
@@ -1065,6 +1216,18 @@ function handleLeave(socketId: string, code: string, playerId: string, explicit:
   const room = registry.get(code);
   if (!room) return;
   if (explicit) {
+    /*
+     * Se la partita è già finita (l'ultimo round è chiuso) ma le partite non
+     * sono ancora state scritte, le salviamo ORA.
+     *
+     * Perché serve: tra la fine dell'ultimo round e l'emissione di `game:gameEnd`
+     * c'è una pausa di 10 secondi. Chi abbandona in quella finestra usciva dalla
+     * stanza prima che il timer scrivesse, e la sua partita non entrava in
+     * classifica. Ora l'abbandono scrive prima di rimuovere il giocatore.
+     */
+    if (room.isGameOver() && room.phase !== 'playing' && !room.gamesPersisted) {
+      recordMultiplayerGames(room);
+    }
     room.removePlayer(playerId);
     socketState.delete(socketId);
     io.sockets.sockets.get(socketId)?.leave(code);
@@ -1093,6 +1256,9 @@ function scheduleRoundEnd(room: Room): void {
     if (room.isGameOver()) {
       setTimeout(() => {
         room.phase = 'gameEnd';
+        // Prima di avvisare i client, la partita viene registrata per la
+        // classifica: se fallisce, il gioco continua comunque (best effort).
+        recordMultiplayerGames(room);
         io.to(room.code).emit('game:gameEnd', { finalScores: room.finalScores() });
         broadcastState(room);
       }, ROUND_END_PAUSE_MS);

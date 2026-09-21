@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.12.1';
+export const APP_VERSION = '0.13.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,51 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.13.0',
+    date: '2026-09-21',
+    title: 'Swipe più tollerante, frecce stile Boggle e classifica multiplayer',
+    changes: [
+      {
+        kind: 'improvement',
+        items: [
+          '**Lo swipe è molto più tollerante**: prima bastava **sfiorare** una cella di pochi pixel per attivarla e, muovendosi in diagonale, il dito scivolava spesso sulla cella ortogonale. Ora la soglia per cambiare cella è quasi **metà cella** (era un quarto) e i settori diagonali sono più larghi (±25° invece di ±20°): il gesto diagonale resta diagonale anche se non è perfetto.',
+          '**L\'accensione delle lettere è più morbida**: la cella si accende in ~0.3s con una dissolvenza, invece dello scatto immediato di prima. Rimosso anche l\'effetto "pop" che faceva sobbalzare la lettera.',
+          '**I collegamenti sono frecce**, come nel Boggle originale: piccoli segmenti tra una lettera e la successiva, con una punta proporzionata. Prima era un\'unica linea luminosa che passava sopra le lettere.',
+          '**La parola in composizione appare sopra la griglia** mentre la scrivi, come nel Boggle: vedi in tempo reale cosa stai per inviare.',
+          'I **messaggi delle parole durano di più** (~2.6s) e compaiono con uno **slide up/down** invece di un pop istantaneo.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**Le partite multiplayer entrano in classifica**: prima solo il single player veniva registrato, quindi giocare con gli amici non produceva né partite né statistiche. Ora a fine partita il server salva una riga per ogni giocatore con profilo.',
+          '**Tasto Home in ogni schermata**, in alto a sinistra. Durante una partita o in una stanza chiede conferma prima di uscire, per non perdere i progressi.',
+          '**Tre icone audio in basso a sinistra**, sempre disponibili: effetti sonori on/off, musica on/off e **traccia successiva** (se la musica era spenta, la riattiva).',
+          '**L\'admin può caricare MP3** dal pannello: le tracce vanno sul server e compaiono nella playlist di **tutti** i giocatori, insieme a quelle incluse.',
+          '**Le statistiche della classifica** mostrano anche le partite multiplayer, con la modalità salvata.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**Le registrazioni audio ora si sovrascrivono davvero**: una riregistrazione poteva lasciare attiva la clip vecchia. La causa era una combinazione di blob URL non revocati e risposte in cache; ora il vecchio blob viene liberato e la nuova clip ha un URL versionato. In più, al salvataggio compare una conferma "✓ salvato" e, se qualcosa va storto, il motivo reale.',
+          '**Non si vedono più le parole trovate mentre si gioca**: l\'elenco rivelava le soluzioni (e in multiplayer le esponeva). Durante il round si vede solo il **numero** di parole trovate; l\'elenco completo arriva nel riepilogo di fine round.',
+          '**Il salvataggio della partita non fallisce più in silenzio**: a fine partita il riepilogo dice se la partita è entrata in classifica, se serve un profilo o se il server non ha risposto.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il riconoscimento delle celle ora valuta l\'annullamento dell\'ultimo passo **solo sull\'ultimo campione** del segmento: i campioni interpolati potevano far aggiungere e togliere più volte la stessa cella nello stesso movimento.',
+          'Il catalogo musicale è diventato **dinamico**: le tracce dell\'admin hanno id `up-…` e sono servite da `/music/:id/file` (gli id non sono più un elenco chiuso nel codice).',
+          'La leaderboard "totali" continua a contare **solo il single player**: i punteggi multiplayer non sono confrontabili perché dipendono dagli avversari.',
+          'Nuovo `POST /admin/games/reset` per azzerare la classifica senza toccare profili e schede.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.12.1',
     date: '2026-09-20',

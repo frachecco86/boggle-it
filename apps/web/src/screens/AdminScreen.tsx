@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty, type GridSize } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
 import { useAppStore } from '../state/store.js';
+import { MusicAdmin } from '../components/MusicAdmin.js';
 
 interface SchedaMetaDTO {
   id: string;
@@ -261,6 +262,8 @@ export function AdminScreen() {
           </button>
         </div>
       </section>
+
+      <MusicAdmin token={adminToken} />
 
       <section className="admin__section">
         <h3 className="summary__label">Filtra</h3>

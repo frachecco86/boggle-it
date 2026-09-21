@@ -51,14 +51,21 @@ describe('ProfileStore', () => {
     expect(store.getByToken(token)).toBeNull();
   });
 
-  it('aggiorna avatar e musica, ignorando una musica non valida', async () => {
+  it('aggiorna avatar e musica, ignorando una musica malformata', async () => {
     const profile = await store.register('Marco', 'segreta123', '🦊');
     expect(store.update(profile.id, { avatar: '🐼' })?.avatar).toBe('🐼');
     expect(store.update(profile.id, { musicId: 'spazio' })?.musicId).toBe('spazio');
     expect(store.update(profile.id, { musicId: 'none' })?.musicId).toBe('none');
-    // Valore sconosciuto: torna al default invece di corrompere il profilo.
-    const bad = store.update(profile.id, { musicId: 'boh' as never });
+    /*
+     * Il catalogo è DIVENUTO DINAMICO: l'admin può caricare nuove tracce, quindi
+     * non esiste più un elenco chiuso di id validi. Il server accetta gli id ben
+     * formati e scarta solo quelli malformati (vuoti o troppo lunghi).
+     */
+    expect(store.update(profile.id, { musicId: 'up-ab12cd34' })?.musicId).toBe('up-ab12cd34');
+    const bad = store.update(profile.id, { musicId: '' as never });
     expect(bad?.musicId).toBe('classica');
+    const tooLong = store.update(profile.id, { musicId: 'x'.repeat(65) as never });
+    expect(tooLong?.musicId).toBe('classica');
   });
 
   it('salva, legge e cancella la foto', async () => {

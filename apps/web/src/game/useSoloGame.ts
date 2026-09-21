@@ -45,6 +45,8 @@ export interface SoloGameState {
   roundScores: number[];
   /** Parole trovate in questo round (per il riepilogo). */
   missedWords: string[];
+  /** Esito della registrazione della partita in classifica (a fine partita). */
+  saveStatus: 'idle' | 'anonymous' | 'saving' | 'saved' | 'failed';
   /** true mentre si carica la scheda dal server. */
   loading: boolean;
 }
@@ -86,6 +88,13 @@ export function useSoloGame(options: UseSoloGameOptions) {
   foundRef.current = found;
   /** true quando la partita conclusa è già stata inviata alla classifica. */
   const savedRef = useRef(false);
+  /**
+   * Esito della registrazione della partita in classifica.
+   *  - `idle`: non ancora conclusa
+   *  - `anonymous`: nessun profilo attivo, la partita non è classificabile
+   *  - `saving` / `saved` / `failed`
+   */
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'anonymous' | 'saving' | 'saved' | 'failed'>('idle');
 
   const score = useMemo(() => found.reduce((sum, f) => sum + f.points, 0), [found]);
   const currentWord = useMemo(
@@ -238,17 +247,25 @@ export function useSoloGame(options: UseSoloGameOptions) {
    *
    * `savedRef` impedisce di inviarla due volte: `gameEnd` può essere raggiunto e
    * poi rivalutato, e in StrictMode gli effect girano due volte in sviluppo.
-   * La registrazione è "best effort": se fallisce (offline, non autenticato) il
-   * gioco non deve mostrare errori — la partita semplicemente non entra in classifica.
+   *
+   * La registrazione NON deve bloccare il gioco (offline, server giù), ma non
+   * deve nemmeno fallire in SILENZIO: prima l'utente non aveva modo di sapere
+   * perché la partita non compariva in classifica. Ora l'esito è esposto in
+   * `state.saveStatus` e mostrato nel riepilogo.
    */
   useEffect(() => {
     if (phase !== 'gameEnd' || savedRef.current) return;
     savedRef.current = true;
     const token = activeToken();
-    if (!token) return;
+    if (!token) {
+      // Senza profilo la partita non è classificabile: è una scelta, non un errore.
+      setSaveStatus('anonymous');
+      return;
+    }
 
     const words = foundRef.current.map((f) => f.word);
     const longest = words.reduce((best, w) => (w.length > best.length ? w : best), '');
+    setSaveStatus('saving');
     void submitGame(
       {
         // `totalScore` ora è corretto: `roundScores` contiene già l'ultimo round.
@@ -262,7 +279,11 @@ export function useSoloGame(options: UseSoloGameOptions) {
         schedaId: schedaRef.current?.id ?? null,
       },
       token,
-    );
+    ).then((res) => {
+      // `submitGame` ritorna null sia in caso di rete assente sia di rifiuto
+      // del server: in entrambi i casi la partita non è entrata in classifica.
+      setSaveStatus(res ? 'saved' : 'failed');
+    });
     // `roundScores` fra le dipendenze: al momento di `gameEnd` l'ultimo round
     // potrebbe non essere ancora stato consolidato.
   }, [phase, totalScore, difficulty, gridSize, roundScores]);
@@ -281,6 +302,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       feedback,
       roundScores,
       missedWords,
+      saveStatus,
       loading,
     } satisfies SoloGameState,
     loadError,

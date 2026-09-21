@@ -11,7 +11,7 @@
  * Foto e audio sono **privati**: il server li tiene per il proprietario e non
  * li mostra agli altri. L'avatar emoji è invece pubblico e appare in classifica.
  */
-import type { MusicId } from './music.js';
+import type { MusicChoice } from './music.js';
 
 /** Fasce di lunghezza per le clip audio registrate dal giocatore. */
 export const SFX_SLOTS = ['3', '4', '5', '6', '7plus'] as const;
@@ -57,7 +57,12 @@ export interface ProfilePublic {
 export interface ProfilePrivate extends ProfilePublic {
   createdAt: number;
   sfx: ProfileSfx[];
-  musicId: MusicId | 'none';
+  /**
+   * Traccia musicale preferita: id di una traccia del catalogo, oppure `'none'`.
+   * Gli id non sono più solo quelli inclusi nel bundle: l'admin può aggiungere
+   * tracce a runtime, quindi è una stringa validata dal server.
+   */
+  musicId: MusicChoice;
 }
 
 /* ------------------------------------------------------------------ */
@@ -82,7 +87,7 @@ export interface AuthResponse {
 
 export interface UpdateProfilePayload {
   avatar?: string;
-  musicId?: MusicId | 'none';
+  musicId?: MusicChoice;
 }
 
 export interface ErrorResponse {

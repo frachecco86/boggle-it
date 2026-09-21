@@ -4,6 +4,8 @@ import { isValidPath, pathMatchesWord, scoreForWord, wordFromPath } from '@boggl
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { WordList } from '../components/WordList.js';
+import { CurrentWord } from '../components/CurrentWord.js';
+import { BackHome } from '../components/BackHome.js';
 import { useAppStore } from '../state/store.js';
 import { audio } from '../audio/AudioEngine.js';
 
@@ -21,6 +23,7 @@ export function MultiplayerGameScreen() {
     submitWord,
     playerId,
     opponentEvents,
+    leaveRoom,
   } = useAppStore();
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -28,6 +31,7 @@ export function MultiplayerGameScreen() {
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
   const [flashError, setFlashError] = useState(false);
   const flashTimer = useRef<number | null>(null);
+  const feedbackTimer = useRef<number | null>(null);
 
   const currentWord = useMemo(() => (grid ? wordFromPath(grid, selectedPath) : ''), [grid, selectedPath]);
   const myRoundWordStrings = useMemo(() => new Set(myWords.map((w) => w.word)), [myWords]);
@@ -38,6 +42,13 @@ export function MultiplayerGameScreen() {
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current) window.clearTimeout(flashTimer.current);
+      if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    };
   }, []);
 
   const badges = useMemo(() => {
@@ -76,7 +87,9 @@ export function MultiplayerGameScreen() {
       if (flashTimer.current) window.clearTimeout(flashTimer.current);
       flashTimer.current = window.setTimeout(() => setFlashError(false), 500);
     }
-    window.setTimeout(() => setFeedback(null), 1600);
+    // Durata allineata al single player (l'animazione del toast è di 2.6s).
+    if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = window.setTimeout(() => setFeedback(null), 2600);
   }, []);
 
   const handleCommit = useCallback(
@@ -116,6 +129,7 @@ export function MultiplayerGameScreen() {
   if (!grid || !room) {
     return (
       <div className="screen">
+        <BackHome confirm onLeave={leaveRoom} />
         <h2 className="screen__title">In attesa della griglia…</h2>
       </div>
     );
@@ -150,6 +164,7 @@ export function MultiplayerGameScreen() {
       )}
 
       <div className="game__topbar">
+        <BackHome confirm onLeave={leaveRoom} />
         <Timer timeLeftMs={timeLeftMs} totalMs={roundDurationMs} />
         <div className="game__round">
           Round {room.currentRound}/{room.rounds} · {room.difficulty} · stanza {roomCode}
@@ -157,6 +172,7 @@ export function MultiplayerGameScreen() {
       </div>
 
       <div className="game__main">
+        <CurrentWord word={currentWord} />
         <GridBoard
           grid={grid}
           selectedPath={selectedPath}
@@ -169,7 +185,9 @@ export function MultiplayerGameScreen() {
             <span className="score-chip__value">{score}</span>
             <span className="score-chip__label">tuo round</span>
           </div>
-          <WordList words={myWords} currentWord={currentWord} />
+          {/* Solo il conteggio durante il round: l'elenco si vede nel riepilogo.
+              Mostrare le parole qui non aggiunge nulla e le espone agli altri. */}
+          <WordList words={myWords} currentWord={currentWord} showItems={false} />
         </aside>
       </div>
 

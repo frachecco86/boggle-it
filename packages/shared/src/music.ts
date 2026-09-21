@@ -1,16 +1,35 @@
 /**
  * Catalogo delle musiche di sottofondo.
  *
- * Tutte le tracce sono **reali, royalty-free e incluse nel bundle** (niente
+ * Tutte le tracce INCLUSE sono **reali, royalty-free e nel bundle** (niente
  * generazione sintetica). Sono in loop e adatte a un gioco di parole: ritmo
  * non invadente, niente voci, volume pensato per stare sotto agli effetti.
+ *
+ * L'admin può **caricare MP3** dal pannello: vengono salvati sul server
+ * (`DATA_DIR/music/`) e compaiono nel catalogo di TUTTI i giocatori. Il client
+ * scarica il catalogo dinamico da `GET /music` e lo passa al motore audio con
+ * `setMusicCatalog`. Gli id delle tracce caricate sono quindi stringhe, non più
+ * solo gli id letterali di questo file: vedi `MusicChoice`.
  *
  * In multiplayer la traccia la sceglie l'HOST e vale per tutta la stanza
  * (vedi `RoomState.musicId`); in single player ognuno scegle la propria.
  *
- * Licenze: tutte **CC0 1.0** (pubblico dominio). Attribuzioni in `credits`:
- * CC0 non le richiede, ma le manteniamo per correttezza.
+ * Licenze: le tracce incluse sono tutte **CC0 1.0** (pubblico dominio).
+ * Attribuzioni in `credits`: CC0 non le richiede, ma le manteniamo per correttezza.
  */
+
+/** Una traccia del catalogo, statica (bundle) o caricata dall'admin. */
+export interface MusicTrackMeta {
+  id: string;
+  label: string;
+  /** Breve descrizione del carattere della traccia. */
+  mood: string;
+  /** Percorso/URL del file audio (mp3). */
+  file: string;
+  credits: string;
+  /** true se è stata caricata dall'admin (non versionata nel bundle). */
+  uploaded?: boolean;
+}
 
 export const MUSIC_TRACKS = [
   {
@@ -55,25 +74,42 @@ export const MUSIC_TRACKS = [
     file: '/audio/tracks/overworld.mp3',
     credits: '“8bit theme - Upbeat Overworld” di Wolfgang_ (CC0) — OpenGameArt',
   },
-] as const;
+] as const satisfies readonly MusicTrackMeta[];
 
+/** Id delle tracce incluse nel bundle (unione letterale, per i tipi). */
 export type MusicId = (typeof MUSIC_TRACKS)[number]['id'];
 
-export const MUSIC_IDS: MusicId[] = MUSIC_TRACKS.map((t) => t.id);
+export const MUSIC_IDS: string[] = MUSIC_TRACKS.map((t) => t.id);
 
 export const DEFAULT_MUSIC_ID: MusicId = 'classica';
 
-export function isMusicId(value: unknown): value is MusicId {
+/** Catalogo di default: le tracce incluse nel bundle. */
+export const DEFAULT_MUSIC_CATALOG: MusicTrackMeta[] = [...MUSIC_TRACKS];
+
+/**
+ * Scelta musicale: `'none'` per la musica spenta, altrimenti l'id di una traccia.
+ *
+ * NON è più un'unione di id letterali: l'admin può aggiungere tracce a runtime,
+ * quindi un id valido è una qualsiasi stringa non vuota presente nel catalogo.
+ */
+export type MusicChoice = string;
+
+/** true se la stringa ha la forma di una scelta musicale (validazione lato server). */
+export function isMusicChoice(value: unknown): value is MusicChoice {
+  return typeof value === 'string' && value.length > 0 && value.length <= 64;
+}
+
+/** true se l'id è una delle tracce incluse nel bundle. */
+export function isBuiltInMusicId(value: unknown): value is MusicId {
   return typeof value === 'string' && (MUSIC_IDS as string[]).includes(value);
 }
 
-/** Nessuna musica: valore speciale accettato in giro (host o impostazioni). */
-export type MusicChoice = MusicId | 'none';
-
-export function isMusicChoice(value: unknown): value is MusicChoice {
-  return value === 'none' || isMusicId(value);
+/** Traccia del catalogo, con fallback sulla prima disponibile. */
+export function findMusicTrack(catalog: readonly MusicTrackMeta[], id: string): MusicTrackMeta | undefined {
+  return catalog.find((t) => t.id === id);
 }
 
-export function musicTrack(id: MusicId) {
-  return MUSIC_TRACKS.find((t) => t.id === id) ?? MUSIC_TRACKS[0];
+/** Traccia attiva (con fallback sulla prima del catalogo). */
+export function musicTrack(id: MusicChoice, catalog: readonly MusicTrackMeta[] = DEFAULT_MUSIC_CATALOG): MusicTrackMeta {
+  return findMusicTrack(catalog, id) ?? catalog[0] ?? MUSIC_TRACKS[0];
 }

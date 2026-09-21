@@ -4,7 +4,7 @@
  */
 
 import type { Difficulty } from './difficulty.js';
-import type { MusicId } from './music.js';
+import type { MusicChoice } from './music.js';
 
 export type GridSize = 4 | 5 | 6;
 
@@ -80,8 +80,9 @@ export interface RoomState {
   /**
    * Musica di sottofondo scelta dall'host, valida per TUTTA la stanza.
    * `'none'` = musica spenta per tutti. In single player la scelta è locale.
+   * L'id può riferirsi a una traccia caricata dall'admin (catalogo dinamico).
    */
-  musicId?: MusicId | 'none';
+  musicId?: MusicChoice;
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,7 +131,7 @@ export interface RoomConfigPayload {
   rounds: number;
   roundDurationMs: number;
   /** Musica di sottofondo per tutta la stanza (solo host). */
-  musicId?: MusicId | 'none';
+  musicId?: MusicChoice;
   /** Numero massimo di giocatori (2, 4 o 8). */
   maxPlayers?: number;
 }

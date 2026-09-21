@@ -7,12 +7,12 @@ import {
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
+import { BackHome } from '../components/BackHome.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { SchedaPreview } from '../components/SchedaPreview.js';
 import { loadScheda } from '../game/schedeLoader.js';
 import { GridPreview } from '../components/GridPreview.js';
 import { MusicPicker } from '../components/MusicPicker.js';
-import type { MusicChoice } from '@boggle/shared';
 
 /** Lobby multiplayer: codice stanza, giocatori, impostazioni host. */
 export function LobbyScreen() {
@@ -86,9 +86,7 @@ export function LobbyScreen() {
 
   return (
     <div className="screen lobby">
-      <button className="btn btn--ghost setup__back" onClick={leaveRoom}>
-        ← Esci
-      </button>
+      <BackHome confirm onLeave={leaveRoom} />
       <h2 className="screen__title">Sala d'attesa</h2>
 
       <button className="room-code" onClick={copyCode} title="Copia codice">
@@ -216,7 +214,7 @@ export function LobbyScreen() {
             </div>
 
             <MusicPicker
-              value={(room.musicId ?? 'none') as MusicChoice}
+              value={room.musicId ?? 'none'}
               onChange={(choice) =>
                 configureRoom(room.gridSize, room.difficulty, room.rounds, room.roundDurationMs, choice)
               }

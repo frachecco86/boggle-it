@@ -133,7 +133,29 @@ async function main() {
     console.warn('⚠ 60000_parole_italiane.txt assente: salto l\'integrazione');
   }
 
-  // 3. Abbreviazioni curate.
+  /*
+   * 3. Composti e neologismi curati.
+   *
+   * Morph-it analizza `dona` e `la` separatamente, quindi `donala` non esiste
+   * come forma unica in nessuna fonte; lo stesso per i neologismi (`googlare`,
+   * `taggare`). Queste liste li aggiungono a mano.
+   */
+  const modernPath = path.join(DATA, 'modern-words.txt');
+  let modernCount = 0;
+  if (existsSync(modernPath)) {
+    const modernRaw = await readFile(modernPath, 'utf8');
+    for (const line of modernRaw.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const w = normalizeWord(trimmed);
+      if (isUsable(w)) {
+        if (!words.has(w)) modernCount++;
+        words.add(w);
+      }
+    }
+  }
+
+  // 4. Abbreviazioni curate.
   const abbrPath = path.join(DATA, 'abbreviations.txt');
   let abbrCount = 0;
   if (existsSync(abbrPath)) {
@@ -158,6 +180,7 @@ async function main() {
   console.log(`  da Morph-it: ${morphCount.toLocaleString('it-IT')}`);
   console.log(`  da comuni:   +${commonCount.toLocaleString('it-IT')}`);
   console.log(`  abbreviazioni: +${abbrCount}`);
+  console.log(`  composti e neologismi: +${modernCount}`);
 }
 
 // Eseguito direttamente?

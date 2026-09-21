@@ -11,7 +11,14 @@
  * Tutto e' "lazy": l'AudioContext viene creato al primo gesto utente (policy dei browser),
  * e nulla suona finche' l'utente non interagisce.
  */
-import { DEFAULT_MUSIC_ID, musicTrack, type MusicId } from '@boggle/shared';
+import {
+  DEFAULT_MUSIC_CATALOG,
+  DEFAULT_MUSIC_ID,
+  findMusicTrack,
+  musicTrack,
+  type MusicChoice,
+  type MusicTrackMeta,
+} from '@boggle/shared';
 import { PersonalSfx, slotForLength } from '../game/audioRecorder.js';
 
 export type SfxKind =
@@ -34,11 +41,11 @@ export interface AudioSettings {
   sfxVolume: number;
   musicVolume: number;
   /**
-   * Traccia musicale attiva. In multiplayer è quella scelta dall'host (vince
-   * sulla preferenza locale), in single player è la preferenza del profilo.
-   * `'none'` = musica spenta.
+   * Traccia musicale attiva: id di una traccia del catalogo, oppure `'none'`.
+   * Gli id non sono più solo quelli inclusi nel bundle: l'admin può aggiungere
+   * tracce a runtime, quindi è una stringa.
    */
-  musicTrack: MusicId | 'none';
+  musicTrack: MusicChoice;
 }
 
 const DEFAULT_SETTINGS: AudioSettings = {
@@ -83,7 +90,9 @@ export class AudioEngine {
   /** Clip personali del profilo, indicizzate per fascia di lunghezza. */
   private readonly personalSfx = new PersonalSfx();
   /** Traccia attualmente caricata (per capire quando cambiarla). */
-  private loadedTrack: MusicId | 'none' | null = null;
+  private loadedTrack: MusicChoice | null = null;
+  /** Catalogo corrente: tracce incluse + quelle caricate dall'admin. */
+  private catalog: MusicTrackMeta[] = [...DEFAULT_MUSIC_CATALOG];
 
   /** Crea il contesto audio. Va chiamato dopo un gesto utente. */
   unlock(): void {
@@ -155,10 +164,54 @@ export class AudioEngine {
   }
 
   /**
+   * Aggiorna il catalogo musicale (tracce incluse + caricate dall'admin).
+   *
+   * Se la traccia attiva non esiste più (l'admin l'ha cancellata) si torna alla
+   * predefinita: senza questo il player resterebbe puntato a un file 404.
+   */
+  setMusicCatalog(tracks: MusicTrackMeta[]): void {
+    if (tracks.length === 0) return;
+    this.catalog = tracks;
+    if (this.settings.musicTrack !== 'none' && !findMusicTrack(tracks, this.settings.musicTrack)) {
+      this.settings = { ...this.settings, musicTrack: tracks[0]!.id };
+      this.reloadMusicTrack();
+      return;
+    }
+    // La traccia esiste ancora: se il file è cambiato (nuova versione) ricarica.
+    if (this.musicEl) this.reloadMusicTrack();
+  }
+
+  /** Catalogo corrente (per l'interfaccia). */
+  getCatalog(): MusicTrackMeta[] {
+    return [...this.catalog];
+  }
+
+  /**
+   * Passa alla traccia successiva del catalogo (tasto ⏭).
+   *
+   * Se la musica è spenta la attiva: il tasto serve a "mettere su qualcosa",
+   * non solo a saltare una traccia già in riproduzione.
+   */
+  nextMusicTrack(): MusicChoice {
+    const tracks = this.catalog;
+    if (tracks.length === 0) return this.settings.musicTrack;
+    const currentIdx = tracks.findIndex((t) => t.id === this.settings.musicTrack);
+    const next = tracks[(currentIdx + 1) % tracks.length]!;
+    const wasDisabled = !this.settings.musicEnabled;
+    this.settings = { ...this.settings, musicTrack: next.id };
+    if (wasDisabled) {
+      this.setSettings({ musicEnabled: true });
+    } else {
+      this.reloadMusicTrack();
+    }
+    return next.id;
+  }
+
+  /**
    * Cambia la traccia musicale mantenendo il contesto audio.
    * Chiamata quando l'host cambia musica in stanza, o quando cambia la preferenza.
    */
-  setMusicTrack(track: MusicId | 'none'): void {
+  setMusicTrack(track: MusicChoice): void {
     if (this.settings.musicTrack === track) return;
     this.settings = { ...this.settings, musicTrack: track };
     this.reloadMusicTrack();
@@ -391,9 +444,9 @@ export class AudioEngine {
     if (!this.settings.musicEnabled || !this.ctx || !this.musicGain) return;
     if (this.settings.musicTrack === 'none') return;
     if (!this.musicEl) {
-      // La traccia attiva arriva dal catalogo condiviso (tracce reali CC0).
+      // La traccia attiva arriva dal catalogo (tracce incluse + caricate).
       this.loadedTrack = this.settings.musicTrack;
-      this.musicEl = new Audio(musicTrack(this.settings.musicTrack).file);
+      this.musicEl = new Audio(musicTrack(this.settings.musicTrack, this.catalog).file);
       this.musicEl.loop = true;
       this.musicEl.preload = 'auto';
       this.musicEl.crossOrigin = 'anonymous';

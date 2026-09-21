@@ -2,13 +2,21 @@ import { useCallback } from 'react';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { WordList } from '../components/WordList.js';
+import { CurrentWord } from '../components/CurrentWord.js';
+import { BackHome } from '../components/BackHome.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 import { SchedaPreview } from '../components/SchedaPreview.js';
 import { CountdownOverlay } from '../components/CountdownOverlay.js';
 import { RoundSummary } from './RoundSummary.js';
 
-/** Partita single player completa (schede pre-calcolate dal server). */
+/**
+ * Partita single player completa (schede pre-calcolate dal server).
+ *
+ * Nota sulle parole: quelle TROVATE non compaiono nell'elenco mentre si gioca
+ * (solo a fine round), per non rivelare troppo presto le soluzioni. Quello che
+ * si vede sopra la griglia è la parola in composizione, come nel Boggle.
+ */
 export function SoloGameScreen() {
   const {
     soloGridSize,
@@ -39,6 +47,7 @@ export function SoloGameScreen() {
   if (game.loadError) {
     return (
       <div className="screen">
+        <BackHome />
         <h2 className="screen__title">Scheda non disponibile</h2>
         <p className="screen__hint">{game.loadError}</p>
         <button className="btn btn--ghost" onClick={() => setScreen('home')}>
@@ -51,6 +60,7 @@ export function SoloGameScreen() {
   if (state.phase === 'idle') {
     return (
       <div className="screen">
+        <BackHome />
         <h2 className="screen__title">Pronto?</h2>
         <p className="screen__hint">
           Trova parole di almeno 3 lettere scorrendo sulle lettere adiacenti.
@@ -73,6 +83,7 @@ export function SoloGameScreen() {
   if (state.phase === 'countdown') {
     return (
       <div className="screen">
+        <BackHome confirm />
         <CountdownOverlay onComplete={game.beginRound} />
       </div>
     );
@@ -89,6 +100,7 @@ export function SoloGameScreen() {
         missedWords={state.missedWords}
         allWords={state.scheda?.words}
         isGameOver={state.phase === 'gameEnd'}
+        saveStatus={state.saveStatus}
         onNext={game.nextRound}
         onExit={() => setScreen(state.phase === 'gameEnd' ? 'solo-setup' : 'home')}
       />
@@ -106,6 +118,7 @@ export function SoloGameScreen() {
   return (
     <div className="screen game">
       <div className="game__topbar">
+        <BackHome confirm />
         <Timer timeLeftMs={state.timeLeftMs} totalMs={soloRoundDurationMs} />
         <div className="game__round">
           Round {state.round}/{soloRounds} · {soloDifficulty}
@@ -113,6 +126,8 @@ export function SoloGameScreen() {
       </div>
 
       <div className="game__main">
+        {/* Anteprima della parola in composizione, sopra la griglia (stile Boggle). */}
+        <CurrentWord word={state.currentWord} />
         <GridBoard
           grid={state.grid!}
           selectedPath={state.selectedPath}
@@ -125,7 +140,10 @@ export function SoloGameScreen() {
             <span className="score-chip__value">{game.totalScore}</span>
             <span className="score-chip__label">punti</span>
           </div>
-          <WordList words={state.found} currentWord={state.currentWord} />
+          {/* Durante la partita mostriamo solo QUANTE parole hai trovato, non
+              quali: l'elenco completo rivela le soluzioni e toglie la sorpresa.
+              Il conteggio serve come feedback di avanzamento. */}
+          <WordList words={state.found} currentWord={state.currentWord} showItems={false} />
         </aside>
       </div>
 

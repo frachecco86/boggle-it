@@ -166,3 +166,56 @@ describe('CellPathTracker — diagonali', () => {
     expect([...t.currentPath]).toEqual([0, 6]);
   });
 });
+
+/*
+ * Regressione sui difetti segnalati giocando:
+ *  1. lo swipe era iper-sensibile: per attivare una cella bastava sfiorarla di
+ *     pochi pixel;
+ *  2. il gesto DIAGONALE scivolava sulla cella ortogonale se non era preciso.
+ * I test qui sotto fissano le soglie nuove (più tolleranti) e le proteggono da
+ * future regressioni: sono le due cose che l'utente ha chiesto esplicitamente.
+ */
+describe('CellPathTracker — tolleranza dello swipe', () => {
+  it('NON attiva la cella accanto sfiorandola di pochi pixel', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    // ~25% della cella verso destra: era sufficiente per superare la deadzone 0.28.
+    t.move({ x: center(0).x + PITCH * 0.25, y: center(0).y });
+    expect([...t.currentPath]).toEqual([0]);
+  });
+
+  it('attiva la cella accanto quando il dito ci arriva davvero', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    t.move(center(1));
+    expect([...t.currentPath]).toEqual([0, 1]);
+  });
+
+  it('resta sulla diagonale anche con una deviazione più marcata (30%)', () => {
+    const { t, center } = tracker();
+    const start = center(0);
+    const target = center(6); // (1,1)
+    t.begin(start);
+    const dx = target.x - start.x;
+    const dy = target.y - start.y;
+    // Gesto diagonale impreciso: 30% di scarto sull'asse X.
+    t.move({ x: start.x + dx + Math.abs(dx) * 0.3, y: start.y + dy });
+    expect([...t.currentPath]).toEqual([0, 6]);
+  });
+
+  it('un movimento quasi orizzontale resta orizzontale', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    t.move({ x: center(0).x + PITCH, y: center(0).y + PITCH * 0.15 });
+    expect([...t.currentPath]).toEqual([0, 1]);
+  });
+
+  it('lo swipe avanti non viene annullato dai campioni interpolati', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    // Movimento lungo e veloce in diagonale: viene campionato internamente.
+    t.move(center(3 * SIZE + 3));
+    // Il percorso deve contenere la diagonale, non tornare indietro.
+    expect([...t.currentPath]).toEqual([0, 6, 12, 18]);
+  });
+});
