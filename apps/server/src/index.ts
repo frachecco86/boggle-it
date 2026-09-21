@@ -203,16 +203,38 @@ app.get('/schede', (_req, res) => {
   const bySize: Record<string, number> = {};
   /** Id raggruppati per chiave: permette al client di costruire il selettore. */
   const ids: Record<string, string[]> = {};
+  /*
+   * Metadati per la pagina "Sfoglia schede": punteggio massimo ottenibile,
+   * numero di parole e parola più lunga (solo lunghezza, mai la parola).
+   * Calcolati dalle schede già in memoria: costo trascurabile, e la lista
+   * permette al client di ordinare e filtrare senza scaricare 750 schede.
+   */
+  const meta: Array<{
+    id: string;
+    size: GridSize;
+    difficulty: Difficulty;
+    words: number;
+    maxScore: number;
+    longest: number;
+  }> = [];
   for (const scheda of schede.list()) {
     const key = `${scheda.size}-${scheda.difficulty}`;
     (ids[key] ??= []).push(scheda.id);
+    meta.push({
+      id: scheda.id,
+      size: scheda.size,
+      difficulty: scheda.difficulty,
+      words: scheda.words.length,
+      maxScore: scheda.words.reduce((total, w) => total + schedaWordPoints(w.length), 0),
+      longest: scheda.longest,
+    });
   }
   for (const list of Object.values(ids)) list.sort();
   for (const [key, count] of Object.entries(byKey)) {
     const size = key.split('-')[0]!;
     bySize[size] = (bySize[size] ?? 0) + count;
   }
-  res.json({ total: schede.size, byKey, bySize, ids });
+  res.json({ total: schede.size, byKey, bySize, ids, meta });
 });
 
 
@@ -253,6 +275,7 @@ app.get('/words', (req, res) => {
     schedaId: typeof req.query.schedaId === 'string' ? req.query.schedaId : undefined,
     pos: typeof req.query.pos === 'string' ? req.query.pos : undefined,
     onlyWithEntry: req.query.onlyWithEntry === '1' || req.query.onlyWithEntry === 'true',
+    scope: req.query.scope === 'dizionario' ? 'dizionario' : 'schede',
     sort,
     direction,
     limit,

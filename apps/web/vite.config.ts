@@ -29,6 +29,9 @@ export default defineConfig({
       '/me': { target: 'http://localhost:3001' },
       '/profiles': { target: 'http://localhost:3001' },
       '/music': { target: 'http://localhost:3001' },
+      '/words': { target: 'http://localhost:3001' },
+      '/leaderboard': { target: 'http://localhost:3001' },
+      '/games': { target: 'http://localhost:3001' },
     },
   },
 });

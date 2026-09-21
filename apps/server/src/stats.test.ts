@@ -188,6 +188,78 @@ describe('clearGames', () => {
 });
 
 describe('catalogo parole', () => {
+  it('espone tag grammaticale, link e categorie disponibili', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 's1', size: 4, difficulty: 'normale', grid: 'casa\nzzzz\nzzzz\nzzzz',
+      words: ['casa', 'caso'], longest: 4,
+    });
+    /*
+     * Indice lessicale iniettato: nella realtà arriva da `word-index.br`, ma per
+     * il test vogliamo valori noti. Serve a verificare che il catalogo unisca
+     * l'indice delle schede con le informazioni del dizionario.
+     */
+    catalog.setWordIndex({
+      pos: new Map([['casa', 'sost'], ['caso', 'sost']]),
+      hasEntry: new Set(['casa']),
+      display: new Map([['citta', 'città']]),
+    });
+
+    const res = catalog.wordCatalog({ sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    const casa = res.entries.find((e) => e.word === 'casa')!;
+    expect(casa.pos).toBe('sost');
+    expect(casa.hasEntry).toBe(true);
+    const caso = res.entries.find((e) => e.word === 'caso')!;
+    // `caso` non ha voce di dizionario: il link non deve esserci.
+    expect(caso.hasEntry).toBe(false);
+    // Le categorie disponibili alimentano il filtro della UI.
+    expect(res.byPos).toEqual([{ pos: 'sost', words: 2 }]);
+    // `withEntry` conta le parole con definizione disponibile.
+    expect(res.withEntry).toBe(1);
+  });
+
+  it('filtra per categoria grammaticale e per presenza di voce', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 's1', size: 4, difficulty: 'normale', grid: 'casa\nzzzz\nzzzz\nzzzz',
+      words: ['casa', 'corre'], longest: 5,
+    });
+    catalog.setWordIndex({
+      pos: new Map([['casa', 'sost'], ['corre', 'verb']]),
+      hasEntry: new Set(['casa']),
+      display: new Map(),
+    });
+
+    const soloSost = catalog.wordCatalog({ pos: 'sost', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(soloSost.entries.map((e) => e.word)).toEqual(['casa']);
+
+    const conVoce = catalog.wordCatalog({ onlyWithEntry: true, sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(conVoce.entries.map((e) => e.word)).toEqual(['casa']);
+  });
+
+  it('lo scope `dizionario` include parole mai componibili in una scheda', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add({
+      id: 's1', size: 4, difficulty: 'normale', grid: 'casa\nzzzz\nzzzz\nzzzz',
+      words: ['casa'], longest: 4,
+    });
+    // `nebulosa` è nel dizionario ma non in nessuna scheda.
+    catalog.setWordIndex({
+      pos: new Map([['casa', 'sost'], ['nebulosa', 'sost']]),
+      hasEntry: new Set(['nebulosa']),
+      display: new Map(),
+    });
+
+    const schede = catalog.wordCatalog({ scope: 'schede', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(schede.entries.map((e) => e.word)).toEqual(['casa']);
+
+    const dizionario = catalog.wordCatalog({ scope: 'dizionario', sort: 'word', direction: 'asc', limit: 100, offset: 0 });
+    expect(dizionario.entries.map((e) => e.word)).toEqual(['casa', 'nebulosa']);
+    // Le occorrenze delle parole fuori dalle schede sono zero.
+    const nebulosa = dizionario.entries.find((e) => e.word === 'nebulosa')!;
+    expect(nebulosa.occurrences).toBe(0);
+  });
+
   it('aggrega le parole con le occorrenze e la distribuzione per lunghezza', () => {
     const catalog = new SchedaCatalog();
     // Tre schede con parole in comune: 'casa' compare in due.

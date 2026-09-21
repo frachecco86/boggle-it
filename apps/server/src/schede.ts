@@ -207,12 +207,28 @@ export class SchedaCatalog {
     const byPosAll = new Map<string, number>();
     let withEntryAll = 0;
 
-    for (const [word, entry] of index.words) {
+    /*
+     * Universo di partenza.
+     *
+     * `schede` (default): le parole che compaiono in almeno una scheda.
+     * `dizionario`: TUTTO il lessico accettato dal gioco (`word-index.br`). Sono
+     * ~403k voci contro le ~30k componibili: molte parole italiane validissime
+     * non entrano mai in una griglia, e questa vista serve proprio a mostrarle.
+     */
+    const source: Iterable<[string, { occurrences: number; schedaIds: string[] } | null]> =
+      query.scope === 'dizionario'
+        ? [...this.lexical.pos.keys()].map((w) => [w, null] as [string, null])
+        : index.words;
+
+    for (const [word, entry] of source) {
       // distribuzione per lunghezza sull'intero catalogo filtrato (prima della paginazione)
-      const occ = restrictSchedaIds
-        ? entry.schedaIds.reduce((n, id) => (restrictSchedaIds.has(id) ? n + 1 : n), 0)
-        : entry.occurrences;
-      if (occ === 0) continue;
+      const occ = !entry
+        ? 0
+        : restrictSchedaIds
+          ? entry.schedaIds.reduce((n, id) => (restrictSchedaIds.has(id) ? n + 1 : n), 0)
+          : entry.occurrences;
+      // Nel perimetro `schede` una parola senza occorrenze non deve comparire.
+      if (entry && occ === 0) continue;
 
       if (query.length !== undefined && word.length !== query.length) continue;
       if (query.minLength !== undefined && word.length < query.minLength) continue;

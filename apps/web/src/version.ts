@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.14.1';
+export const APP_VERSION = '0.15.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,45 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.15.0',
+    date: '2026-09-22',
+    title: 'Dizionario verificato, schede equilibrate, pagina Parole a due viste',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          "**Pagina Parole a due viste**: *Nelle schede* mostra le parole che si possono davvero comporre nel gioco (con in quante schede compaiono), *Dizionario* mostra tutto il lessico accettato. Ogni parola ha il **tag grammaticale** (`sost`, `verb`, `agg`, …) e un **link alla voce di Wikizionario** che ne ha una (45.227 parole).",
+          "**Sfoglia le schede** ora è un elenco filtrabile: per griglia, difficoltà e taglia del punteggio, con ordinamento per **punteggio massimo**, parola più lunga o numero di parole. L'elenco mostra subito punteggio, parole e taglia, e si apre la scheda che interessa.",
+          'Un **box informativo** (icona `?`) spiega come nascono le schede (i cinque criteri) e come leggere i tag delle parole, senza lasciare la pagina.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Punteggio massimo ora prevedibile entro la stessa difficoltà**: la variabilità scende dal 34–59% al **5–19%** di scarto. Su 4×4 facile ora si va da 40 a 74 punti, prima da 117 a 870 (7 volte tanto).',
+          "**I livelli facili usano davvero parole facili**: *molto facile* e *facile* accettano solo il lessico di uso comune, quindi il 100% delle parole è comune (prima ~42%: capitava `contumace` in mezzo a `casa`).",
+          '**Rigenerate tutte le 750 schede** (50 per ognuna delle 15 combinazioni) con i nuovi criteri.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**Rimosse 96.436 parole inesistenti** dal dizionario: voci come `ato`, `acta`, `agfa`, `baili` entravano da una lista senza analisi grammaticale. Ora ogni parola è una voce attestata di dizionario, e `broccolo`, `anta`, `alce`, `tris` restano tutte giocabili.',
+          "**L'esultanza degli avversari in multiplayer ora suona la LORO registrazione**, non quella di chi ascolta: era il bug per cui si sentiva sempre la propria clip. Volume a metà.",
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Nuovo comando **`pnpm --filter @boggle/server verify:schede`** che controlla le schede contro i criteri dichiarati (con `--measure` per rigenerare griglie di prova, `--verbose` per il dettaglio). Esce con codice 1 se trova violazioni, quindi è utilizzabile in CI.',
+          'I criteri vivono in un solo posto (`schedaGen.ts`) e vengono letti sia dal generatore sia dal verificatore, così non possono disallinearsi. È stato proprio il verificatore a scoprire due difetti reali: soglie di lunghezza irrealistiche e un lessico "comune" calcolato in modo diverso fra le due parti.',
+          'I tag grammaticali arrivano da **Morph-it!** (Università di Bologna) e **Wikizionario** (dump kaikki.org), coprendo il **99%** delle parole. Il dato sta in un indice compresso (~800 KB) caricato dal server.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.14.1',
     date: '2026-09-21',

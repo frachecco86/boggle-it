@@ -279,6 +279,16 @@ export interface WordCatalogQuery {
   pos?: string;
   /** true = solo parole con voce di Wikizionario (definizione disponibile). */
   onlyWithEntry?: boolean;
+  /**
+   * Universo di parole su cui lavorare:
+   *  - `'schede'` (default): solo le parole componibili in almeno una scheda.
+   *  - `'dizionario'`: TUTTO il lessico, comprese le parole mai componibili.
+   *
+   * Perché serve: la pagina Parole ha due viste. Senza questo parametro la vista
+   * "Dizionario" mostrerebbe comunque solo le parole delle schede, cioè un
+   * sottoinsieme (è il bug che rendeva le due viste identiche).
+   */
+  scope?: 'schede' | 'dizionario';
   sort: 'word' | 'length' | 'occurrences';
   direction: 'asc' | 'desc';
   limit: number;

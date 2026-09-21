@@ -96,6 +96,12 @@ export async function fetchWordCatalog(
   if (query.maxLength !== undefined) params.set('maxLength', String(query.maxLength));
   if (query.gridSize !== undefined) params.set('gridSize', String(query.gridSize));
   if (query.difficulty) params.set('difficulty', query.difficulty);
+  if (query.schedaId) params.set('schedaId', query.schedaId);
+  if (query.pos && query.pos !== 'all') params.set('pos', query.pos);
+  if (query.onlyWithEntry) params.set('onlyWithEntry', '1');
+  // `scope` distingue le due viste della pagina Parole (solo schede / tutto il
+  // lessico). Senza questa riga il client chiedeva sempre il perimetro "schede".
+  if (query.scope) params.set('scope', query.scope);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
   if (query.offset !== undefined) params.set('offset', String(query.offset));
   try {

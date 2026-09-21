@@ -13,10 +13,32 @@
 import type { Difficulty, GridSize, Scheda } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
 
+/**
+ * Metadati di una scheda per la pagina "Sfoglia schede".
+ *
+ * Sono già nel catalogo (`/schede`), così il client può filtrare e ordinare 750
+ * schede senza scaricarle tutte: `maxScore` richiederebbe altrimenti una richiesta
+ * per scheda, cioè 750 chiamate per una pagina.
+ */
+export interface SchedaMeta {
+  id: string;
+  size: GridSize;
+  difficulty: Difficulty;
+  /** Parole trovabili. */
+  words: number;
+  /** Punteggio massimo ottenibile: somma dei punti di tutte le parole. */
+  maxScore: number;
+  /** Lunghezza della parola più lunga (mai la parola: sarebbe la soluzione). */
+  longest: number;
+}
+
 export interface CatalogInfo {
   total: number;
   byKey: Record<string, number>;
+  bySize?: Record<string, number>;
   ids: Record<string, string[]>;
+  /** Metadati per filtri e ordinamento. Assente se il server è vecchio. */
+  meta?: SchedaMeta[];
   /** true se i dati arrivano dal bundle locale (offline). */
   offline: boolean;
 }
