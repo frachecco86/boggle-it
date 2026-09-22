@@ -15,7 +15,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare).
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
-- **Dizionario italiano ampio**: ~354.000 forme, incluse **tutte le coniugazioni verbali**
+- **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**
   e le abbreviazioni da dizionario. **Ogni voce è giocabile**: è la stessa lista usata dalle schede.
 - **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (180 schede di base,
   20 per ognuna delle 9 combinazioni dimensione × difficoltà). Ogni scheda contiene la griglia

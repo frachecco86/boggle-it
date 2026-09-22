@@ -485,6 +485,46 @@ export class AudioEngine {
     [1567.98, 2093.0].forEach((f, i) => this.blip(f, now + 0.24 + i * 0.07, 0.3, 'sine', 0.08));
   }
 
+  /**
+   * Tick degli ultimi 10 secondi del round: un suono per secondo, con tono
+   * CRESCENTE, così si percepisce che il tempo sta finendo senza dover guardare.
+   *
+   * `remainingSeconds` è il numero di secondi rimasti (10 → 1). Il tono sale
+   * linearmente da ~440 Hz a ~880 Hz (un'ottava).
+   *
+   * VOLUME VOLUTAMENTE BASSO: è un promemoria, non un allarme. Resta sotto la
+   * soglia degli altri effetti (il tick del countdown d'apertura è a 0.22, qui si
+   * va da 0.045 a 0.085) e suona sempre `sine`, il timbro più morbido: si nota
+   * mentre si gioca senza coprire le parole trovate né la musica di sottofondo.
+   * Negli ultimi 3 secondi il volume sale solo un po', per chiudere la corsa.
+   *
+   * Perché un parametro e non uno stato interno come nel countdown: qui il valore
+   * è noto e va usato per la frequenza, non solo per alternare due note.
+   */
+  playRoundTick(remainingSeconds: number): void {
+    // Stessa condizione degli altri effetti pubblici: rispetta il muto.
+    if (!this.settings.sfxEnabled || !this.unlocked || !this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    const total = 10;
+    // 0 al decimo secondo rimasto, 1 all'ultimo: progressione lineare.
+    const t = Math.min(1, Math.max(0, (total - remainingSeconds) / (total - 1)));
+    const freq = 440 * Math.pow(2, t); // 440 Hz → 880 Hz (una ottava)
+    const peak = 0.045 + 0.04 * t; // 0.045 → 0.085: discreto, mai invadente
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine'; // timbro morbido: nessun attacco tagliente
+    osc.frequency.setValueAtTime(freq, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    // Attacco e rilascio dolci (senza lo scatto secco degli altri tick) e durata
+    // breve: un "bip" appena percettibile che non spezza il ritmo del gioco.
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+    osc.connect(gain).connect(this.sfxGain);
+    osc.start(now);
+    osc.stop(now + 0.16);
+  }
+
   /** Passo corrente del countdown (alterna le note dei tick). */
   private countdownStep = 0;
 

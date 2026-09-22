@@ -42,10 +42,12 @@ const MAX_LEN = 16;
 /**
  * Carica gli headword di Wikizionario (vedi `fetch-wiktionary.mjs`).
  *
- * Formato su disco: bucket `categoria` → parole separate da spazio, più due
- * sezioni speciali in coda: `~acc` (normale<TAB>originale, forme accentate) e
- * `~w` (l'elenco delle parole con voce di Wikizionario).
- * Ritorna `{ byWord, accents }`; `null` se il file manca (build offline).
+ * Formato su disco: bucket `categoria` → parole separate da spazio, più le
+ * sezioni speciali in coda:
+ *   `~acc` normale<TAB>originale → forme accentate (`citta` → `città`);
+ *   `~inf` elenco → forme dei PARADIGMI (`cerva`, `cerve` da `cervo`);
+ *   `~w`   elenco → parole con voce di Wikizionario.
+ * Ritorna `{ byWord, accents, inflected }`; `null` se il file manca.
  */
 async function loadWiktionary() {
   const file = path.join(DATA, 'wiktionary-heads.br');
@@ -53,6 +55,12 @@ async function loadWiktionary() {
   const lines = brotliDecompressSync(await readFile(file)).toString('utf8').split('\n');
   const byWord = new Map();
   const accents = new Map();
+  /**
+   * Forme dei paradigmi (`~inf:<pos>`): parola → categoria del lemma di origine.
+   * Servono sia come ATTESTAZIONE (`cerva`/`cerve` non hanno una voce propria)
+   * sia per dare loro un TAG, evitando che finiscano in `n.c.`.
+   */
+  const inflected = new Map();
   let i = 0;
   while (i < lines.length) {
     const section = lines[i++];
@@ -65,13 +73,25 @@ async function loadWiktionary() {
       }
       continue;
     }
+    // Sezioni speciali a elenco: `~inf:<pos>` (paradigmi) e `~w` (voci).
+    // Vanno gestite PRIMA del caso generico, altrimenti diventerebbero un tag.
+    if (section.startsWith('~inf:')) {
+      const pos = section.slice('~inf:'.length);
+      const words = lines[i++] ?? '';
+      for (const w of words.split(' ')) if (w) inflected.set(w, pos);
+      continue;
+    }
+    if (section === '~w') {
+      i++; // elenco delle voci Wikizionario: non serve al build
+      continue;
+    }
     // Bucket di categoria: la riga successiva elenca le parole.
     const words = lines[i++] ?? '';
     for (const w of words.split(' ')) {
       if (w) byWord.set(w, section);
     }
   }
-  return { byWord, accents };
+  return { byWord, accents, inflected };
 }
 
 export function normalizeWord(raw) {
@@ -296,6 +316,33 @@ const POS_LABEL = {
  * e `~acc` per le forme accentate. Con una riga per parola il file pesava 757 KB,
  * così scende a ~700 KB e il server lo carica in una mappa unica.
  */
+/*
+ * Ordine di RILEVANZA dei tag, per i tag multipli (`imi` è sia aggettivo sia, da
+ * una seconda analisi di Morph-it, nome proprio `Imi`).
+ *
+ * Perché non l'ordine alfabetico: producendo `n.pr agg` la pagina Parole mostra
+ * un nome proprio in testa a una parola comunissima come `imi`, che confonde.
+ * Le categorie grammaticali "vere" vengono prima; `n.pr` va in coda.
+ */
+const POS_RELEVANCE = [
+  'sost', 'verb', 'agg', 'avv', 'pron', 'art', 'prep', 'cong', 'num',
+  'inter', 'loc', 'loc.avv', 'loc.prep', 'pref', 'suff', 'abbr', 'sim',
+  'car', 'aff', 'part', 'n.pr', 'n.c.',
+];
+
+/** Ordina i tag di un tag multiplo per rilevanza. */
+function sortTags(tag) {
+  const parts = tag.split(' ').filter(Boolean);
+  if (parts.length < 2) return tag;
+  return [...new Set(parts)]
+    .sort((a, b) => {
+      const ia = POS_RELEVANCE.indexOf(a);
+      const ib = POS_RELEVANCE.indexOf(b);
+      return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+    })
+    .join(' ');
+}
+
 async function writeWordIndex(sorted, morphPath, wiktionary) {
   // Morph-it: forma → categoria (o categorie) del lemma.
   const morphPos = new Map();
@@ -312,7 +359,7 @@ async function writeWordIndex(sorted, morphPath, wiktionary) {
     if (!cat) continue;
     const cur = morphPos.get(w);
     if (cur) {
-      if (!cur.includes(cat)) morphPos.set(w, `${cur} ${cat}`);
+      if (!cur.includes(cat)) morphPos.set(w, sortTags(`${cur} ${cat}`));
     } else {
       morphPos.set(w, cat);
     }
@@ -323,7 +370,12 @@ async function writeWordIndex(sorted, morphPath, wiktionary) {
   let withTag = 0;
   for (const w of sorted) {
     const wiki = wiktionary?.byWord.get(w) ?? null;
-    const tag = wiki ?? morphPos.get(w) ?? 'n.c.';
+    // Ordine di priorità: voce autonoma → Morph-it → categoria del lemma del
+    // paradigma (`~inf`) → non classificata. Senza il terzo gradino le ~14k
+    // forme recuperate dai paradigmi sarebbero tutte `n.c.`.
+    const tag = sortTags(
+      wiki ?? morphPos.get(w) ?? wiktionary?.inflected.get(w) ?? 'n.c.',
+    );
     if (tag !== 'n.c.') withTag++;
     const list = buckets.get(tag) ?? [];
     list.push(w);
@@ -546,7 +598,12 @@ async function main() {
       if (!accepted(w)) continue;
       // Già coperta da una fonte con analisi grammaticale: nessun dubbio.
       if (words.has(w)) continue;
-      if (wiktionary && !wiktionary.byWord.has(w)) {
+      /*
+       * Attestazione: voce autonoma (`byWord`) OPPURE flessione di una voce
+       * (`inflected`, sezione `~inf`). Senza la seconda `cerva`/`cerve` restavano
+       * fuori pur essendo forme regolari di `cervo`.
+       */
+      if (wiktionary && !wiktionary.byWord.has(w) && !wiktionary.inflected?.has(w)) {
         extendedDropped++;
         continue;
       }
@@ -587,7 +644,7 @@ async function main() {
     // qui va invece normalizzata come il resto, senza il minimo di 3 filtri a valle.
     for (const w of words) {
       if (!isNoiseOnly(morphNoise, w)) continue;
-      if (commonSet.has(w) || wiktionary?.byWord.has(w)) continue;
+      if (commonSet.has(w) || wiktionary?.byWord.has(w) || wiktionary?.inflected?.has(w)) continue;
       noiseDropped.push(w);
     }
     for (const w of noiseDropped) words.delete(w);

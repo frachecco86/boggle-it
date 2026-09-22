@@ -218,3 +218,29 @@ describe('AudioEngine — volume delle esultanze', () => {
     expect(peaks.length).toBeGreaterThan(0);
   });
 });
+
+describe('AudioEngine — feedback degli ultimi 10 secondi', () => {
+  it('il tick cresce di tono e di volume avvicinandosi alla fine', async () => {
+    const engine = await makeEngine();
+    // Con 10 secondi rimasti il tono è il più basso; con 1 il più alto e marcato.
+    peaks = [];
+    engine.playRoundTick(10);
+    const first = loudest(peaks);
+    peaks = [];
+    engine.playRoundTick(1);
+    const last = loudest(peaks);
+
+    expect(first).toBeGreaterThan(0);
+    expect(last).toBeGreaterThan(0);
+    // Il volume cresce: l'ultimo secondo si sente più del primo.
+    expect(last).toBeGreaterThan(first);
+  });
+
+  it('rispetta il muto: con gli effetti spenti non suona', async () => {
+    const engine = await makeEngine();
+    engine.setSettings({ sfxEnabled: false });
+    peaks = [];
+    engine.playRoundTick(5);
+    expect(peaks).toHaveLength(0);
+  });
+});

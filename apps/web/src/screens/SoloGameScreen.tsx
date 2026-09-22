@@ -8,6 +8,7 @@ import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 import { SchedaPreview } from '../components/SchedaPreview.js';
 import { CountdownOverlay } from '../components/CountdownOverlay.js';
+import { useFinalCountdown } from '../game/useFinalCountdown.js';
 import { RoundSummary } from './RoundSummary.js';
 
 /**
@@ -32,6 +33,9 @@ export function SoloGameScreen() {
     roundDurationMs: soloRoundDurationMs,
   });
   const { state } = game;
+
+  // Tick crescente negli ultimi 10 secondi del round.
+  useFinalCountdown(state.timeLeftMs, state.phase === 'playing');
 
   const handlePathChange = useCallback((path: number[]) => game.setSelectedPath(path), [game]);
 

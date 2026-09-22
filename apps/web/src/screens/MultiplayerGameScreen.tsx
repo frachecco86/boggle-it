@@ -9,6 +9,7 @@ import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useAppStore } from '../state/store.js';
 import { audio } from '../audio/AudioEngine.js';
+import { useFinalCountdown } from '../game/useFinalCountdown.js';
 
 type Feedback = { kind: 'valid' | 'invalid' | 'duplicate'; text: string };
 
@@ -33,6 +34,10 @@ export function MultiplayerGameScreen() {
   const [flashError, setFlashError] = useState(false);
   const flashTimer = useRef<number | null>(null);
   const feedbackTimer = useRef<number | null>(null);
+
+  // Tick crescente negli ultimi 10 secondi del round. In multiplayer il round è
+  // attivo quando il server ha comunicato una scadenza (`roundEndsAt`).
+  useFinalCountdown(timeLeftMs, roundEndsAt > 0);
 
   const currentWord = useMemo(() => (grid ? wordFromPath(grid, selectedPath) : ''), [grid, selectedPath]);
   const myRoundWordStrings = useMemo(() => new Set(myWords.map((w) => w.word)), [myWords]);

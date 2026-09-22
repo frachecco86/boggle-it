@@ -103,6 +103,15 @@ async function main() {
 
   /** parola normalizzata → { pos: Set<string>, display: string } */
   const heads = new Map();
+  /**
+   * Forme flesse provenienti dai paradigmi degli headword (`cerva`, `cerve`),
+   * con la categoria grammaticale del LEMMA di provenienza.
+   *
+   * La categoria serve a dare un tag anche a queste forme: senza, `cerva`
+   * finirebbe in `n.c.` (non è un headword né sta in Morph-it) e la copertura
+   * dei tag crollerebbe dal 99% al 96%.
+   */
+  const inflectionForms = new Map();
   let lines = 0;
 
   const rl = createInterface({
@@ -140,6 +149,21 @@ async function main() {
     const cur = heads.get(word) ?? { pos: new Set(), display: String(obj.word) };
     cur.pos.add(pos);
     heads.set(word, cur);
+
+    /*
+     * FORME DEL PARADIGMA. Un headword porta con sé le sue flessioni in `forms[]`
+     * (`cervo` → `cervi`, `cerva`, `cerve`). Servono al build del dizionario per
+     * riconoscere come valide le forme regolari di una voce attestata: senza,
+     * `cerva`/`cerve` restano fuori perché NON hanno una entry propria nel dump
+     * (esistono solo come forme di `cervo`).
+     */
+    for (const f of obj.forms ?? []) {
+      const fw = normalize(f.form ?? '');
+      if (fw.length < 3 || fw.length > 16) continue;
+      const set = inflectionForms.get(fw) ?? new Set();
+      set.add(pos);
+      inflectionForms.set(fw, set);
+    }
   }
 
   /*
@@ -176,13 +200,35 @@ async function main() {
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
     .map(([norm, display]) => `${norm}\t${display}`);
   if (accentLines.length > 0) text += `~acc\n${accentLines.join('\n')}\n`;
+  /*
+   * Sezioni speciali `~inf:<pos>` (forme dei paradigmi, raggruppate per categoria).
+   *
+   * Toglie le forme che sono già headword (inutili: attestate di per sé) e quelle
+   * già coperte dal bucket principale. Il formato a BUCKET (`~inf:sost` + elenco)
+   * costa molto meno di `forma<TAB>tag` ripetuto 380k volte.
+   */
+  const infBuckets = new Map();
+  for (const [w, poss] of inflectionForms) {
+    if (heads.has(w)) continue;
+    for (const pos of poss) {
+      const list = infBuckets.get(pos) ?? [];
+      list.push(w);
+      infBuckets.set(pos, list);
+    }
+  }
+  let infCount = 0;
+  for (const pos of [...infBuckets.keys()].sort()) {
+    const list = infBuckets.get(pos).sort();
+    infCount += list.length;
+    text += `~inf:${pos}\n${list.join(' ')}\n`;
+  }
 
   const br = brotliCompressSync(Buffer.from(text, 'utf8'), {
     params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
   });
   await writeFile(OUT_BR, br);
 
-  console.log(`✓ wiktionary-heads.br: ${heads.size.toLocaleString('it-IT')} headword, ${buckets.size} categorie, ${accentLines.length} forme accentate (${(br.length / 1024).toFixed(0)} KB)`);
+  console.log(`✓ wiktionary-heads.br: ${heads.size.toLocaleString('it-IT')} headword, ${buckets.size} categorie, ${accentLines.length} forme accentate, ${infCount.toLocaleString('it-IT')} forme di paradigma (${(br.length / 1024).toFixed(0)} KB)`);
   console.log(`  righe lette dal dump: ${lines.toLocaleString('it-IT')}`);
   if (process.env.KEEP_DUMP !== '1') {
     unlinkSync(GZ);

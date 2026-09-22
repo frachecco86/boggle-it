@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.16.0';
+export const APP_VERSION = '0.16.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,41 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.16.1',
+    date: '2026-09-22',
+    title: 'Più parole valide, tag corretti e feedback negli ultimi 10 secondi',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          "**Parole come `cerva`, `cerve`, `abache`, `abachi` ora sono valide.** Erano forme regolari di una voce attestata (`cervo`), ma non avevano una voce propria su Wikizionario: il filtro le scartava. Recuperate **13.895 parole** collegate al lemma di origine. Il lessico passa da 354.318 a **368.213** voci.",
+          '**Rimosse 717 voci che non sono parole italiane**: nomi propri e sigle come `pli`, `abi`, `zenga`, `agca`. Restano invece i nomi con uso reale (`roma`, `carlo`, `cina`), perché la regola esclude solo chi non è attestato da nessuna fonte.',
+          "**Tag più chiari**: `imi` non è più mostrato come `n.pr agg` ma come **`agg n.pr`** (la categoria grammaticale prima del nome proprio). Vale per tutte le 7.746 parole con tag multiplo.",
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**I tag grammaticali restano affidabili** (99,5% di copertura) anche per le 14k parole recuperate: ereditano la categoria del lemma da cui derivano.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**Feedback sonoro negli ultimi 10 secondi del round**: un tick leggero per ogni secondo, con tono e volume crescenti. È discreto — un promemoria, non un allarme — e si sente senza coprire la musica né le parole trovate. Vale sia in single player sia in multiplayer, e rispetta il muto.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il file di Wikizionario ora include anche le **forme dei paradigmi** (`cervo` → `cervi`, `cerva`, `cerve`), non solo le voci autonome: è ciò che rende riconoscibili le flessioni che il dump non elenca come voci.',
+          'Le forme di paradigma entrano nell\'indice con la categoria del loro lemma, così la copertura dei tag non cala.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.16.0',
     date: '2026-09-22',
