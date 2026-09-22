@@ -2,7 +2,6 @@ import {
   DEFAULT_MUSIC_ID,
   generateGrid,
   generateRoomCode,
-  isBuiltInMusicId,
   isMusicChoice,
   isValidPath,
   pathMatchesWord,
@@ -359,10 +358,21 @@ export class Room {
    * stava usando resterebbe con un id non più valido e il client non troverebbe
    * il file. In quel caso si torna alla traccia predefinita.
    */
-  ensureMusicExists(exists: (id: string) => boolean): void {
+  /**
+   * Garantisce che la traccia scelta sia ancora suonabile.
+   *
+   * Due casi da coprire:
+   *  - la traccia è stata CANCELLATA dall'admin;
+   *  - la traccia è stata DISABILITATA (o è una di quelle incluse nel bundle, che
+   *    prima si consideravano sempre valide).
+   * In entrambi si passa a una traccia attiva, così nessuno resta in silenzio.
+   */
+  ensureMusicExists(isPlayable: (id: string) => boolean, fallbackId?: string): void {
     if (this.musicId === 'none') return;
-    if (isBuiltInMusicId(this.musicId) || exists(this.musicId)) return;
-    this.musicId = DEFAULT_MUSIC_ID;
+    if (isPlayable(this.musicId)) return;
+    // `fallbackId` è la prima traccia attiva secondo il server; se manca (vecchie
+    // chiamate) si usa la predefinita, che è sempre nel bundle.
+    this.musicId = fallbackId ?? DEFAULT_MUSIC_ID;
   }
 
   removePlayer(playerId: string): void {
@@ -424,6 +434,11 @@ export class RoomRegistry {
 
   delete(code: string): void {
     this.rooms.delete(code);
+  }
+
+  /** Tutte le stanze attive (per operazioni globali, come un cambio di playlist). */
+  all(): Room[] {
+    return [...this.rooms.values()];
   }
 
   /** Rimuove stanze vuote o terminate da troppo tempo. */

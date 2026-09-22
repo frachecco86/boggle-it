@@ -31,6 +31,17 @@ export interface MusicTrackMeta {
   uploaded?: boolean;
 }
 
+/**
+ * Traccia nel pannello admin: metadati + stato di attivazione.
+ *
+ * Il catalogo PUBBLICO (`/music`) contiene solo le tracce attive, quindi l'admin
+ * non potrebbe vedere quelle spente né riaccenderle. Questo tipo è quello che il
+ * server restituisce su `/admin/music`.
+ */
+export interface AdminMusicTrack extends MusicTrackMeta {
+  enabled: boolean;
+}
+
 export const MUSIC_TRACKS = [
   {
     id: 'classica',

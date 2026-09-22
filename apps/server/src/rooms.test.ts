@@ -277,3 +277,35 @@ describe('Clip audio condivise in stanza', () => {
     expect(registry.sharesRoomWith('profile-a', 'profile-c')).toBe(false);
   });
 });
+
+describe('musica della stanza e tracce disabilitate', () => {
+  it('una traccia non più suonabile viene sostituita', () => {
+    const room = new Room('MUS01', DICT, 4, 3);
+    room.setMusic('classica');
+    // Il server dice che `classica` è spenta: si passa alla prima attiva.
+    room.ensureMusicExists((id) => id !== 'classica', 'overworld');
+    expect(room.musicId).toBe('overworld');
+  });
+
+  it('una traccia ancora suonabile resta invariata', () => {
+    const room = new Room('MUS02', DICT, 4, 3);
+    room.setMusic('classica');
+    room.ensureMusicExists(() => true, 'overworld');
+    expect(room.musicId).toBe('classica');
+  });
+
+  it('se tutte le tracce sono spente si ricade sulla predefinita', () => {
+    const room = new Room('MUS03', DICT, 4, 3);
+    room.setMusic('overworld');
+    // Nessun ripiego disponibile: si usa la predefinita, che è nel bundle.
+    room.ensureMusicExists(() => false, undefined);
+    expect(room.musicId).toBe('classica');
+  });
+
+  it('la musica spenta per scelta (`none`) non viene toccata', () => {
+    const room = new Room('MUS04', DICT, 4, 3);
+    room.setMusic('none');
+    room.ensureMusicExists(() => false, 'overworld');
+    expect(room.musicId).toBe('none');
+  });
+});

@@ -10,7 +10,6 @@ import {
   isDifficulty,
   isSfxSlot,
   isSubmitGamePayload,
-  isBuiltInMusicId,
   LEADERBOARD_KINDS,
   PROFILE_LIMITS,
   type ClientToServerEvents,
@@ -854,11 +853,17 @@ app.post('/admin/db/checkpoint', (req, res) => {
 /* Admin musica                                                        */
 /* ------------------------------------------------------------------ */
 
-/** Elenco delle tracce caricate (le incluse sono già note al client). */
+/**
+ * Elenco COMPLETO per il pannello admin: include anche le tracce spente.
+ *
+ * `uploaded` → tracce caricate; `all` → catalogo con `enabled`, così l'admin può
+ * mostrare e riaccendere anche una traccia disabilitata (che non compare nel
+ * catalogo pubblico `/music`).
+ */
 app.get('/admin/music', (req, res) => {
   if (!requireAdmin(req, res)) return;
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ uploaded: musicLibrary.listUploaded(), all: musicLibrary.list() });
+  res.json({ uploaded: musicLibrary.listUploaded(), all: musicLibrary.listAll() });
 });
 
 /**
@@ -909,6 +914,46 @@ app.delete('/admin/music/:id', (req, res) => {
   if (!musicLibrary.remove(id)) return res.status(404).json({ error: 'Traccia non trovata' });
   console.log(`✓ Admin: rimossa traccia ${id}`);
   res.json({ ok: true, tracks: musicLibrary.list() });
+});
+
+/**
+ * Accende o spegne una traccia nella playlist.
+ *
+ * `PUT /admin/music/:id/enabled` con body JSON `{ enabled: boolean }`.
+ *
+ * Perché disabilitare invece di cancellare: una traccia INCLUDITA nel bundle non
+ * si può cancellare (è versionata nel client), e una caricata potrebbe servire
+ * ancora. Spegnendola sparisce dal catalogo pubblico — quindi nessuno può
+ * sceglierla — ma resta riaccendibile e non perde il file.
+ */
+app.put('/admin/music/:id/enabled', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const id = String(req.params.id);
+  const enabled = req.body?.enabled;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'Campo `enabled` mancante o non booleano' });
+  }
+  if (!musicLibrary.setEnabled(id, enabled)) {
+    return res.status(404).json({ error: 'Traccia non trovata' });
+  }
+  console.log(`✓ Admin: traccia ${id} ${enabled ? 'attivata' : 'disattivata'}`);
+  /*
+   * Le stanze che stavano usando quella traccia vanno aggiornate SUBITO: senza,
+   * chi è già in partita continuerebbe a sentirla finché non ricarica. La
+   * sostituzione è visibile a tutti (stato della stanza + musica locale).
+   */
+  for (const room of registry.all()) {
+    const before = room.musicId;
+    room.ensureMusicExists(
+      (mid) => musicLibrary.isPlayable(mid),
+      musicLibrary.firstPlayable()?.id,
+    );
+    if (room.musicId !== before) {
+      console.log(`  stanza ${room.code}: musica ${before} → ${room.musicId}`);
+      broadcastState(room);
+    }
+  }
+  res.json({ ok: true, all: musicLibrary.listAll(), tracks: musicLibrary.list() });
 });
 
 /**
@@ -990,7 +1035,10 @@ function broadcastState(room: Room): void {
   // Una traccia caricata dall'admin può essere stata cancellata mentre la stanza
   // la usava: in quel caso si ricade sulla predefinita, così nessun client
   // resta puntato a un file che non esiste più.
-  room.ensureMusicExists((id) => musicLibrary.has(id));
+  room.ensureMusicExists(
+    (id) => musicLibrary.isPlayable(id),
+    musicLibrary.firstPlayable()?.id,
+  );
   io.to(room.code).emit('room:update', room.publicState());
 }
 

@@ -112,3 +112,75 @@ describe('MusicLibrary', () => {
     expect(entry?.credits).toBe('Autore X');
   });
 });
+
+describe('abilitazione delle tracce', () => {
+  it('disabilitare una traccia la toglie dal catalogo pubblico ma non da quello admin', () => {
+    const l = makeLibrary();
+    // Una traccia INCLUSA nel bundle: non si può cancellare, solo spegnere.
+    expect(l.setEnabled('classica', false)).toBe(true);
+
+    // Catalogo pubblico: non c'è più, quindi nessun giocatore può sceglierla.
+    expect(l.list().map((t) => t.id)).not.toContain('classica');
+    // Catalogo admin: c'è ancora, marcata come spenta, così si può riaccendere.
+    const admin = l.listAll().find((t) => t.id === 'classica');
+    expect(admin?.enabled).toBe(false);
+
+    expect(l.setEnabled('classica', true)).toBe(true);
+    expect(l.list().map((t) => t.id)).toContain('classica');
+    expect(l.listAll().find((t) => t.id === 'classica')?.enabled).toBe(true);
+  });
+
+  it('funziona anche sulle tracce caricate, non solo su quelle incluse', () => {
+    const l = makeLibrary();
+    const track = l.add({ label: 'Mia traccia', ...fakeMp3() });
+    expect(l.setEnabled(track.id, false)).toBe(true);
+    expect(l.list().map((t) => t.id)).not.toContain(track.id);
+    // Il file resta su disco: spegnere non è cancellare.
+    expect(l.fileOf(track.id)).not.toBeNull();
+  });
+
+  it('rifiuta un id inesistente', () => {
+    const l = makeLibrary();
+    expect(l.setEnabled('non-esiste', false)).toBe(false);
+  });
+
+  it('la scelta sopravvive al riavvio (persistita su disabled.json)', () => {
+    const first = makeLibrary();
+    first.setEnabled('overworld', false);
+    expect(existsSync(path.join(dir, 'disabled.json'))).toBe(true);
+
+    const second = makeLibrary();
+    expect(second.list().map((t) => t.id)).not.toContain('overworld');
+    expect(second.listAll().find((t) => t.id === 'overworld')?.enabled).toBe(false);
+  });
+
+  it('rimuovere una traccia la toglie anche dall elenco dei disabilitati', () => {
+    const l = makeLibrary();
+    const track = l.add({ label: 'Temporanea', ...fakeMp3() });
+    l.setEnabled(track.id, false);
+    l.remove(track.id);
+    // Senza la pulizia, un id riusato in futuro resterebbe spento senza motivo.
+    const raw = JSON.parse(readFileSync(path.join(dir, 'disabled.json'), 'utf8')) as string[];
+    expect(raw).not.toContain(track.id);
+  });
+
+  it('exists/isEnabled/isPlayable distinguono esistenza e attivazione', () => {
+    const l = makeLibrary();
+    l.setEnabled('classica', false);
+    expect(l.exists('classica')).toBe(true);
+    expect(l.isEnabled('classica')).toBe(false);
+    expect(l.isPlayable('classica')).toBe(false);
+    // Una traccia mai vista non esiste affatto.
+    expect(l.exists('boh')).toBe(false);
+    expect(l.isPlayable('boh')).toBe(false);
+  });
+
+  it('firstPlayable salta le tracce spente e null se sono tutte spente', () => {
+    const l = makeLibrary();
+    const first = l.firstPlayable();
+    expect(first?.id).toBe(l.list()[0]?.id);
+    for (const t of l.listAll()) l.setEnabled(t.id, false);
+    expect(l.list()).toHaveLength(0);
+    expect(l.firstPlayable()).toBeNull();
+  });
+});

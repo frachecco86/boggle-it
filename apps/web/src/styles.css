@@ -2288,6 +2288,27 @@ body {
   max-width: 240px;
 }
 
+/*
+ * Traccia SPENTA: resta nell'elenco (per poterla riaccendere) ma si vede subito
+ * che non è in playlist. Attenuata e con bordo tratteggiato per distinguerla da
+ * una traccia attiva senza confonderla con un errore.
+ */
+.admin__music-row--off {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.admin__music-row--off .admin__music-info strong {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.admin__music-id {
+  font-size: 0.68rem !important;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .sfx-row__actions {
   display: flex;
   gap: 4px;
