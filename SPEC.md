@@ -27,10 +27,10 @@ nessuna persistenza su database, nessuna PWA.
 | Frontend | **React 18 + Vite + TypeScript** |
 | Animazioni | **CSS + Web Animations API** (nessuna libreria) |
 | Multiplayer | **Node + Socket.IO**, stanza con codice 6 caratteri |
-| Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer |
+| Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer; ~355k forme, tutte giocabili |
 | Struttura | **Monorepo pnpm workspaces** |
 | Sorgente dizionario | **Morph-it! (UniBO) + abbreviazioni Wikizionario** |
-| Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 480 schede** |
+| Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 180 schede** |
 | Punteggio | **lunghezza − 2**; in multiplayer **raddoppio** se trovata da un solo giocatore |
 
 ---
@@ -53,14 +53,15 @@ le parole trovabili. Vantaggi: partite riproducibili, soluzioni verificate, ness
 runtime, e la possibilità di **filtrare la qualità** delle schede (parole lunghe, parole comuni).
 
 Requisiti di qualità (imposti in generazione, con rigenerazione finché non è soddisfatto):
+- **densità di parole**: il numero di parole trovabili deve stare nella banda della difficoltà
+  (su 4×4 circa 130 / 60 / 30 per Facile / Normale / Difficile); è il criterio che DEFINISCE
+  la difficoltà, sostituendo la vecchia composizione vocali/rare;
+- **punteggio massimo** nella banda corrispondente (evita schede di sole parole cortissime);
 - parole di **varia lunghezza**, con almeno una parola lunga (≥ 7; su 6×6 tipicamente 9-12);
-- un numero minimo di parole per dimensione;
-- nei livelli `molto-facile` e `facile` la griglia è risolta contro il **lessico comune**
-  (~60k parole non astruse): tutte le parole trovabili sono comuni;
-- nei livelli `normale` e `difficile` si usa il dizionario completo, accettando solo schede
-  con almeno una parola lunga.
+- tutte le griglie risolvono contro il **dizionario completo**: ogni voce del dizionario è
+  giocabile e viceversa (una sola lista di parole valide).
 
-Catalogo di base: **480 schede** (40 per ognuna delle 12 combinazioni dimensione × difficoltà),
+Catalogo di base: **180 schede** (20 per ognuna delle 9 combinazioni dimensione × difficoltà),
 rigenerabili con `pnpm gen:schede` e ampliabili dal pannello admin.
 
 ### 3.2 Selezione parola (swipe)
@@ -266,7 +267,7 @@ sbooble/
 │           └── index.ts        # HTTP + Socket.IO + admin
 ├── packages/
 │   ├── shared/                 # tipi, griglia, scoring, solver, schede (web+server)
-│   │   └── schede/             # 480 schede pre-calcolate (JSON versionati)
+│   │   └── schede/             # 180 schede pre-calcolate (JSON versionati)
 │   └── dictionary/             # lista parole + script di build
 ├── tools/
 │   └── check-context.mjs       # controllo contesto di build

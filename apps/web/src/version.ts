@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.15.0';
+export const APP_VERSION = '0.16.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,37 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.16.0',
+    date: '2026-09-22',
+    title: 'Una sola lista di parole, 3 livelli, difficoltà misurata in parole',
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**`tua` (e `per`, `sul`, `del`, `nel`, `non`) ora si possono trovare.** Erano nel dizionario ma **escluse da ogni scheda** da una lista separata di "parole funzionali": il gioco le rifiutava sempre. Ora il dizionario e le schede usano **una sola lista** di parole giocabili.',
+          '**Rimosse 48.376 parole che il gioco non accettava mai**: erano troncamenti delle fonti (`andar`, `alzar`, `maggior`, `normalit`) e abbreviazioni. Il lessico scende da 403.393 a 355.027 voci, ma ora **ogni voce è davvero giocabile** (verificato: 0 incoerenze).',
+          '**Il Dizionario non è più vuoto in produzione.** L\'indice dei tag e dei link (`word-index.br`) non veniva generato né copiato nel build di deploy: la vista Dizionario mostrava 0 parole. Ora il build lo produce anche offline.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**La difficoltà ora è il numero di parole trovabili**, come richiesto: non più "quante vocali". I 5 livelli diventano **3** (Facile / Normale / Difficile) con bande di parole e punteggio misurate. Su 4×4: circa **126 / 59 / 28** parole di media.',
+          '**Schede molto più ricche dove serve**: il livello Facile passa da ~27 a ~126 parole su 4×4. Le griglie facili non sono più simili a quelle difficili (prima 27 vs 32: indistinguibili).',
+          '**20 schede per categoria** (180 in tutto: 3 dimensioni × 3 livelli). Rigenerabili con `pnpm gen:schede`.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'I criteri di qualità sono ora **densità di parole + punteggio massimo**, con verifica automatica (`pnpm --filter @boggle/server verify:schede`): tutte le 180 schede passano, nessuna violazione.',
+          'Il verificatore segnala anche le schede fuori banda prodotte dal criterio di ripiego del generatore, così un catalogo incoerente non passa inosservato.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.15.0',
     date: '2026-09-22',

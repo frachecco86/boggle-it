@@ -8,7 +8,7 @@
  */
 import type { GridSize } from './types.js';
 
-export type Difficulty = 'molto-facile' | 'facile' | 'normale' | 'difficile' | 'estremo';
+export type Difficulty = 'facile' | 'normale' | 'difficile';
 
 export interface DifficultyMeta {
   id: Difficulty;
@@ -27,30 +27,14 @@ export interface DifficultyMeta {
   };
 }
 
-export const DIFFICULTY_ORDER: Difficulty[] = [
-  'molto-facile',
-  'facile',
-  'normale',
-  'difficile',
-  'estremo',
-];
+export const DIFFICULTY_ORDER: Difficulty[] = ['facile', 'normale', 'difficile'];
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
-  'molto-facile': {
-    id: 'molto-facile',
-    label: 'Molto facile',
-    description: 'Tantissime vocali e solo lettere comuni: ideale per iniziare.',
-    theme: {
-      background: 'radial-gradient(1200px 800px at 50% -10%, #eafbf1 0%, #d7f2e4 55%, #cbeadb 100%)',
-      surface: '#ffffff',
-      accent: '#1fa97a',
-      accentSoft: '#5fd0a6',
-    },
-  },
   facile: {
     id: 'facile',
     label: 'Facile',
-    description: 'Più vocali e lettere comuni: molte parole possibili.',
+    description:
+      'Griglia ricca, lettere comuni: tantissime parole trovabili. Ideale per iniziare.',
     theme: {
       background: 'radial-gradient(1200px 800px at 50% -10%, #eaf7fb 0%, #d5eef5 55%, #c7e7f0 100%)',
       surface: '#ffffff',
@@ -61,7 +45,7 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
   normale: {
     id: 'normale',
     label: 'Normale',
-    description: 'Distribuzione bilanciata di vocali e consonanti.',
+    description: 'Griglia equilibrata: un buon numero di parole, con qualche lettera rara.',
     theme: {
       background: 'radial-gradient(1200px 800px at 50% -10%, #f3f1ff 0%, #e7e3fb 55%, #ded9f7 100%)',
       surface: '#ffffff',
@@ -72,7 +56,8 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
   difficile: {
     id: 'difficile',
     label: 'Difficile',
-    description: 'Meno vocali e più consonanti rare: parole più difficili da comporre.',
+    description:
+      'Poche parole trovabili e più lettere rare: ogni parola vale, servono quelle lunghe.',
     theme: {
       background: 'radial-gradient(1200px 800px at 50% -10%, #fdf0f5 0%, #f8e2ec 55%, #f4d6e3 100%)',
       surface: '#ffffff',
@@ -80,22 +65,39 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyMeta> = {
       accentSoft: '#ef85b2',
     },
   },
-  estremo: {
-    id: 'estremo',
-    label: 'Estremo',
-    description:
-      'Vocabolario più ampio e pochissime vocali: servono parole di 9-10 lettere per fare punti.',
-    theme: {
-      background: 'radial-gradient(1200px 800px at 50% -10%, #f3eefb 0%, #e5dcf5 55%, #d8cbee 100%)',
-      surface: '#ffffff',
-      accent: '#7c3aed',
-      accentSoft: '#a78bfa',
-    },
-  },
 };
 
 export function isDifficulty(value: unknown): value is Difficulty {
   return DIFFICULTY_ORDER.includes(value as Difficulty);
+}
+
+/**
+ * Difficoltà valida a partire da un valore arbitrario, con ripiego.
+ *
+ * Serve per i dati STORICI: il database contiene partite registrate con i livelli
+ * aboliti (`molto-facile`, `estremo`). Leggendo `DIFFICULTIES[d]` su quei valori
+ * si otterrebbe `undefined` e l'interfaccia andrebbe in errore. Qui il valore
+ * sconosciuto ricade su `normale`, così classifica e statistiche restano leggibili.
+ */
+export function resolveDifficulty(value: unknown, fallback: Difficulty = 'normale'): Difficulty {
+  return isDifficulty(value) ? value : fallback;
+}
+
+/**
+ * Meta di una difficoltà storica, sempre definita.
+ *
+ * Per un livello abolito non esiste più la voce in `DIFFICULTIES`: se ne costruisce
+ * una neutra, così l'interfaccia mostra il nome originale invece di andare in errore.
+ */
+export function difficultyMeta(value: unknown): DifficultyMeta {
+  if (isDifficulty(value)) return DIFFICULTIES[value];
+  const label = typeof value === 'string' && value ? value : 'Sconosciuta';
+  return {
+    ...DIFFICULTIES.normale,
+    id: DIFFICULTIES.normale.id,
+    label,
+    description: 'Livello non più disponibile.',
+  };
 }
 
 /** Durate di round selezionabili (secondi). */

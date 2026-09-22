@@ -12,8 +12,12 @@ import type { GridSize } from './types.js';
 export interface SchedaPoolOptions {
   /** Dizionario completo, una parola per elemento (già normalizzato o no). */
   fullWords: Iterable<string>;
-  /** Lessico comune, una parola per elemento. */
-  commonWords: Iterable<string>;
+  /**
+   * Lessico comune. NON è più usato per risolvere le schede (tutti i livelli
+   * usano il dizionario completo): resta accettato e ignorato per compatibilità
+   * con i chiamanti esistenti.
+   */
+  commonWords?: Iterable<string>;
   /** Lunghezza massima delle parole nel trie (default 14). */
   maxWordLength?: number;
   /**
@@ -30,16 +34,15 @@ export interface SchedaPoolOptions {
    */
   allowedConsonantEndings?: Iterable<string>;
   /**
+   * Abbreviazioni curate ammesse come parole (`dott`, `avv`). Vedi
+   * `packages/dictionary/data/abbreviations.txt`.
+   */
+  abbreviations?: Iterable<string>;
+  /**
    * Parole da NON rimuovere col filtro (es. abbreviazioni curate come `dott`).
    * Non entrano nel lessico comune dei livelli facili.
    */
   protectedWords?: Iterable<string>;
-  /**
-   * Parole funzionali da ESCLUDERE (articoli, preposizioni, congiunzioni).
-   * Vedi `packages/dictionary/data/function-words.txt`: non ha senso "trovare"
-   * un articolo in una griglia.
-   */
-  functionWords?: Iterable<string>;
 }
 
 /** true se la parola termina in consonante nella forma normalizzata. */
@@ -58,15 +61,20 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
     [...(options.allowedConsonantEndings ?? [])].map(normalizeWord).filter(Boolean),
   );
   const protectedSet = new Set([...options.protectedWords ?? []].map(normalizeWord).filter(Boolean));
-  /** Parole grammaticali escluse dalle schede (articoli, preposizioni). */
-  const functionSet = new Set([...options.functionWords ?? []].map(normalizeWord).filter(Boolean));
-  /** Filtro: tiene solo le parole che terminano in vocale o sono esplicitamente ammesse. */
+  const abbreviationSet = new Set(
+    [...(options.abbreviations ?? [])].map(normalizeWord).filter(Boolean),
+  );
+  /**
+   * Filtro: tiene solo le parole che terminano in vocale o sono esplicitamente ammesse.
+   *
+   * NON esiste più un'esclusione per le "parole funzionali" (articoli, preposizioni,
+   * possessivi come `tua`): la lista unica delle parole giocabili coincide con il
+   * dizionario.
+   */
   const keep = (w: string): boolean => {
-    // Le parole funzionali sono sempre escluse, anche se terminano in vocale.
-    if (functionSet.has(w)) return false;
     if (!dropTruncated) return true;
     if (!endsInConsonant(w)) return true;
-    return allowedEndings.has(w) || protectedSet.has(w);
+    return allowedEndings.has(w) || abbreviationSet.has(w) || protectedSet.has(w);
   };
   /*
    * Lessico comune usato per risolvere le schede.
@@ -78,45 +86,25 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
    * La lista bianca e' gia' curata (nessun troncamento), quindi non reintroduce rumore.
    */
   /*
-   * NOTA: `allowedEndings` va filtrato con `keep()` come tutto il resto.
-   * Prima veniva concatenato DOPO il filtro, quindi le parole funzionali presenti
-   * nella lista bianca (`con`, `col`) rientravano comunque nel trie e comparivano
-   * nelle schede nonostante fossero state escluse.
+   * `allowedEndings` va filtrato con `keep()` come tutto il resto: un tempo veniva
+   * concatenato DOPO il filtro e riammetteva comunque le parole scartate.
    */
   const allowedKept = [...allowedEndings].filter((w) => keep(w));
-  const commonList = [
-    ...new Set([
-      ...[...options.commonWords].map(normalizeWord).filter((w) => w && keep(w)),
-      ...allowedKept,
-    ]),
-  ];
-  const commonSet = new Set(commonList);
   const fullList = [
     ...new Set([...[...options.fullWords].map(normalizeWord).filter((w) => w && keep(w)), ...allowedKept]),
   ];
   const tries: SchedaTries = {
     full: buildTrie(fullList, { maxLength }),
-    common: buildTrie(commonList, { maxLength }),
   };
-  return new SchedaPool(tries, commonSet);
+  return new SchedaPool(tries);
 }
 
 export class SchedaPool {
-  constructor(
-    private readonly tries: SchedaTries,
-    private readonly commonSet: Set<string>,
-  ) {}
-
-  isCommon(word: string): boolean {
-    return this.commonSet.has(normalizeWord(word));
-  }
+  constructor(private readonly tries: SchedaTries) {}
   /**
    * Genera `count` schede di qualità per una coppia dimensione/difficoltà.
    * Gli id seguono `size-difficulty-NNN`; `startIndex` permette di continuare
    * una numerazione esistente quando l'admin aggiunge schede.
-   *
-   * `isRare` viene passato al generatore: alimenta il criterio di rarità che nei
-   * livelli facili limita le parole fuori dal lessico comune.
    */
   generate(
     size: GridSize,
@@ -138,7 +126,6 @@ export class SchedaPool {
         tries: this.tries,
         rng: options.rng,
         id,
-        isRare: (w) => !this.isCommon(w),
       });
       if (scheda) {
         out.push(scheda);

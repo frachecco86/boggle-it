@@ -8,7 +8,7 @@
  *
  * Opzioni:
  *   --size 4|5|6          dimensione della griglia (default: tutte)
- *   --difficolta <nome>   molto-facile|facile|normale|difficile (default: tutte)
+ *   --difficolta <nome>   facile|normale|difficile (default: tutte)
  *   --n <numero>          schede da generare per combinazione (default 100)
  *   --append              aggiunge alle schede esistenti invece di sovrascrivere
  *   --seed <numero>       seme del generatore (per risultati riproducibili)
@@ -87,7 +87,7 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 function main(): void {
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : ALL_DIFFICULTIES;
-  const count = Number(arg('n', '24'));
+  const count = Number(arg('n', '20'));
   const append = hasFlag('append');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
@@ -102,16 +102,24 @@ function main(): void {
   console.log('Carico il dizionario…');
   const fullWords = readWords('words.txt');
   const commonWords = readWords('60000_parole_italiane.txt');
-  // Le abbreviazioni da vocabolario (`agg`, `avv`, `biol`) NON sono parole giocabili:
-  // sono marcatori grammaticali e rendevano le schede "strane". Qui non entrano.
+  // Liste canoniche di giocabilità: le STESSE usate dal build del dizionario
+  // (`build-words.mjs`), così dizionario e schede non possono divergere.
   const allowedConsonantEndings = readCuratedList('consonant-endings.txt');
+  const abbreviations = readCuratedList('abbreviations.txt');
   console.log(`  dizionario completo: ${fullWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  lessico comune:      ${commonWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  finali in consonante ammessi: ${allowedConsonantEndings.length}`);
+  console.log(`  abbreviazioni ammesse: ${abbreviations.length}`);
 
-  const functionWords = readCuratedList('function-words.txt');
-  console.log(`  parole funzionali escluse: ${functionWords.length}`);
-  const pool = createSchedaPool({ fullWords, commonWords, allowedConsonantEndings, functionWords });
+  // Parole funzionali (articoli, preposizioni, possessivi come `tua`) NON sono più
+  // escluse: la lista delle parole giocabili coincide con il dizionario. Vedi
+  // `schedaPool.ts`. Restano fuori solo i troncamenti e le voci bloccate.
+  const pool = createSchedaPool({
+    fullWords,
+    commonWords,
+    allowedConsonantEndings,
+    abbreviations,
+  });
   mkdirSync(OUT_DIR, { recursive: true });
 
   for (const size of sizes) {

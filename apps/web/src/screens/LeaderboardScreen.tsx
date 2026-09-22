@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
+  difficultyMeta,
   type Difficulty,
   type GridSize,
   type LeaderboardEntry,
@@ -114,7 +115,7 @@ export function LeaderboardScreen() {
   const subtitle = (e: LeaderboardEntry) => {
     if (kind === 'total') return `${e.games ?? 0} ${(e.games ?? 0) === 1 ? 'partita' : 'partite'}`;
     if (kind === 'longest') return `${e.longest.length} lettere · ${e.score} pt`;
-    return `${e.words} parole · ${e.gridSize}×${e.gridSize} ${DIFFICULTIES[e.difficulty].label.toLowerCase()}`;
+    return `${e.words} parole · ${e.gridSize}×${e.gridSize} ${difficultyMeta(e.difficulty).label.toLowerCase()}`;
   };
 
   return (

@@ -9,6 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA = path.resolve(__dirname, '../../../packages/dictionary/data/words.txt');
 const COMMON_WORDS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/60000_parole_italiane.txt');
 const CONSONANT_ENDINGS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/consonant-endings.txt');
+const ABBREVIATIONS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/abbreviations.txt');
 
 /**
  * Lunghezza massima delle parole caricate nel trie per il solver ("parole mancate").
@@ -93,14 +94,16 @@ export async function getSchedaPool(): Promise<SchedaPool> {
     poolBuilding = (async () => {
       if (!cachedWords) await loadServerDictionary();
       const startedAt = Date.now();
-      const [commonText, endingsText] = await Promise.all([
+      const [commonText, endingsText, abbrText] = await Promise.all([
         existsSync(COMMON_WORDS_PATH) ? readFile(COMMON_WORDS_PATH, 'utf8') : Promise.resolve(''),
         existsSync(CONSONANT_ENDINGS_PATH) ? readFile(CONSONANT_ENDINGS_PATH, 'utf8') : Promise.resolve(''),
+        existsSync(ABBREVIATIONS_PATH) ? readFile(ABBREVIATIONS_PATH, 'utf8') : Promise.resolve(''),
       ]);
       cachedPool = createSchedaPool({
         fullWords: cachedWords ?? [],
         commonWords: commonText.split('\n'),
         allowedConsonantEndings: endingsText.split('\n'),
+        abbreviations: abbrText.split('\n'),
         maxWordLength: SCHEDA_MAX_WORD_LENGTH,
       });
       const mem = (process.memoryUsage().heapUsed / 1048576).toFixed(0);

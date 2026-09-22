@@ -18,51 +18,20 @@ function pool() {
 }
 
 describe('generatore schede', () => {
-  it('i livelli facili risolvono sul lessico comune, gli altri sul completo', () => {
+  it('tutti i livelli risolvono sul dizionario completo', () => {
     /*
-     * Scelta di prodotto (v0.15): la difficoltà è data dal LESSICO oltre che dalla
-     * griglia. Nei livelli facili devono uscire solo parole di uso quotidiano
-     * (`casa`, `testa`), non forme astruse (`contumace`, `sbrecciare`): per questo
-     * `molto-facile` e `facile` risolvono contro il lessico comune. Da `normale`
-     * in su si usa il dizionario completo, con la banda di punteggio e la rarità a
-     * controllare la qualità.
+     * Scelta di prodotto: la difficoltà è la DENSITÀ di parole, non il lessico.
+     * Tutti i livelli usano il dizionario completo, così un livello "facile" è
+     * ricco di parole e uno "difficile" ne ha poche.
      */
-    expect(solvingTrieFor('molto-facile')).toBe('common');
-    expect(solvingTrieFor('facile')).toBe('common');
+    expect(solvingTrieFor('facile')).toBe('full');
     expect(solvingTrieFor('normale')).toBe('full');
     expect(solvingTrieFor('difficile')).toBe('full');
-    expect(solvingTrieFor('estremo')).toBe('full');
-  });
-
-  it('la rarità viene applicata: senza il predicato nessuna parola è rara', () => {
-    const p = pool();
-    const tries = {
-      full: buildTrie(FULL, { maxLength: 12 }),
-      common: buildTrie(COMMON, { maxLength: 12 }),
-    };
-    // Con un budget di rarità pari a zero, una scheda 4×4 normale può ancora
-    // esistere (il criterio fa scattare il ripiego), ma non deve contenere
-    // parole rare in quantità: il predicato conta davvero.
-    const scheda = generateScheda({
-      size: 4,
-      difficulty: 'normale',
-      tries,
-      id: 'rare-001',
-      maxAttempts: 200,
-      isRare: (w) => !COMMON.includes(w),
-    });
-    if (!scheda) return;
-    const rare = scheda.words.filter((w) => !COMMON.includes(w)).length;
-    // Il budget per 4×4 normale è floor(18 × 0.7) = 12.
-    expect(rare).toBeLessThanOrEqual(12);
   });
 
   it('genera una scheda coerente con la sua griglia', () => {
     const p = pool();
-    const tries = {
-      full: buildTrie(FULL, { maxLength: 12 }),
-      common: buildTrie(COMMON, { maxLength: 12 }),
-    };
+    const tries = { full: buildTrie(FULL, { maxLength: 12 }) };
     // Tentativi finché una griglia 4x4 soddisfa i requisiti minimi.
     const scheda = generateScheda({
       size: 4,
@@ -127,8 +96,8 @@ describe('generatore schede', () => {
 describe('catalogo schede (metadati)', () => {
   it('accetta tutte le combinazioni dimensione/difficoltà', () => {
     const sizes: GridSize[] = [4, 5, 6];
-    const difficulties: Difficulty[] = ['molto-facile', 'facile', 'normale', 'difficile'];
+    const difficulties: Difficulty[] = ['facile', 'normale', 'difficile'];
     expect(sizes).toHaveLength(3);
-    expect(difficulties).toHaveLength(4);
+    expect(difficulties).toHaveLength(3);
   });
 });

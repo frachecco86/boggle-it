@@ -15,7 +15,7 @@ import { FloatingControls } from './components/FloatingControls.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
-import { DIFFICULTIES, type Difficulty } from '@boggle/shared';
+import { difficultyMeta, type Difficulty } from '@boggle/shared';
 import { bindSocketEvents, useAppStore } from './state/store.js';
 import { getActiveProfile } from './game/profileStore.js';
 import { audio, installAudioUnlock } from './audio/AudioEngine.js';
@@ -67,7 +67,7 @@ export function App() {
    */
   const difficulty: Difficulty = roomDifficulty ?? soloDifficulty;
   useEffect(() => {
-    const theme = DIFFICULTIES[difficulty].theme;
+    const theme = difficultyMeta(difficulty).theme;
     const root = document.documentElement;
     root.style.setProperty('--difficulty-bg', theme.background);
     root.style.setProperty('--difficulty-surface', theme.surface);

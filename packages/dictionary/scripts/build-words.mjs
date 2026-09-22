@@ -85,6 +85,45 @@ export function normalizeWord(raw) {
     .replace(/[^a-z]/g, '');
 }
 
+/*
+ * ============================================================================
+ * REGOLA CANONICA DI "PAROLA GIOCABILE"
+ * ============================================================================
+ *
+ * Il dizionario deve contenere ESATTAMENTE le parole giocabili: una parola che
+ * sta qui ma non entra in nessuna scheda è una promessa non mantenuta (era il
+ * caso di `tua`: presente nel dizionario, rifiutata in partita).
+ *
+ * Le regole sono le stesse applicate dalle schede (`schedaPool.ts`), cioè:
+ *   1. lunghezza 3..16, solo [a-z] dopo la normalizzazione;
+ *   2. non bloccata (`blocked-words.txt`);
+ *   3. se termina in consonante, deve essere una parola autonoma attestata
+ *      (`consonant-endings.txt`, derivata dal lemma di Morph-it) oppure
+ *      un'abbreviazione curata (`abbreviations.txt`).
+ *
+ * PERCHÉ SERVIVA: le fonti contengono migliaia di TRONCAMENTI (`andar`, `alzar`,
+ * `maggior`, `normalit`, `abbacchiaron`) che non sono parole italiane. Prima
+ * restavano nel dizionario e il gioco li rifiutava sempre: ~48k voci fantasma.
+ *
+ * Le stesse liste sono lette dal generatore delle schede, quindi non possono
+ * più disallinearsi.
+ */
+
+/** true se la parola termina in consonante (dopo normalizzazione). */
+const endsInConsonant = (w) => /[bcdfghjklmnpqrstvwxyz]$/.test(w);
+
+/** Legge una lista curata (una voce per riga, righe `#` ignorate). */
+async function loadCuratedList(file) {
+  const full = path.join(DATA, file);
+  if (!existsSync(full)) return new Set();
+  const set = new Set();
+  for (const line of (await readFile(full, 'utf8')).split('\n')) {
+    const w = normalizeWord(line.trim());
+    if (w) set.add(w);
+  }
+  return set;
+}
+
 /**
  * Voci escluse dal dizionario.
  *
@@ -103,6 +142,18 @@ async function loadBlocked() {
 }
 
 const isUsable = (w) => w.length >= MIN_LEN && w.length <= MAX_LEN;
+
+/**
+ * Filtro di giocabilità: identico alla regola di `schedaPool.ts`.
+ * Ritorna una funzione costruita sulle liste curate già caricate.
+ */
+function makePlayableFilter({ allowedEndings, abbreviations, blocked }) {
+  return (w) => {
+    if (!isUsable(w) || blocked.has(w)) return false;
+    if (!endsInConsonant(w)) return true;
+    return allowedEndings.has(w) || abbreviations.has(w);
+  };
+}
 
 async function findMorphIt() {
   const preferred = path.join(DATA, 'morph-it_048.txt');
@@ -238,52 +289,115 @@ async function writeWordIndex(sorted, morphPath, wiktionary) {
     if (wiki) linked.push(w);
   }
 
-  let text = '';
-  for (const tag of [...buckets.keys()].sort()) {
-    text += `${tag}\n${buckets.get(tag).join(' ')}\n`;
-  }
-  /*
-   * Solo le parole CON voce su Wikizionario (45k): l'assenza da questo elenco
-   * significa "nessun link", quindi ripetere anche le altre 358k parole sarebbe
-   * peso inutile (erano ~400 KB compressi).
-   */
-  text += `~w\n${linked.join(' ')}\n`;
-  /*
-   * Forme accentate (`citta` → `città`): servono al link, che deve usare la forma
-   * ORIGINALE (la chiave ha perso l'accento con la normalizzazione).
-   */
-  const accentLines = [...(wiktionary?.accents ?? new Map())]
-    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([norm, display]) => `${norm}\t${display}`);
-  if (accentLines.length > 0) text += `~acc\n${accentLines.join('\n')}\n`;
-
-  const br = brotliCompressSync(Buffer.from(text, 'utf8'), {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
-  });
-  await writeFile(path.join(DATA, 'word-index.br'), br);
+  // Testo e scrittura sono condivisi con il percorso offline (`writeWordIndexFile`),
+  // così il formato non può divergere fra i due build.
+  const { br } = await writeWordIndexFile(buckets, linked, wiktionary?.accents ?? new Map(), sorted);
   console.log(
     `✓ word-index.br  ${sorted.length.toLocaleString('it-IT')} voci, ${withTag.toLocaleString('it-IT')} con tag (${((withTag / sorted.length) * 100).toFixed(1)}%), ${linked.length.toLocaleString('it-IT')} con voce Wikizionario  (${(br.length / 1024).toFixed(0)} KB)`,
   );
 }
 
 /**
+ * Compone il testo di `word-index.br` dai bucket (formato documentato sopra).
+ * Estratto da `writeWordIndex` per essere riusabile anche nel percorso offline.
+ */
+function composeWordIndexText(buckets, linked, accents) {
+  let text = '';
+  for (const tag of [...buckets.keys()].sort()) {
+    text += `${tag}\n${buckets.get(tag).join(' ')}\n`;
+  }
+  /*
+   * Solo le parole CON voce su Wikizionario: l'assenza da questo elenco significa
+   * "nessun link", quindi ripetere anche le altre sarebbe peso inutile.
+   */
+  text += `~w\n${linked.join(' ')}\n`;
+  if (accents.size > 0) {
+    const accentLines = [...accents]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([norm, display]) => `${norm}\t${display}`);
+    text += `~acc\n${accentLines.join('\n')}\n`;
+  }
+  return text;
+}
+
+/** Scrive `word-index.br` compresso. */
+async function writeWordIndexFile(buckets, linked, accents, sorted) {
+  const text = composeWordIndexText(buckets, linked, accents);
+  const br = brotliCompressSync(Buffer.from(text, 'utf8'), {
+    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
+  });
+  await writeFile(path.join(DATA, 'word-index.br'), br);
+  return { br, text };
+}
+
+/**
  * Caso offline: le fonti grezze non ci sono, ma `words.txt` esiste.
- * Il dizionario e' gia' generato: normalizziamo e riscriviamo l'output, senza rete.
+ * Il dizionario e' gia' generato: applichiamo il filtro canonico (così un
+ * dizionario vecchio viene ripulito dai troncamenti) e riscriviamo l'output.
  * E' il percorso usato nei build di deploy (Netlify, Docker).
+ *
+ * Genera ANCHE `word-index.br`: prima questo percorso non lo produceva, quindi in
+ * produzione la tab Dizionario restava vuota e i tag sparivano (bug noto). I tag
+ * grammaticali (`pos`) non sono ricostruibili senza Morph-it, che è gitignored e
+ * non arriva nei build di deploy: in quel caso l'indice contiene tutte le parole
+ * con categoria `n.c.`, il che ripristina almeno l'elenco completo del lessico e i
+ * link a Wikizionario (da `wiktionary-heads.br`, che è versionato). Per i tag
+ * pieni serve `build:full` (o rigenerare e versionare `word-index.br`).
  */
 async function buildFromExistingWords() {
   const existing = path.join(DATA, 'words.txt');
+  const blocked = await loadBlocked();
+  const allowedEndings = await loadCuratedList('consonant-endings.txt');
+  const abbreviations = await loadCuratedList('abbreviations.txt');
+  const accepted = makePlayableFilter({ allowedEndings, abbreviations, blocked });
+
+  let dropped = 0;
   const words = new Set();
   for (const line of (await readFile(existing, 'utf8')).split('\n')) {
     const w = normalizeWord(line.trim());
-    if (isUsable(w)) words.add(w);
+    if (!w) continue;
+    if (accepted(w)) words.add(w);
+    else if (isUsable(w)) dropped++;
+  }
+  /*
+   * Aggiunge le voci della whitelist in consonante che non fossero nel dizionario
+   * precedente: senza questo, un dizionario vecchio resterebbe incoerente con la
+   * whitelist usata dalle schede (`tag`, `host`, `flip` mancherebbero ancora).
+   */
+  for (const w of allowedEndings) {
+    if (accepted(w)) words.add(w);
   }
   const sorted = [...words].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const { txt, br } = await writeOutputs(sorted);
   const kb = (n) => (n / 1024).toFixed(1) + ' KB';
   console.log(`✓ words.txt  ${sorted.length.toLocaleString('it-IT')} parole  (${kb(txt.length)})  [da lista gia' generata]`);
   console.log(`✓ words.br   ${kb(br.length)}  (ratio ${((br.length / txt.length) * 100).toFixed(1)}%)`);
-  console.log('  (fonti grezze assenti: salto il merge. Usa `build:full` per rigenerare da Morph-it!)');
+  if (dropped > 0) {
+    console.log(`  ripulite ${dropped.toLocaleString('it-IT')} voci non giocabili (troncamenti/abbreviazioni non ammesse)`);
+  }
+
+  /*
+   * Indice parole: i tag pieni richiedono Morph-it (assente nei build di deploy),
+   * quindi qui mettiamo tutte le parole in un unico bucket `n.c.` più i link di
+   * Wikizionario. Senza almeno questo, la tab Dizionario restava vuota.
+   */
+  const wiktionary = await loadWiktionary();
+  const buckets = new Map();
+  const linked = [];
+  for (const w of sorted) {
+    const list = buckets.get('n.c.') ?? [];
+    list.push(w);
+    buckets.set('n.c.', list);
+    if (wiktionary?.byWord.has(w)) linked.push(w);
+  }
+  const { br: idxBr } = await writeWordIndexFile(buckets, linked, wiktionary?.accents ?? new Map(), sorted);
+  console.log(
+    `✓ word-index.br  ${sorted.length.toLocaleString('it-IT')} voci, ${linked.length.toLocaleString('it-IT')} con voce Wikizionario  (${(idxBr.length / 1024).toFixed(0)} KB)`,
+  );
+  if (!wiktionary) {
+    console.warn('  ⚠ wiktionary-heads.br assente: nessun link di dizionario e nessun tag.');
+  }
+  console.log('  (fonti grezze assenti: tag grammaticali limitati. Usa `build:full` per la copertura piena!)');
 }
 
 async function main() {
@@ -302,9 +416,15 @@ async function main() {
 
   const words = new Set();
   const blocked = await loadBlocked();
+  // Liste canoniche: definiscono cosa è una parola giocabile (vedi sopra).
+  const allowedEndings = await loadCuratedList('consonant-endings.txt');
+  const abbreviations = await loadCuratedList('abbreviations.txt');
+  console.log(
+    `  filtro giocabilità: ${allowedEndings.size} finali in consonante ammesse, ${abbreviations.size} abbreviazioni`,
+  );
 
-  /** true se la parola può entrare nel dizionario. */
-  const accepted = (w) => isUsable(w) && !blocked.has(w);
+  /** true se la parola entra nel dizionario (e quindi è giocabile). */
+  const accepted = makePlayableFilter({ allowedEndings, abbreviations, blocked });
 
   /*
    * 1. Morph-it: la prima colonna e' la forma flessa.
@@ -421,6 +541,24 @@ async function main() {
     }
   }
 
+  /*
+   * 5. Parole in consonante ammesse dalla whitelist (`consonant-endings.txt`).
+   *
+   * PERCHÉ SERVE: il pool delle schede aggiunge questa lista alle parole valide
+   * (`schedaPool.ts`, `allowedKept`), ma il dizionario non la usava come sorgente.
+   * Risultato: `tag`, `host`, `flip`, `foul`, `report` finivano nelle schede senza
+   * essere nel dizionario (schede "stale"). Aggiungendola qui, i due insiemi
+   * coincidono: sono le stesse parole in entrambi i lati.
+   */
+  let endingCount = 0;
+  for (const w of allowedEndings) {
+    if (accepted(w)) {
+      if (!words.has(w)) endingCount++;
+      words.add(w);
+    }
+  }
+
+
   const sorted = await writeDictionary(words);
   await writeWordIndex(sorted, morphPath, wiktionary);
 
@@ -429,6 +567,7 @@ async function main() {
   console.log(`  da comuni:   +${commonCount.toLocaleString('it-IT')}`);
   console.log(`  lista estesa: +${extendedCount.toLocaleString('it-IT')}`);
   console.log(`  abbreviazioni: +${abbrCount}`);
+  console.log(`  finali in consonante: +${endingCount}`);
   console.log(`  composti e neologismi: +${modernCount}`);
 }
 

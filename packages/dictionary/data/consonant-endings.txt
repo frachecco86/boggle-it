@@ -2,7 +2,7 @@
 #
 # ⚠️ FILE GENERATO da tools/gen-consonant-endings.mjs — non modificare a mano.
 #    Per aggiungere voci curate usa `consonant-endings.curated.txt`.
-#    Rigenerato il 2026-09-20: 1068 voci (162 curate + 1024 da Morph-it).
+#    Rigenerato il 2026-09-22: 1078 voci (162 curate + 1035 da Morph-it).
 #
 # Perche' serve: le fonti contengono migliaia di forme TRONCATE che non sono parole
 # (`andar`, `abbic`, `abrog`, `maggior`). Il generatore delle schede tiene una parola
@@ -266,6 +266,8 @@ cult
 curriculum
 cursus
 cyberpunk
+dal
+dall
 dan
 dancing
 dandy
@@ -280,6 +282,8 @@ decoder
 decor
 deejay
 deficit
+del
+dell
 depliant
 derby
 design
@@ -602,6 +606,8 @@ naif
 napalm
 narcos
 naziskin
+nel
+nell
 neon
 neopremier
 nessun
@@ -616,6 +622,7 @@ nightclub
 noir
 nolimits
 nomination
+non
 nonds
 nonopec
 nonstop
@@ -674,6 +681,7 @@ pcus
 peeling
 peggior
 pentathlon
+per
 performer
 perpetual
 personal
@@ -924,6 +932,8 @@ sud
 sudest
 sudovest
 suk
+sul
+sull
 summit
 super
 supercar

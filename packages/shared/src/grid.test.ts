@@ -97,7 +97,7 @@ describe('Difficoltà: composizione controllata', () => {
 
   it('rispetta i limiti di vocali e lettere rare per ogni difficoltà', () => {
     for (const size of [4, 5, 6] as const) {
-      for (const diff of ['molto-facile', 'facile', 'normale', 'difficile'] as const) {
+      for (const diff of ['facile', 'normale', 'difficile'] as const) {
         const comp = COMPOSITION[diff];
         const total = size * size;
         const minV = Math.round(total * comp.vowels.min);
@@ -116,15 +116,13 @@ describe('Difficoltà: composizione controllata', () => {
     }
   });
 
-  it('molto-facile non ha lettere rare', () => {
-    for (let i = 0; i < 30; i++) {
-      const g = generateGrid(4, Math.random, 'molto-facile');
-      expect(g.tiles.filter((t) => RARE.has(t.letter)).length).toBe(0);
-    }
-  });
-
-  it('ogni difficoltà superiore ha meno vocali della precedente (medie)', () => {
-    const avgVowels = (diff: (typeof COMPOSITION)['normale'] extends never ? never : 'molto-facile' | 'facile' | 'normale' | 'difficile') => {
+  it('la composizione resta un MEZZO: le vocali calano con la difficoltà', () => {
+    /*
+     * La composizione non è più il criterio di difficoltà (lo è la densità di
+     * parole): qui verifichiamo solo che generi griglie via via più "secche",
+     * che è la proprietà usata dal generatore come base di partenza.
+     */
+    const avgVowels = (diff: 'facile' | 'normale' | 'difficile') => {
       let sum = 0;
       const N = 40;
       for (let i = 0; i < N; i++) {
@@ -132,26 +130,19 @@ describe('Difficoltà: composizione controllata', () => {
       }
       return sum / N;
     };
-    const a = avgVowels('molto-facile');
-    const b = avgVowels('facile');
-    const c = avgVowels('normale');
-    const d = avgVowels('difficile');
-    expect(a).toBeGreaterThan(b);
-    expect(b).toBeGreaterThan(c);
-    expect(c).toBeGreaterThan(d);
+    expect(avgVowels('facile')).toBeGreaterThan(avgVowels('normale'));
+    expect(avgVowels('normale')).toBeGreaterThan(avgVowels('difficile'));
   });
 });
 
 describe('Difficoltà: validazione condivisa', () => {
-  it('accetta tutti i 5 livelli, incluso Estremo', () => {
-    // Regressione: il server aveva una copia locale della validazione con i
-    // confronti hardcoded. Aggiungendo 'estremo' non era stata aggiornata e il
-    // livello veniva rifiutato silenziosamente, ricadendo su 'normale'.
-    expect(isDifficulty('molto-facile')).toBe(true);
+  it('accetta i 3 livelli', () => {
     expect(isDifficulty('facile')).toBe(true);
     expect(isDifficulty('normale')).toBe(true);
     expect(isDifficulty('difficile')).toBe(true);
-    expect(isDifficulty('estremo')).toBe(true);
+    // I livelli rimossi non devono più essere accettati.
+    expect(isDifficulty('molto-facile')).toBe(false);
+    expect(isDifficulty('estremo')).toBe(false);
   });
 
   it('rifiuta valori non validi', () => {
@@ -163,9 +154,9 @@ describe('Difficoltà: validazione condivisa', () => {
   });
 
   it('DIFFICULTY_ORDER contiene esattamente i livelli validi', () => {
-    expect(DIFFICULTY_ORDER).toHaveLength(5);
+    expect(DIFFICULTY_ORDER).toHaveLength(3);
     for (const d of DIFFICULTY_ORDER) expect(isDifficulty(d)).toBe(true);
-    expect(DIFFICULTY_ORDER[DIFFICULTY_ORDER.length - 1]).toBe('estremo');
+    expect(DIFFICULTY_ORDER[DIFFICULTY_ORDER.length - 1]).toBe('difficile');
   });
 
   it('ogni livello ha una composizione definita', () => {
@@ -173,21 +164,6 @@ describe('Difficoltà: validazione condivisa', () => {
       const comp = COMPOSITION[d];
       expect(comp, `manca COMPOSITION per ${d}`).toBeDefined();
       expect(comp!.vowels.min).toBeLessThan(comp!.vowels.max);
-    }
-    // Estremo ha meno vocali e più rare di Difficile.
-    expect(COMPOSITION.estremo.vowels.max).toBeLessThan(COMPOSITION.difficile.vowels.max);
-    expect(COMPOSITION.estremo.rareMax).toBeGreaterThan(COMPOSITION.difficile.rareMax);
-  });
-
-  it('genera griglie valide per Estremo', () => {
-    for (const size of [4, 5, 6] as const) {
-      for (let i = 0; i < 15; i++) {
-        const g = generateGrid(size, Math.random, 'estremo');
-        expect(g.tiles).toHaveLength(size * size);
-        const vowels = g.tiles.filter((t) => 'aeiou'.includes(t.letter)).length;
-        // Estremo: 16-26% di vocali.
-        expect(vowels / (size * size)).toBeLessThanOrEqual(0.3);
-      }
     }
   });
 });

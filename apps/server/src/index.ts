@@ -1063,8 +1063,8 @@ function clampMaxPlayers(v: unknown): number {
 
 /*
  * NOTA: la validazione delle difficoltà usa `isDifficulty` dal pacchetto condiviso.
- * Prima c'era una funzione locale con i confronti hardcoded: aggiungendo un livello
- * ('estremo') restava indietro e lo rifiutava silenziosamente, ricadendo su 'normale'.
+ * Prima c'era una funzione locale con i confronti hardcoded: aggiungendo o togliendo
+ * un livello restava indietro e lo rifiutava silenziosamente, ricadendo su 'normale'.
  * Usare la funzione condivisa evita che i due elenchi si disallineino.
  */
 

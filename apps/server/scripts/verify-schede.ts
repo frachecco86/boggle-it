@@ -1,8 +1,8 @@
 /**
  * Verifica le schede generate rispetto ai CRITERI dichiarati.
  *
- * A cosa serve: i criteri di qualità (lessico, quantità, lunghezza, rarità, banda
- * di punteggio) vivono in `packages/shared/src/schedaGen.ts`. Questo script legge
+ * A cosa serve: i criteri di qualità (densità di parole, punteggio, lunghezze)
+ * vivono in `packages/shared/src/schedaGen.ts`. Questo script legge
  * le schede su disco e controlla che OGNI scheda li rispetti, segnalando le
  * violazioni. Serve dopo una rigenerazione, dopo aver cambiato una soglia, o per
  * capire perché una categoria si comporta diversamente dalle altre.
@@ -23,12 +23,12 @@ import { fileURLToPath } from 'node:url';
 import {
   createSchedaPool,
   DIFFICULTY_ORDER,
+  densityBandFor,
   minByLengthFor,
   normalizeWord,
   requiredLengthsFor,
   SCHEDA_CRITERIA,
   schedaFileName,
-  scoreBandFor,
   type Difficulty,
   type GridSize,
   type Scheda,
@@ -70,18 +70,6 @@ function readCuratedList(file: string): string[] {
     .filter((w) => w.length >= 3);
 }
 
-/**
- * Lessico "comune" per il criterio di rarità.
- *
- * DEVE coincidere con quello usato da `createSchedaPool`: i 60k PIÙ i prestiti in
- * consonante della lista bianca (`film`, `gol`, `computer`), che il pool aggiunge
- * al lessico comune. Leggendo solo i 60k il verificatore segnalava come "rare"
- * parole che il generatore considera comuni, producendo falsi positivi.
- */
-function commonLexicon(): Set<string> {
-  return new Set([...readWords('60000_parole_italiane.txt'), ...readCuratedList('consonant-endings.txt')]);
-}
-
 /** Una violazione di un criterio, con il contesto per capirla. */
 interface Violation {
   schedaId: string;
@@ -94,35 +82,64 @@ interface Violation {
  *
  * I criteri sono gli stessi usati dal generatore: qui li rileggiamo da
  * `SCHEDA_CRITERIA`, così non possono disallinearsi.
+ *
+ * Il verificatore usa una TOLLERANZA sui confini di densità (`densityTolerance`):
+ * le schede sono state generate con un dizionario preciso, e una ricostruzione
+ * leggermente diversa può spostare di poco il conteggio. Senza tolleranza si
+ * segnalerebbero differenze di una o due parole.
  */
 function checkScheda(
   scheda: Scheda,
-  commonSet: Set<string>,
+  dictionary: Set<string>,
 ): { violations: Violation[]; stats: SchedaSummary } {
   const violations: Violation[] = [];
-  const shape = SCHEDA_CRITERIA.shape[scheda.size];
-  const band = SCHEDA_CRITERIA.band[scheda.difficulty];
-  const { min: minScore, max: maxScore } = scoreBandFor(scheda.size, scheda.difficulty);
+  const band = densityBandFor(scheda.size, scheda.difficulty);
+  const tol = SCHEDA_CRITERIA.densityTolerance;
+  const minWords = Math.floor(band.min * (1 - tol));
+  const maxWords = Math.ceil(band.max * (1 + tol));
+  const minScore = Math.floor(band.scoreMin * (1 - tol));
+  const maxScore = Math.ceil(band.scoreMax * (1 + tol));
 
   const byLength = new Map<number, number>();
   let score = 0;
-  let rare = 0;
+  // Parole della scheda che NON esistono nel dizionario: sintomo di schede stale
+  // generate con un dizionario diverso. Il gioco le accetterebbe (valida contro
+  // la scheda) ma non sono più nel lessico: incoerenza da segnalare.
+  let notInDictionary = 0;
   for (const w of scheda.words) {
     byLength.set(w.length, (byLength.get(w.length) ?? 0) + 1);
     score += w.length - 2;
-    if (!commonSet.has(w)) rare++;
+    if (dictionary.size > 0 && !dictionary.has(w)) notInDictionary++;
   }
 
-  // 1. Quantità.
-  if (scheda.words.length < shape.minWords) {
+  // 1. Densità: numero di parole nella banda della difficoltà.
+  if (scheda.words.length < minWords || scheda.words.length > maxWords) {
     violations.push({
       schedaId: scheda.id,
-      criterion: 'quantità',
-      detail: `${scheda.words.length} parole < minimo ${shape.minWords}`,
+      criterion: 'densità',
+      detail: `${scheda.words.length} parole fuori banda [${band.min}, ${band.max}]`,
     });
   }
 
-  // 2. Scala di lunghezze (già scalata per la difficoltà).
+  // 2. Punteggio massimo nella banda.
+  if (score < minScore || score > maxScore) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'punteggio',
+      detail: `${score} fuori banda [${band.scoreMin}, ${band.scoreMax}]`,
+    });
+  }
+
+  // 2b. Coerenza con il dizionario.
+  if (notInDictionary > 0) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'dizionario',
+      detail: `${notInDictionary} parole della scheda non sono nel dizionario (schede stale?)`,
+    });
+  }
+
+  // 3. Scala di lunghezze.
   for (const len of requiredLengthsFor(scheda.size, scheda.difficulty)) {
     if (!byLength.has(len)) {
       violations.push({
@@ -133,7 +150,7 @@ function checkScheda(
     }
   }
 
-  // 3. Soglie per fascia (già scalate per la difficoltà).
+  // 4. Soglie per fascia ("almeno N parole di almeno L lettere").
   for (const rule of minByLengthFor(scheda.size, scheda.difficulty)) {
     let count = 0;
     for (const [len, n] of byLength) if (len >= rule.length) count += n;
@@ -146,35 +163,12 @@ function checkScheda(
     }
   }
 
-  // 4. Rarità: il generatore confronta le parole rare con un budget derivato dal
-  // minimo della dimensione, non dal totale: qui usiamo la STESSA formula, così il
-  // verificatore accetta esattamente ciò che il generatore accetta.
-  const rarityBudget = Math.max(0, Math.floor(shape.minWords * band.maxRareRatio));
-  if (rare > rarityBudget) {
-    violations.push({
-      schedaId: scheda.id,
-      criterion: 'rarità',
-      detail: `${rare} parole rare > budget ${rarityBudget} (lessico ${band.lexicon})`,
-    });
-  }
-
-  // 5. Banda di punteggio.
-  if (score < minScore || score > maxScore) {
-    violations.push({
-      schedaId: scheda.id,
-      criterion: 'punteggio',
-      detail: `${score} fuori banda [${minScore}, ${maxScore}]`,
-    });
-  }
-
   return {
     violations,
     stats: {
       id: scheda.id,
       words: scheda.words.length,
       score,
-      rare,
-      commonRatio: scheda.words.length ? 1 - rare / scheda.words.length : 0,
       longest: scheda.longest,
     },
   };
@@ -184,8 +178,6 @@ interface SchedaSummary {
   id: string;
   words: number;
   score: number;
-  rare: number;
-  commonRatio: number;
   longest: number;
 }
 
@@ -197,13 +189,12 @@ function summarize(label: string, summaries: SchedaSummary[], violations: Violat
   const scores = summaries.map((s) => s.score);
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
   const sd = Math.sqrt(scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length);
-  const common = summaries.reduce((a, b) => a + b.commonRatio, 0) / summaries.length;
   const words = summaries.reduce((a, b) => a + b.words, 0) / summaries.length;
   const flag = violations.length === 0 ? '✓' : '✗';
   console.log(
     `${flag} ${label.padEnd(20)} n=${String(summaries.length).padStart(3)}  ` +
       `score ${Math.min(...scores)}–${Math.max(...scores)} (μ${mean.toFixed(0)} σ${sd.toFixed(0)} CV${((sd / mean) * 100).toFixed(0)}%)  ` +
-      `parole~${words.toFixed(0)}  comuni ${(common * 100).toFixed(0)}%  ${ms}ms`,
+      `parole~${words.toFixed(0)}  ${ms}ms`,
   );
 }
 
@@ -218,10 +209,6 @@ function main(): void {
   for (const s of sizes) if (!ALL_SIZES.includes(s)) throw new Error(`Dimensione non valida: ${s}`);
   for (const d of difficulties) if (!DIFFICULTY_ORDER.includes(d)) throw new Error(`Difficoltà non valida: ${d}`);
 
-  console.log('Carico il lessico comune…');
-  const commonSet = commonLexicon();
-  console.log(`  lessico comune: ${commonSet.size.toLocaleString('it-IT')} parole\n`);
-
   /*
    * Due modalità:
    *  - `--measure N`: genera N griglie FRESCHE con il pool e le controlla. Serve
@@ -233,11 +220,12 @@ function main(): void {
   if (measureCount !== undefined) {
     console.log(`Modalità misura: ${measureCount} griglie fresche per categoria`);
     console.log('  (leggo il dizionario completo, serve per risolvere)\n');
-    pool = createSchedaPool({
-      fullWords: readWords('words.txt'),
-      commonWords: [...commonSet],
-    });
+    pool = createSchedaPool({ fullWords: readWords('words.txt') });
   }
+
+  // Dizionario: serve al controllo di coerenza (schede stale).
+  const dictionary = new Set(readWords('words.txt'));
+  console.log(`  dizionario: ${dictionary.size.toLocaleString('it-IT')} parole\n`);
 
   const allViolations: Violation[] = [];
   for (const size of sizes) {
@@ -259,7 +247,7 @@ function main(): void {
       const summaries: SchedaSummary[] = [];
       const violations: Violation[] = [];
       for (const scheda of schede) {
-        const res = checkScheda(scheda, commonSet);
+        const res = checkScheda(scheda, dictionary);
         summaries.push(res.stats);
         violations.push(...res.violations);
         if (verbose && res.violations.length > 0) {

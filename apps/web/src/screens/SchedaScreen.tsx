@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty, type GridSize } from '@boggle/shared';
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyMeta, type Difficulty, type GridSize } from '@boggle/shared';
 import { loadCatalog, loadScheda, type CatalogInfo, type SchedaMeta } from '../game/schedeLoader.js';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
@@ -262,11 +262,11 @@ export function SchedaScreen() {
                 <button
                   className={`scheda__item${m.id === schedaId ? ' scheda__item--active' : ''}`}
                   onClick={() => setSchedaId(m.id)}
-                  style={{ ['--level-accent' as string]: DIFFICULTIES[m.difficulty].theme.accent }}
+                  style={{ ['--level-accent' as string]: difficultyMeta(m.difficulty).theme.accent }}
                 >
                   <span className="scheda__item-id">{m.id}</span>
                   <span className="scheda__item-meta">
-                    <span className="scheda__item-diff">{DIFFICULTIES[m.difficulty].label}</span>
+                    <span className="scheda__item-diff">{difficultyMeta(m.difficulty).label}</span>
                     <span className="scheda__item-score" title="Punteggio massimo ottenibile">
                       {m.maxScore} pt
                     </span>
@@ -295,7 +295,7 @@ export function SchedaScreen() {
               <header className="scheda__head">
                 <h2 className="screen__title">{scheda.id}</h2>
                 <p className="scheda__meta">
-                  {scheda.size}×{scheda.size} · {DIFFICULTIES[scheda.difficulty].label} ·{' '}
+                  {scheda.size}×{scheda.size} · {difficultyMeta(scheda.difficulty).label} ·{' '}
                   {scheda.words.length} parole · più lunga {scheda.longest} lettere ·{' '}
                   <strong>massimo {maxScore} punti</strong>
                 </p>

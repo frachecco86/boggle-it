@@ -15,15 +15,16 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare).
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
-- **Dizionario italiano ampio**: ~387.000 forme, incluse **tutte le coniugazioni verbali**
-  e le abbreviazioni da dizionario.
-- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (480 schede di base,
-  40 per ognuna delle 12 combinazioni dimensione × difficoltà). Ogni scheda contiene la griglia
+- **Dizionario italiano ampio**: ~355.000 forme, incluse **tutte le coniugazioni verbali**
+  e le abbreviazioni da dizionario. **Ogni voce è giocabile**: è la stessa lista usata dalle schede.
+- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (180 schede di base,
+  20 per ognuna delle 9 combinazioni dimensione × difficoltà). Ogni scheda contiene la griglia
   e **tutte** le parole trovabili, con parole di varia lunghezza (fino a 10-12 lettere su 6×6).
   Niente più griglie improvvisate: partite riproducibili e soluzioni verificate.
-- **Parole comuni nei livelli facili**: le schede `molto-facile` e `facile` sono risolte contro
-  il **lessico comune** (~60k parole non astruse); `normale` e `difficile` contro il dizionario
-  completo, ma solo se contengono almeno una parola lunga.
+- **La difficoltà è il numero di parole trovabili**, non la composizione delle lettere: le bande
+  di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
+  parole per Facile / Normale / Difficile). Le lettere rare restano più frequenti nei livelli alti,
+  ma come mezzo, non come criterio.
 - **Punteggio Boggle adattato**: **1 punto per una parola di 3 lettere, poi un punto in più per
   ogni lettera** (lunghezza − 2; una parola da 10 lettere vale 8 punti). In multiplayer una
   parola trovata da **un solo giocatore vale doppio**.
@@ -49,8 +50,8 @@ risultato. Niente filtri né stili AI.
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
   clip audio personale, se ne hanno registrata una, a metà volume.
-- **4 difficoltà** (molto facile / facile / normale / difficile) con tema visivo dedicato.
-  La difficoltà controlla la composizione della griglia; la dimensione è una scelta separata.
+- **3 difficoltà** (facile / normale / difficile) con tema visivo dedicato.
+  La difficoltà controlla la banda di parole/punteggio della scheda; la dimensione è una scelta separata.
 - **Anteprima reale**: il server pesca una scheda di esempio dal catalogo con le impostazioni
   scelte e mostra quante parole si possono trovare (conteggio esatto, non stimato).
 - **Avatar**: 32 emoji selezionabili, visibili in classifica e nelle notifiche.
@@ -119,7 +120,7 @@ mentre il container gira come `node`. Dettagli in [`docs/DEPLOY.md`](docs/DEPLOY
 
 ### Schede
 
-Le schede di base sono versionate in `packages/shared/schede/` (480 schede, ~1.4 MB).
+Le schede di base sono versionate in `packages/shared/schede/` (180 schede, ~540 KB).
 Per rigenerarle o aggiungerne:
 
 ```bash

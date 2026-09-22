@@ -61,21 +61,16 @@ let infinitiTroncati = 0;
  * Rumore da escludere. Criteri derivati ispezionando le voci che Morph-it
  * registra come autonome ma che non hanno posto in un gioco di parole.
  */
-/**
- * Parole funzionali: articoli, preposizioni e congiunzioni.
+/*
+ * Parole funzionali (articoli, preposizioni, congiunzioni).
  *
- * Erano gia' nella lista curata originale, ma non ha senso "trovare" `il` o `nel`
- * in una griglia: sono parole grammaticali, non lessicali. Le escludiamo qui.
+ * DECISIONE DI PRODOTTO: TUTTE le parole di >=3 lettere sono giocabili, quindi
+ * NON le escludiamo più. Prima `per`, `sul`, `del`, `nel` restavano fuori dalla
+ * whitelist e il gioco rifiutava parole che il dizionario conteneva (stessa
+ * classe del bug di `tua`). Gli articoli di 1-2 lettere non entrano comunque
+ * (lunghezza minima 3).
  */
-const PAROLE_FUNZIONALI = new Set([
-  'a', 'ad', 'al', 'all', 'alla', 'allo', 'ai', 'agli', 'alle',
-  'da', 'dal', 'dall', 'dalla', 'dai', 'dagli', 'dalle',
-  'dei', 'del', 'dell', 'della', 'delle', 'degli', 'di',
-  'e', 'ed', 'il', 'in', 'la', 'le', 'lo', 'i', 'gli',
-  'nel', 'nell', 'nella', 'nelle', 'nei', 'negli',
-  'non', 'o', 'od', 'per', 'pel', 'su', 'sul', 'sull', 'sui', 'sugli',
-  'un', 'una', 'uno', 'che', 'chi', 'cui',
-]);
+const PAROLE_FUNZIONALI = new Set();
 
 const ESPLICITAMENTE_ESCLUSE = new Set([
   // parole funzionali inglesi o forme isolate, non componibili in italiano
@@ -119,20 +114,22 @@ for (const line of morphText.split('\n')) {
 
   /*
    * Tipi grammaticali da escludere: non sono parole giocabili.
-   *   NPR    nomi propri (`Adams`, `Airbus`)
+   *   NPR    nomi propri (`Adams`, `Airbus`): non componibili come parole comuni
    *   SMI    simboli ed emoticon (`-D`, `:-p`)
-   *   ABR    abbreviazioni (`ecc`, `dott`)
+   *   ABR    abbreviazioni (`ecc`, `dott`): gestite da `abbreviations.txt`
    *   INT    interiezioni e versi (`aleohoh`, `boh`)
-   *   ARTPRE articoli e preposizioni (`all`, `del`, `nel`): parole funzionali
-   *          che non ha senso "trovare" in una griglia
+   *
+   * NOTA: `ARTPRE` (preposizioni articolate: `del`, `nel`, `sul`, `dal`, `col`)
+   * NON è più escluso: la decisione di prodotto è che TUTTE le parole di >=3
+   * lettere sono giocabili. Escludendolo, `sul` restava fuori dalla whitelist e
+   * il dizionario lo conteneva ma il gioco lo rifiutava (stessa classe di `tua`).
    */
   const tipo = tratti.toUpperCase();
   if (
     tipo.startsWith('NPR') ||
     tipo.startsWith('SMI') ||
     tipo.startsWith('ABR') ||
-    tipo.startsWith('INT') ||
-    tipo.startsWith('ARTPRE')
+    tipo.startsWith('INT')
   ) {
     scartateTipo++;
     continue;

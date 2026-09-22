@@ -32,13 +32,19 @@ export interface DifficultyComposition {
 }
 
 export const COMPOSITION: Record<Difficulty, DifficultyComposition> = {
-  // Le mediane misurate su 4x4 sono ~87 / 66 / 49 / 34 parole: livelli ben separati.
-  'molto-facile': { vowels: { min: 0.46, max: 0.56 }, rareMax: 0 },
-  facile: { vowels: { min: 0.34, max: 0.44 }, rareMax: 0.0625 },
-  normale: { vowels: { min: 0.28, max: 0.38 }, rareMax: 0.125 },
-  difficile: { vowels: { min: 0.22, max: 0.32 }, rareMax: 0.19 },
-  // Estremo: pochissime vocali, molte consonanti rare. Pensato per parole lunghe.
-  estremo: { vowels: { min: 0.16, max: 0.26 }, rareMax: 0.25 },
+  /*
+   * La composizione è un MEZZO, non l'obiettivo: la difficoltà vera è il numero
+   * di parole trovabili (imposto dal generatore, vedi `schedaGen.ts`). Questi
+   * valori danno al generatore un bacino di griglie con lettere plausibili.
+   *
+   * Misure sul dizionario (150 griglie per livello, dopo Fase 1): la sola
+   * composizione produce mediane 59/55/50 parole su 4x4 — troppo vicine per
+   * distinguere i livelli. È il FILTRO sulla densità di parole a separarli.
+   */
+  facile: { vowels: { min: 0.40, max: 0.52 }, rareMax: 0.03 },
+  normale: { vowels: { min: 0.27, max: 0.38 }, rareMax: 0.12 },
+  // Poche vocali e molte consonanti rare: meno parole, più lunghe da comporre.
+  difficile: { vowels: { min: 0.16, max: 0.27 }, rareMax: 0.22 },
 };
 
 /** Lettere rare/straniere che rendono il gioco difficile. */
