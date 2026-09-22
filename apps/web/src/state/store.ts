@@ -828,16 +828,38 @@ export const useAppStore = create<AppState>()(
 
       submitWord: async (word, path) => {
         const socket = getSocket();
-        return new Promise((resolve) => {
-          socket.emit('game:submitWord', { word, path }, (res) => {
-            resolve({
-              accepted: res.accepted,
-              reason: res.reason,
-              points: res.points,
-              unique: res.unique,
-            });
-          });
+        const send = () =>
+          new Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>(
+            (resolve) => {
+              socket.emit('game:submitWord', { word, path }, (res) => {
+                resolve({
+                  accepted: res.accepted,
+                  reason: res.reason,
+                  points: res.points,
+                  unique: res.unique,
+                });
+              });
+            },
+          );
+
+        const res = await send();
+        /*
+         * Rete di sicurezza per la riconnessione trasparente.
+         *
+         * Normalmente `onConnect` ripristina il legame prima che il giocatore
+         * invii una parola. Se però la riconnessione è appena avvenuta (finestra
+         * di pochi ms) il submit può arrivare al server ancora senza la stanza:
+         * in quel caso non si mostra "Non in una stanza", si rientra e si rimanda
+         * la parola una volta sola. Un secondo fallimento è reale e viene esposto.
+         */
+        if (res.accepted || !/non in una stanza/i.test(res.reason ?? '')) return res;
+
+        const { roomCode, playerId } = get();
+        if (!roomCode || !playerId) return res;
+        const rejoinOk = await new Promise<boolean>((resolve) => {
+          socket.emit('room:rejoin', { code: roomCode, playerId }, (r) => resolve('ok' in r && r.ok));
         });
+        return rejoinOk ? send() : res;
       },
 
       leaveRoom: () => {
@@ -884,6 +906,8 @@ export const useAppStore = create<AppState>()(
 export function bindSocketEvents(): () => void {
   const socket = getSocket();
   const set = useAppStore.setState;
+  // `getState` serve al rientro dopo riconnessione e al retry del submit.
+  const get = useAppStore.getState;
 
   const onRoomUpdate = (room: RoomState) => {
     // In multiplayer la musica la scegle l'host: vince sulla preferenza locale.
@@ -969,6 +993,40 @@ export function bindSocketEvents(): () => void {
     set({ countdown: p.seconds, screen: 'mp-game', grid: null });
   const onError = (p: { message: string }) => set({ errorMessage: p.message });
 
+  /**
+   * Riconnessione TRASPARENTE del socket.
+   *
+   * Socket.IO riconnette da solo e assegna un NUOVO `socket.id`, ma il server
+   * lega stanza e giocatore proprio a quell'id: dopo la riconnessione il mapping
+   * è perso e `game:submitWord` rispondeva "Non in una stanza" mentre il
+   * giocatore era ancora in partita. Qui, appena il socket torna connesso e lo
+   * store sa di essere in una stanza, si chiede il rientro con i dati già
+   * posseduti (`roomCode` + `playerId`).
+   *
+   * Perché ascoltare `connect` invece di gestire l'errore del submit: il mapping
+   * va ripristinato PRIMA che l'utente provi a inviare una parola. Rileggere
+   * l'errore e rimandare la parola funzionerebbe solo per il primo submit e
+   * lascerebbe comunque la griglia senza stato per qualche istante.
+   */
+  const onConnect = () => {
+    const { roomCode, playerId } = useAppStore.getState();
+    if (!roomCode || !playerId) return;
+    socket.emit('room:rejoin', { code: roomCode, playerId }, (res) => {
+      if ('ok' in res && res.ok) {
+        set({ room: res.state });
+        return;
+      }
+      /*
+       * Rientro rifiutato: la stanza non esiste più (chiusa/scaduta) o il
+       * giocatore è stato rimosso. Meglio uscire in modo pulito che restare in
+       * una schermata di gioco che non può più inviare nulla. `leaveRoom` emette
+       * anche `room:leave`, ma è un no-op lato server se la stanza è sparita.
+       */
+      get().leaveRoom();
+      set({ errorMessage: 'La stanza è stata chiusa: sei tornato alla home.' });
+    });
+  };
+
   socket.on('room:update', onRoomUpdate);
   socket.on('game:roundStart', onRoundStart);
   socket.on('game:playerWord', onPlayerWord);
@@ -976,6 +1034,7 @@ export function bindSocketEvents(): () => void {
   socket.on('game:gameEnd', onGameEnd);
   socket.on('game:countdown', onCountdown);
   socket.on('error', onError);
+  socket.on('connect', onConnect);
 
   return () => {
     socket.off('room:update', onRoomUpdate);
@@ -985,6 +1044,7 @@ export function bindSocketEvents(): () => void {
     socket.off('game:gameEnd', onGameEnd);
     socket.off('game:countdown', onCountdown);
     socket.off('error', onError);
+    socket.off('connect', onConnect);
   };
 }
 

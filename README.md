@@ -50,6 +50,9 @@ risultato. Niente filtri né stili AI.
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
   clip audio personale, se ne hanno registrata una, a metà volume.
+- **Riconnessione**: il giocatore viene marcato "offline" e la partita continua; rientrando
+  (anche con una **riconnessione automatica** del socket) recupera griglia, timer e punteggio
+  senza interrompere la partita.
 - **Riepilogo di fine round in stile arcade** (multiplayer): i concorrenti in basso e le
   parole che si accendono una alla volta seguendo la **timeline reale** della partita, con
   punteggio che si accumula fino al totale del round. Saltabile, con suoni dedicati.

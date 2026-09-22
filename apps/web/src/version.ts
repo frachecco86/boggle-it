@@ -51,6 +51,7 @@ export const RELEASES: ReleaseEntry[] = [
         kind: 'fix',
         items: [
           "**Il suono degli ultimi secondi ora si sente davvero.** Prima era una sinusoide debolissima (~0,03 di volume effettivo): impercettibile su un telefono o sotto la musica. Ora è un **campanello** con due parziali e un attacco netto, chiaramente udibile ma sotto le esultanze delle parole, così non le copre. Rispetta sempre il muto.",
+          "**Niente più \"Non in una stanza\" quando la rete fa i capricci.** Se il collegamento cade e torna da solo (rete instabile, telefono in background), il gioco ora **rientra nella partita** e riprende a inviare le parole. Prima poteva comparire l'avviso rosso a ogni parola composta, pur essendo ancora in partita con la griglia davanti: il server aveva perso il legame con quel collegamento e lo trattava come se non fosse in una stanza.",
         ],
       },
       {
@@ -60,6 +61,7 @@ export const RELEASES: ReleaseEntry[] = [
           'La pianificazione del replay è **logica pura e testata** (`game/replay.ts`): rispetta l\'ordine cronologico reale, comprime la timeline in una finestra breve, impone una spaziatura minima fra le parole e ha tetti di sicurezza (mai oltre ~18 s) per non bloccare il round successivo.',
           'Lo swipe ha ora un\'**isteresi garantita a livello di configurazione**: il tracker corregge da sé una combinazione di parametri che renderebbe lo spegnimento facile quanto l\'accensione, quindi il difetto non può rientrare da una futura messa a punto.',
           'La timeline è **retro-compatibile**: i round senza timeline (o le partite registrate prima di questa versione) mostrano direttamente il riepilogo classico, senza animazione.',
+          'Il rientro dopo una riconnessione usa un evento dedicato (`room:rejoin`): il legame stanza ↔ socket è ricostruito **senza** far ripartire la partita né duplicare il giocatore. Il client rientra appena il socket torna connesso e, come rete di sicurezza, ritenta una volta l\'invio se il server risponde ancora \'non in stanza\'.',
         ],
       },
     ],

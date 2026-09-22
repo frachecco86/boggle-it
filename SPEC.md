@@ -212,6 +212,7 @@ separate da quelle versionate, e aggiunte subito al catalogo in memoria.
 - Nella schermata di fine round ogni giocatore vede le parole trovate dagli altri.
 - Gestione disconnessione: il giocatore viene marcato "offline"; la partita continua.
 - Riconnessione con lo stesso `playerId` recupera lo stato della stanza.
+- **Riconnessione trasparente**: se il socket si riconnette da solo (rete instabile, app in background), il client rientra in stanza con `room:rejoin` e riprende a inviare parole. Prima il server perdeva il legame e rispondeva "Non in una stanza".
 
 ---
 
@@ -288,6 +289,7 @@ sbooble/
 **Client → Server**
 - `room:create` `{ nickname, avatar, gridSize, difficulty, rounds, roundDurationMs }` → `{ roomCode, playerId, state }`
 - `room:join` `{ roomCode, nickname, playerId? }` → `{ state }`
+- `room:rejoin` `{ code, playerId }` → `{ playerId, state }` — rientro dopo una **riconnessione trasparente** del socket: il server ricostruisce il legame socket ↔ giocatore (che Socket.IO perde cambiando `socket.id`) senza far ripartire la partita.
 - `room:start` `{ roomCode }` (solo host)
 - `game:submitWord` `{ word, path }` → `{ accepted, reason?, word?, points? }`
 - `room:leave` `{ roomCode }`

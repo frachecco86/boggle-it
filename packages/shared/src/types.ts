@@ -244,6 +244,17 @@ export interface ErrorPayload {
 export interface ClientToServerEvents {
   'room:create': (payload: RoomCreatePayload, ack: (res: RoomCreateAck | ErrorPayload) => void) => void;
   'room:join': (payload: RoomJoinPayload, ack: (res: RoomJoinAck | ErrorPayload) => void) => void;
+  /**
+   * Rientro dopo una riconnessione del socket.
+   *
+   * Perché serve un evento dedicato: Socket.IO riconnette da solo con un NUOVO
+   * `socket.id`, e il server associa stanza/giocatore proprio a quell'id. Dopo
+   * una riconnessione trasparente il mapping è perso, quindi `game:submitWord`
+   * rispondeva "Non in una stanza" pur essendo in partita. Il client, appena il
+   * socket torna connesso, rimanda qui i dati della stanza (che conserva nello
+   * store) e il server ricostruisce il mapping senza far ripartire la partita.
+   */
+  'room:rejoin': (payload: { code: string; playerId: string }, ack: (res: RoomJoinAck | ErrorPayload) => void) => void;
   'room:start': (payload: { code: string }) => void;
   'room:config': (payload: RoomConfigPayload) => void;
   /** L'host pesca una nuova scheda per il prossimo round (visibile a tutti). */

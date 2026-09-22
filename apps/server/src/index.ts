@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
-import { Server } from 'socket.io';
+import { Server, type Socket } from 'socket.io';
 import {
   isDifficulty,
   isSfxSlot,
@@ -1052,6 +1052,39 @@ function broadcastState(room: Room): void {
 }
 
 /**
+ * Lega un socket alla stanza e al giocatore.
+ *
+ * Estratto perché la stessa operazione serve sia all'ingresso (`room:join`) sia
+ * al rientro dopo una riconnessione (`room:rejoin`): stanza Socket.IO + mapping
+ * `socket.id` → { code, playerId } + id del socket sul giocatore. Duplicarla
+ * significava rischiare che una delle due strade dimenticasse un pezzo, ed è
+ * esattamente il tipo di omissione che produce "Non in una stanza".
+ */
+function attachSocketToRoom(socket: Socket, room: Room, playerId: string): void {
+  socket.join(room.code);
+  socketState.set(socket.id, { code: room.code, playerId });
+  const player = room.players.get(playerId);
+  if (player) player.socketId = socket.id;
+}
+
+/**
+ * A un round in corso, reinvia griglia e scadenza a un socket che è appena
+ * rientrato. Emesso in un tick successivo perché il client deve prima registrare
+ * i listener (dopo l'ack di join/rejoin).
+ */
+function resendRoundIfPlaying(socket: Socket, room: Room): void {
+  if (room.phase !== 'playing' || !room.grid) return;
+  const payload = {
+    round: room.currentRound,
+    grid: room.grid,
+    endsAt: room.roundEndsAt,
+    durationMs: room.roundDurationMs,
+    schedaId: room.schedaId ?? undefined,
+  };
+  setTimeout(() => socket.emit('game:roundStart', payload), 0);
+}
+
+/**
  * Registra TUTTE le partite multiplayer concluse nella stanza.
  *
  * Perché sul server e non nel client: il punteggio autoritativo e la parola più
@@ -1180,23 +1213,41 @@ io.on('connection', (socket) => {
       );
       player.socketId = socket.id;
     }
-    socket.join(room.code);
-    socketState.set(socket.id, { code: room.code, playerId });
+    attachSocketToRoom(socket, room, playerId);
     ack({ ok: true as const, playerId, state: room.publicState() });
     broadcastState(room);
 
     // Reconnecting a round in corso: reinvia la griglia e la scadenza.
     // Emesso in un tick successivo, cosi' il client ha il tempo di registrare i listener
     // dopo aver ricevuto l'ack di room:join.
-    if (existing && room.phase === 'playing' && room.grid) {
-      const payload = {
-        round: room.currentRound,
-        grid: room.grid,
-        endsAt: room.roundEndsAt,
-        durationMs: room.roundDurationMs,
-      };
-      setTimeout(() => socket.emit('game:roundStart', payload), 0);
-    }
+    if (existing) resendRoundIfPlaying(socket, room);
+  });
+
+  /**
+   * Rientro dopo una riconnessione TRASPARENTE del socket.
+   *
+   * A differenza di `room:join`, qui il giocatore deve esistere GIÀ: non si
+   * entra in una stanza nuova, si ripristina solo il legame socket ↔ giocatore
+   * che Socket.IO ha perso riconnettendosi con un nuovo `socket.id`. Senza questa
+   * ricostruzione `game:submitWord` rispondeva "Non in una stanza".
+   */
+  socket.on('room:rejoin', (payload, ack) => {
+    const code = String(payload?.code ?? '').toUpperCase().trim();
+    const room = registry.get(code);
+    if (!room) return ack(errorPayload('ROOM_NOT_FOUND', 'Stanza non trovata'));
+    const player = payload?.playerId ? room.players.get(payload.playerId) : undefined;
+    if (!player) return ack(errorPayload('PLAYER_NOT_FOUND', 'Giocatore non in stanza'));
+
+    // Un socket precedente rimasto appeso (es. doppia connessione) non deve
+    // continuare a ricevere gli eventi della stessa partita.
+    const stale = player.socketId;
+    if (stale && stale !== socket.id) socketState.delete(stale);
+
+    player.connected = true;
+    attachSocketToRoom(socket, room, player.id);
+    ack({ ok: true as const, playerId: player.id, state: room.publicState() });
+    broadcastState(room);
+    resendRoundIfPlaying(socket, room);
   });
 
   /**
