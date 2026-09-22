@@ -135,6 +135,39 @@ describe('Room lifecycle', () => {
     expect(room.phase).toBe('roundEnd');
   });
 
+  it('produce la timeline delle parole in ordine cronologico', () => {
+    const { room } = makeRoomWithGrid(['c', 'a', 's', 'a', ...Array(12).fill('x')]);
+    room.addPlayer('p2', 'Bob');
+    room.submitWord('p1', 'casa', [0, 1, 2, 3]);
+    const results = room.endRound();
+    const p1 = results.find((r) => r.playerId === 'p1')!;
+    expect(p1.timeline).toHaveLength(1);
+    expect(p1.timeline![0]!.word).toBe('casa');
+    // Il raddoppio è già dentro la timeline (2 base + 2 bonus = 4).
+    expect(p1.timeline![0]!.points).toBe(4);
+    expect(p1.timeline![0]!.unique).toBe(true);
+    // `at` è un offset dall'inizio del round, non un timestamp assoluto.
+    expect(p1.timeline![0]!.at).toBeGreaterThanOrEqual(0);
+    expect(p1.timeline![0]!.at).toBeLessThan(room.roundDurationMs);
+  });
+
+  it('la timeline di round contiene solo le parole di QUEL round', () => {
+    const room = new Room('TL01', DICT, 4, 2, 'normale', 60_000);
+    room.addPlayer('p1', 'Alice');
+    // Round 1: griglia forzata 'casa'.
+    room.startRound();
+    room.grid = fixedGrid(['c', 'a', 's', 'a', ...Array(12).fill('x')]);
+    room.submitWord('p1', 'casa', [0, 1, 2, 3]);
+    const r1 = room.endRound();
+    expect(r1[0]!.timeline!.map((w) => w.word)).toEqual(['casa']);
+    // Round 2: nessuna parola → timeline vuota, ma `words` accumula la partita.
+    room.startRound();
+    room.grid = fixedGrid([...Array(16).fill('x')]);
+    const r2 = room.endRound();
+    expect(r2[0]!.timeline).toHaveLength(0);
+    expect(room.players.get('p1')!.words.map((w) => w.word)).toContain('casa');
+  });
+
   it('termina la partita dopo il numero di round configurato', () => {
     const room = new Room('TEST02', DICT, 4, 2);
     room.addPlayer('p1', 'Alice');

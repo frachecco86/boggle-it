@@ -135,6 +135,47 @@ describe('leaderboard', () => {
     expect(entries[0]!.nickname).toBe('AnnaVecchia');
     expect(entries[0]!.avatar).toBe('🦊');
   });
+
+  it('separa single player e multiplayer con il filtro `mode`', async () => {
+    const a = await profile('Anna');
+    const b = await profile('Bruno');
+    store.recordGame(a, game({ score: 300, mode: 'solo' }));
+    store.recordMultiplayerGames(
+      [{ profileId: b, score: 900, words: 30, longest: 'bellissimo' }],
+      { difficulty: 'normale', gridSize: 4, schedaId: null },
+    );
+
+    // Solo single player: solo Anna.
+    const solo = store.leaderboard({ kind: 'best', period: 'all', mode: 'solo' });
+    expect(solo.entries.map((e) => e.nickname)).toEqual(['Anna']);
+    expect(solo.entries[0]!.mode).toBe('solo');
+
+    // Solo multiplayer: solo Bruno.
+    const multi = store.leaderboard({ kind: 'best', period: 'all', mode: 'multi' });
+    expect(multi.entries.map((e) => e.nickname)).toEqual(['Bruno']);
+    expect(multi.entries[0]!.mode).toBe('multi');
+
+    // Tutte: entrambe, ordinate per punteggio.
+    const all = store.leaderboard({ kind: 'best', period: 'all', mode: 'all' });
+    expect(all.entries.map((e) => e.nickname)).toEqual(['Bruno', 'Anna']);
+  });
+
+  it('la classifica "totali" somma il multiplayer quando la modalità è esplicita', async () => {
+    const a = await profile('Anna');
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 120, words: 12, longest: 'casa' }],
+      { difficulty: 'normale', gridSize: 4, schedaId: null },
+    );
+    store.recordMultiplayerGames(
+      [{ profileId: a, score: 80, words: 8, longest: 'sole' }],
+      { difficulty: 'normale', gridSize: 4, schedaId: null },
+    );
+    // Con `mode: 'multi'` i totali multiplayer si sommano (120 + 80).
+    const total = store.leaderboard({ kind: 'total', period: 'all', mode: 'multi' });
+    expect(total.entries).toHaveLength(1);
+    expect(total.entries[0]!.value).toBe(200);
+    expect(total.entries[0]!.games).toBe(2);
+  });
 });
 
 describe('playerStats', () => {

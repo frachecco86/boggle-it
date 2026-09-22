@@ -74,10 +74,13 @@ rigenerabili con `pnpm gen:schede` e ampliabili dal pannello admin.
 - **Riconoscimento** (`apps/web/src/game/cellTracker.ts`): dalla cella corrente la
   direzione del vettore dito→centro viene classificata in 8 settori angolari; le diagonali
   hanno settori più larghi, così un dito che "striscia" verso la laterale sceglie comunque
-  la cella diagonale voluta. Si richiedono una distanza minima dal centro (deadzone) e un
-  allineamento minimo, più severo al cambio di direzione (isteresi): niente sfarfallio sul
-  bordo e percorsi a zig-zag incrociati stabili. I movimenti veloci sono interpolati, quindi
-  non si perdono le celle intermedie.
+  la cella diagonale voluta. Si richiedono una **deadzone oltre il confine fra le celle**
+  (una cella si accende solo quando il dito è davvero entrato in quella vicina, non
+  "sfiorandola") e un allineamento minimo, più severo al cambio di direzione. La soglia di
+  **undo è più alta di quella di attivazione** (isteresi: accendere è facile, spegnere no) e
+  i **micro-movimenti si accumulano** invece di essere valutati uno per uno, così un tremolio
+  sul bordo non produce sfarfallio e i percorsi a zig-zag incrociati restano stabili.
+  I movimenti veloci sono interpolati, quindi non si perdono le celle intermedie.
 
 ### 3.3 Validità
 Una parola è valida se **tutte** queste condizioni sono vere:

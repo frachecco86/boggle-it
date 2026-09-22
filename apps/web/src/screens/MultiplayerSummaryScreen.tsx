@@ -1,5 +1,7 @@
+import { useMemo, useState } from 'react';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
+import { RoundReplay } from '../components/RoundReplay.js';
 
 /** Riepilogo multiplayer: classifica finale o di round + parole per giocatore. */
 export function MultiplayerSummaryScreen() {
@@ -9,6 +11,32 @@ export function MultiplayerSummaryScreen() {
   const isHost = room?.hostId === playerId;
   const isLastRound = room ? room.currentRound >= room.rounds : false;
   const sortedWords = [...missedWords].sort((a, b) => b.length - a.length);
+
+  /*
+   * Replay "arcade" a fine round: appare UNA volta per round, poi si può passare
+   * al riepilogo completo. A fine partita (gameEnd) non c'è una timeline unica
+   * per l'intera partita, quindi si mostra direttamente la classifica finale.
+   */
+  const hasTimeline = useMemo(
+    () => results.some((r) => (r.timeline?.length ?? 0) > 0),
+    [results],
+  );
+  const [replayDone, setReplayDone] = useState(false);
+  const showReplay = !isFinal && hasTimeline && !replayDone;
+
+  if (showReplay) {
+    return (
+      <div className="screen summary">
+        <BackHome onLeave={leaveRoom} />
+        <h2 className="screen__title">Fine round {room?.currentRound ?? ''}</h2>
+        <RoundReplay
+          results={results}
+          players={room?.players.map((p) => ({ id: p.id, avatar: p.avatar, photoUrl: p.photoUrl }))}
+          onDone={() => setReplayDone(true)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="screen summary">

@@ -134,9 +134,28 @@ export function MultiplayerGameScreen() {
 
   if (!grid || !room) {
     return (
-      <div className="screen">
+      <div className="screen game">
         <BackHome confirm onLeave={leaveRoom} />
-        <h2 className="screen__title">In attesa della griglia…</h2>
+        {/*
+          Countdown di inizio round: i numeri arrivano dal server e la griglia
+          non c'è ancora. Si mostra qui la sovrapposizione, perché la schermata
+          di gioco vera (più sotto) richiede una griglia.
+        */}
+        {countdown !== null ? (
+          <div className="countdown-overlay" role="status" aria-live="assertive">
+            <div className="countdown">
+              <svg className="countdown__ring" viewBox="0 0 100 100" aria-hidden>
+                <circle className="countdown__ring-bg" cx="50" cy="50" r="45" />
+              </svg>
+              <span key={countdown} className="countdown__num">
+                {countdown}
+              </span>
+            </div>
+            <p className="countdown__hint">Preparati…</p>
+          </div>
+        ) : (
+          <h2 className="screen__title">In attesa della griglia…</h2>
+        )}
       </div>
     );
   }

@@ -67,6 +67,13 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const [phase, setPhase] = useState<SoloGameState['phase']>('idle');
   /** Scheda scelta nell'anteprima, in attesa che il countdown finisca. */
   const pendingSchedaRef = useRef<Scheda | null>(null);
+  /**
+   * Numero del round che il countdown avvierà.
+   *
+   * Serve perché il countdown 3-2-1 ora precede OGNI round, non solo il primo:
+   * `beginRound` deve sapere se sta partendo il round 1 o uno successivo.
+   */
+  const pendingRoundRef = useRef(1);
   const [round, setRound] = useState(0);
   const [scheda, setScheda] = useState<Scheda | null>(null);
   const [found, setFound] = useState<FoundWord[]>([]);
@@ -145,6 +152,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setRoundScores([]);
       // La scheda resta in attesa: la userà beginRound.
       pendingSchedaRef.current = prescelta ?? null;
+      pendingRoundRef.current = 1;
       setPhase('countdown');
     },
     [],
@@ -153,8 +161,9 @@ export function useSoloGame(options: UseSoloGameOptions) {
   /** Chiamato dal countdown quando ha finito: qui parte il round vero. */
   const beginRound = useCallback(() => {
     const prescelta = pendingSchedaRef.current ?? undefined;
+    const roundNumber = pendingRoundRef.current;
     pendingSchedaRef.current = null;
-    void startRound(1, prescelta);
+    void startRound(roundNumber, prescelta);
   }, [startRound]);
 
   // Timer
@@ -226,7 +235,15 @@ export function useSoloGame(options: UseSoloGameOptions) {
       return;
     }
     savedRef.current = false;
-    void startRound(round + 1);
+    /*
+     * Countdown 3-2-1 anche fra un round e l'altro: è parte del ritmo, come nel
+     * Boggle originale. La scheda nuova viene pescata solo alla fine del
+     * countdown (in `beginRound`), così i secondi di gioco non si consumano
+     * durante il conto alla rovescia.
+     */
+    pendingSchedaRef.current = null;
+    pendingRoundRef.current = round + 1;
+    setPhase('countdown');
   }, [round, rounds, score, startRound]);
 
   /**

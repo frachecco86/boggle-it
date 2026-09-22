@@ -23,15 +23,30 @@ export interface TrackerHooks {
 
 export interface TrackerTuning {
   /**
-   * Distanza minima dal centro (in passi) per cambiare cella.
+   * Distanza minima dal centro (in passi) per ATTIVARE la cella vicina.
    *
-   * Era 0.28 (poco più di un quarto di cella): bastava sfiorare il bordo per
-   * attivare la lettera accanto. 0.42 impone di arrivare quasi a metà cella,
-   * così una passata veloce non "accende" le celle che si sfiorano soltanto.
+   * Deve stare OLTRE la metà cella (0.5): il confine geometrico fra due celle è a
+   * 0.5 passi, quindi con un valore più basso la cella si accendeva PRIMA che il
+   * dito uscisse da quella corrente. 0.56 impone di superare il confine di un
+   * margine, così una passata veloce o un tremolio non accendono le celle vicine.
    */
   deadZone: number;
-  /** Distanza minima per annullare l'ultimo passo (undo), più alta per non farlo per sbaglio. */
+  /**
+   * Distanza minima dal centro per ANNULLARE l'ultimo passo (undo).
+   *
+   * È la soglia di isteresi: DEVE essere maggiore di `deadZone`. Il dito deve
+   * tornare indietro in modo deciso prima che la cella si spenga. Senza questo
+   * scarto, un tremolio sul confine accendeva e spegneva la stessa cella.
+   */
   backDeadZone: number;
+  /**
+   * Movimento minimo (in passi) perché un campione venga elaborato.
+   *
+   * I micro-movimenti (tremolio del dito, dithering del mouse) non vengono
+   * processati: si ACCUMULANO finché non raggiungono la soglia. È il filtro che
+   * evita accensioni improvvise quando il dito è quasi fermo sul confine.
+   */
+  minMove: number;
   /**
    * Sotto questo rapporto min/max il movimento è considerato diagonale.
    *
@@ -49,8 +64,12 @@ export interface TrackerTuning {
 }
 
 export const DEFAULT_TUNING: TrackerTuning = {
-  deadZone: 0.42,
-  backDeadZone: 0.52,
+  // Attivazione appena oltre il confine fra celle (0.5) + margine.
+  deadZone: 0.56,
+  // Undo deliberato: più severo dell'attivazione → isteresi, niente flicker.
+  backDeadZone: 0.65,
+  // Micro-movimenti ignorati (si accumulano): ~6% di una cella.
+  minMove: 0.06,
   diagonalRatio: 0.36,
   alignMin: 0.86,
   alignSwitch: 0.95,
@@ -79,11 +98,33 @@ export class CellPathTracker {
   private lastPoint: Point | null = null;
   /** Direzione (dx,dy) dell'ultimo passo confermato: usata per l'isteresi. */
   private committedDir: { dx: number; dy: number } | null = null;
+  /**
+   * Ultimo punto effettivamente elaborato.
+   *
+   * `lastPoint` è il punto grezzo dell'ultimo evento; questo è dove il dito si
+   * trovava all'ultima VALUTAZIONE. La differenza è il filtro anti-tremolio:
+   * finché il dito non si allontana di `minMove` dal punto elaborato, i punti
+   * vengono ignorati (e il loro spostamento accumulato al prossimo campione).
+   */
+  private evaluatedPoint: Point | null = null;
 
   constructor(
     private readonly hooks: TrackerHooks,
-    private readonly tuning: TrackerTuning = DEFAULT_TUNING,
-  ) {}
+    tuning: TrackerTuning = DEFAULT_TUNING,
+  ) {
+    /*
+     * Garanzia di ISTERESI: se una configurazione passasse `backDeadZone` non
+     * strettamente maggiore di `deadZone`, una cella potrebbe accendersi e
+     * spegnersi sullo stesso punto (flicker). Qui lo correggiamo alla fonte,
+     * così nessuna combinazione di parametri può reintrodurre il difetto.
+     */
+    this.tuning =
+      tuning.backDeadZone > tuning.deadZone
+        ? tuning
+        : { ...tuning, backDeadZone: Math.min(0.95, tuning.deadZone + 0.1) };
+  }
+
+  private readonly tuning: TrackerTuning;
 
   get currentPath(): readonly number[] {
     return this.path;
@@ -131,6 +172,7 @@ export class CellPathTracker {
     if (idx === null) return false;
     this.path = [idx];
     this.lastPoint = point;
+    this.evaluatedPoint = point;
     this.committedDir = null;
     this.emit();
     return true;
@@ -139,15 +181,30 @@ export class CellPathTracker {
   /**
    * Aggiorna il percorso verso `point`, campionando il segmento percorso.
    * Ritorna true se il percorso è cambiato.
+   *
+   * FILTRO ANTI-TREMOLIO: se il dito si è mosso meno di `minMove` dal punto
+   * elaborato, l'evento viene ignorato *senza aggiornare* il punto di riferimento.
+   * Così i micro-spostamenti si ACCUMULANO: quando il dito supera davvero la
+   * soglia, il vettore calcolato è quello complessivo e non un singolo jitter.
+   * Senza questo, muovendosi di 1-2 px sopra il confine di una cella la cella
+   * vicina si accendeva e spegneva a ripetizione.
    */
   move(point: Point): boolean {
     if (this.path.length === 0) return false;
     const layout = this.hooks.getLayout();
     const pitch = this.pitch(layout);
-    const from = this.lastPoint ?? point;
+    const from = this.evaluatedPoint ?? this.lastPoint ?? point;
     const dx = point.x - from.x;
     const dy = point.y - from.y;
     const distance = Math.hypot(dx, dy);
+
+    // Sotto la soglia: nessuna valutazione e nessun avanzamento del riferimento
+    // (lo spostamento resta in attesa del prossimo campione). Si aggiorna solo il
+    // punto grezzo, così il rilascio sa dove si trova il dito.
+    if (distance < pitch * this.tuning.minMove) {
+      this.lastPoint = point;
+      return false;
+    }
 
     // Campionamento del segmento: uno swipe veloce non deve saltare le celle.
     const steps = Math.max(1, Math.min(24, Math.ceil(distance / (pitch / 3))));
@@ -167,6 +224,7 @@ export class CellPathTracker {
       }
     }
     this.lastPoint = point;
+    this.evaluatedPoint = point;
     if (changed) this.emit();
     return changed;
   }
@@ -181,6 +239,7 @@ export class CellPathTracker {
   reset(): void {
     this.path = [];
     this.lastPoint = null;
+    this.evaluatedPoint = null;
     this.committedDir = null;
     this.emit();
   }
@@ -242,7 +301,6 @@ export class CellPathTracker {
         if (align < this.tuning.alignSwitch) break;
         this.path.pop();
         this.committedDir = null;
-        this.lastPoint = point;
         changed = true;
         continue;
       }

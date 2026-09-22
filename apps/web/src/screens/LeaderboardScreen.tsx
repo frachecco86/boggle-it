@@ -4,6 +4,7 @@ import {
   DIFFICULTY_ORDER,
   difficultyMeta,
   type Difficulty,
+  type GameMode,
   type GridSize,
   type LeaderboardEntry,
   type LeaderboardKind,
@@ -18,13 +19,20 @@ import { fetchLeaderboard, fetchMyStats } from '../game/statsClient.js';
 const KINDS: { id: LeaderboardKind; label: string; hint: string }[] = [
   { id: 'best', label: 'Migliori', hint: 'Punteggio più alto in una partita' },
   /*
-   * "Somma dei punti" conta solo il SINGLE PLAYER: in multiplayer il punteggio
-   * dipende dagli avversari (e dal numero di giocatori), quindi sommarlo a quello
-   * di una partita in solitaria non darebbe un numero confrontabile. L'hint lo
-   * dice esplicitamente, altrimenti la voce sembra un totale generale.
+   * "Somma dei punti" è disponibile per ENTRAMBE le modalità: il filtro in alto
+   * (Da solo / Con altri) sceglie quali partite sommare. Sommare single player e
+   * multiplayer insieme non avrebbe senso (un punteggio multiplayer dipende dagli
+   * avversari), quindi la modalità è sempre esplicita.
    */
-  { id: 'total', label: 'Totali', hint: 'Somma dei punti delle partite in single player' },
+  { id: 'total', label: 'Totali', hint: 'Somma dei punti delle partite della modalità scelta' },
   { id: 'longest', label: 'Parole lunghe', hint: 'La parola più lunga trovata' },
+];
+
+/** Modalità della classifica: single player, multiplayer o tutte. */
+const MODES: { id: GameMode | 'all'; label: string; hint: string }[] = [
+  { id: 'solo', label: 'Da solo', hint: 'Classifica delle partite single player' },
+  { id: 'multi', label: 'Con altri', hint: 'Classifica delle partite multiplayer' },
+  { id: 'all', label: 'Tutte', hint: 'Single player e multiplayer insieme' },
 ];
 
 const PERIODS: { id: LeaderboardPeriod; label: string }[] = [
@@ -47,6 +55,7 @@ export function LeaderboardScreen() {
   // Il token vive nel profileStore, non nello store di navigazione.
   const token = activeToken();
   const [kind, setKind] = useState<LeaderboardKind>('best');
+  const [mode, setMode] = useState<GameMode | 'all'>('solo');
   const [period, setPeriod] = useState<LeaderboardPeriod>('all');
   const [gridSize, setGridSize] = useState<GridSize | 'all'>('all');
   const [difficulty, setDifficulty] = useState<Difficulty | 'all'>('all');
@@ -68,6 +77,7 @@ export function LeaderboardScreen() {
       {
         kind,
         period,
+        mode,
         gridSize: gridSize === 'all' ? undefined : gridSize,
         difficulty: difficulty === 'all' ? undefined : difficulty,
       },
@@ -91,7 +101,7 @@ export function LeaderboardScreen() {
       alive = false;
       controller.abort();
     };
-  }, [kind, period, gridSize, difficulty, token]);
+  }, [kind, period, mode, gridSize, difficulty, token]);
 
   // Statistiche personali (solo se c'è un profilo).
   useEffect(() => {
@@ -105,7 +115,7 @@ export function LeaderboardScreen() {
   }, [token]);
 
   const activeKind = useMemo(() => KINDS.find((k) => k.id === kind)!, [kind]);
-  const hasFilters = gridSize !== 'all' || difficulty !== 'all' || period !== 'all';
+  const hasFilters = gridSize !== 'all' || difficulty !== 'all' || period !== 'all' || mode !== 'solo';
 
   const formatValue = (e: LeaderboardEntry) => {
     if (kind === 'longest') return e.longest ? e.longest.toUpperCase() : '—';
@@ -126,6 +136,23 @@ export function LeaderboardScreen() {
         <h2 className="screen__title">Classifica</h2>
         <p className="screen__hint">{activeKind.hint}</p>
       </header>
+
+      {/* Modalità: single player e multiplayer separati. È la scelta in alto
+          perché cambia il senso di TUTTI i numeri sottostanti. */}
+      <div className="leaderboard__modes" role="tablist" aria-label="Modalità">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            role="tab"
+            aria-selected={mode === m.id}
+            title={m.hint}
+            className={`leaderboard__mode${mode === m.id ? ' leaderboard__mode--active' : ''}`}
+            onClick={() => setMode(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
 
       {/* Statistiche personali complete: parole per lunghezza, split solo/multi
           e storico partite. Componente a parte perché è una sezione ricca. */}
@@ -207,7 +234,7 @@ export function LeaderboardScreen() {
           {offline
             ? 'Riprova quando il server è raggiungibile.'
             : hasFilters
-              ? 'Nessuna partita con questi filtri. Prova ad allargare la ricerca.'
+              ? `Nessuna partita ${modeLabel(mode)} con questi filtri. Prova ad allargare la ricerca.`
               : 'Nessuna partita registrata ancora. Gioca la prima!'}
         </p>
       ) : (
@@ -241,10 +268,17 @@ export function LeaderboardScreen() {
 
       {!loading && entries.length > 0 && (
         <p className="leaderboard__note">
-          {games.toLocaleString('it-IT')} partite considerate
+          {games.toLocaleString('it-IT')} partite {modeLabel(mode)} considerate
           {hasFilters ? ' con i filtri attuali' : ''}. Miglior punteggio per giocatore.
         </p>
       )}
     </div>
   );
+}
+
+/** Etichetta della modalità, per i messaggi. */
+function modeLabel(mode: GameMode | 'all'): string {
+  if (mode === 'solo') return 'single player';
+  if (mode === 'multi') return 'multiplayer';
+  return '';
 }

@@ -455,9 +455,17 @@ export class ProfileStore {
     const where: string[] = [];
     const params: (string | number)[] = [];
 
-    // La classifica "totali" somma le partite: solo single player, perché le partite
-    // multiplayer non hanno un punteggio confrontabile (dipendono dagli avversari).
-    if (filters.kind === 'total') where.push("mode = 'solo'");
+    // Filtro per modalità: single player, multiplayer o tutte. `all`/assente
+    // include entrambe (retro-compatibile con i client che non lo mandano).
+    if (filters.mode && filters.mode !== 'all') {
+      where.push('mode = ?');
+      params.push(filters.mode);
+    } else if (filters.kind === 'total' && filters.mode !== 'all') {
+      // La classifica "totali" somma le partite: se non è stata scelta una
+      // modalità esplicita, si limita al single player (un totale che mescola
+      // partite in otto e partite in solitaria non descrive né le une né le altre).
+      where.push("mode = 'solo'");
+    }
     if (filters.gridSize) {
       where.push('grid_size = ?');
       params.push(filters.gridSize);
@@ -487,6 +495,7 @@ export class ProfileStore {
         .prepare(
           `SELECT profile_id, nickname, avatar,
                   SUM(score) AS value, COUNT(*) AS games,
+                  MIN(mode) AS mode,
                   MAX(score) AS best, MAX(played_at) AS played_at
              FROM games
             WHERE ${whereSql}
@@ -500,6 +509,7 @@ export class ProfileStore {
         avatar: string;
         value: number;
         games: number;
+        mode: string;
         best: number;
         played_at: number;
       }>;
@@ -518,6 +528,7 @@ export class ProfileStore {
           difficulty: filters.difficulty ?? 'normale',
           playedAt: r.played_at,
           games: r.games,
+          mode: r.mode === 'multi' ? 'multi' : 'solo',
         })),
         gamesConsidered,
       };
@@ -529,7 +540,7 @@ export class ProfileStore {
     const rows = this.db
       .prepare(
         `SELECT profile_id, nickname, avatar, score, words, longest,
-                grid_size, difficulty, played_at, LENGTH(longest) AS longest_len
+                grid_size, difficulty, mode, played_at, LENGTH(longest) AS longest_len
            FROM games
           WHERE ${whereSql}
           ORDER BY ${orderBy}
@@ -544,6 +555,7 @@ export class ProfileStore {
       longest: string;
       grid_size: number;
       difficulty: string;
+      mode: string;
       played_at: number;
       longest_len: number;
     }>;
@@ -565,6 +577,7 @@ export class ProfileStore {
         gridSize: r.grid_size as GridSize,
         difficulty: r.difficulty as Difficulty,
         playedAt: r.played_at,
+        mode: r.mode === 'multi' ? 'multi' : 'solo',
       });
     }
     return { entries, gamesConsidered };

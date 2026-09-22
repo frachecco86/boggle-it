@@ -66,8 +66,21 @@ export interface Player {
   sfxSlots: SfxSlot[];
   totalScore: number;
   roundScore: number;
+  /**
+   * Tutte le parole trovate nella PARTITA, in ordine cronologico.
+   *
+   * `at` è misurato dall'inizio del round (vedi `roundStartedAt`), non è un
+   * timestamp assoluto: il client non deve conoscere l'orologio del server.
+   * Alimenta il riepilogo "arcade" (replay della partita).
+   */
   words: FoundWord[];
   roundWords: Set<string>;
+  /**
+   * Parole del round CORRENTE, in ordine cronologico.
+   * Separata da `words` perché la timeline del riepilogo di round deve contenere
+   * solo le parole di quel round, mentre `words` accumula l'intera partita.
+   */
+  roundTimeline: FoundWord[];
   connected: boolean;
 }
 
@@ -96,6 +109,11 @@ export class Room {
    */
   musicId: MusicChoice = DEFAULT_MUSIC_ID;
   roundEndsAt = 0;
+  /**
+   * Momento (ms epoch, orologio server) in cui è iniziato il round corrente.
+   * Serve a calcolare `at` delle parole come offset dall'inizio del round.
+   */
+  roundStartedAt = 0;
 
   /**
    * true quando la partita è conclusa ma le partite NON sono ancora state
@@ -171,6 +189,7 @@ export class Room {
       roundScore: 0,
       words: [],
       roundWords: new Set(),
+      roundTimeline: [],
       connected: true,
     };
     this.players.set(id, player);
@@ -229,8 +248,10 @@ export class Room {
     for (const p of this.players.values()) {
       p.roundScore = 0;
       p.roundWords = new Set();
+      p.roundTimeline = [];
     }
-    this.roundEndsAt = Date.now() + this.roundDurationMs;
+    this.roundStartedAt = Date.now();
+    this.roundEndsAt = this.roundStartedAt + this.roundDurationMs;
     return { grid: this.grid, endsAt: this.roundEndsAt };
   }
 
@@ -278,7 +299,12 @@ export class Room {
     player.roundWords.add(normalized);
     player.roundScore += points;
     player.totalScore += points;
-    player.words.push({ word: normalized, points, at: Date.now() });
+    // `at` è un OFFSET dall'inizio del round: il client non deve conoscere
+    // l'orologio del server. Minimo 0 per sicurezza.
+    const at = Math.max(0, Date.now() - this.roundStartedAt);
+    const found: FoundWord = { word: normalized, points, at };
+    player.words.push(found);
+    player.roundTimeline.push(found);
     this.roundFoundWords.add(normalized);
 
     // La parola potrebbe valere doppio (trovata da soli), ma l'unicità si sa solo
@@ -327,8 +353,24 @@ export class Room {
         totalScore: p.totalScore,
         words: [...p.roundWords].sort(),
         uniqueWords: uniquePerPlayer.get(p.id) ?? [],
+        // Le parole del round in ordine cronologico: il client le accende una
+        // alla volta nel riepilogo "arcade". I punti e il flag `unique` sono già
+        // definitivi perché `roundTimeline` referenzia gli stessi oggetti di
+        // `words`, aggiornati dal raddoppio qui sopra.
+        timeline: this.roundTimelineFor(p),
       }))
       .sort((a, b) => b.roundScore - a.roundScore || a.nickname.localeCompare(b.nickname));
+  }
+
+  /**
+   * Timeline del round corrente per un giocatore, ordinata per momento di
+   * scoperta. Estratta perché usata sia nel riepilogo di round sia in quello
+   * finale (dove serve la timeline dell'ULTIMO round).
+   */
+  private roundTimelineFor(p: Player) {
+    return [...p.roundTimeline]
+      .sort((a, b) => a.at - b.at)
+      .map((w) => ({ word: w.word, points: w.points, at: w.at, unique: w.unique }));
   }
 
   isGameOver(): boolean {

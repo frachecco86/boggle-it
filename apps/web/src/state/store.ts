@@ -956,7 +956,17 @@ export function bindSocketEvents(): () => void {
   const onRoundEnd = (p: { results: RoundResultEntry[]; missedWords: string[] }) =>
     set({ roundResults: p.results, missedWords: p.missedWords, screen: 'summary' });
   const onGameEnd = (p: { finalScores: RoundResultEntry[] }) => set({ finalScores: p.finalScores, screen: 'summary' });
-  const onCountdown = (p: { seconds: number }) => set({ countdown: p.seconds });
+  /*
+   * Countdown 3-2-1 a ogni round: il numero arriva dal server.
+   *
+   * Si passa SUBITO alla schermata di gioco, anche se la griglia del nuovo round
+   * non è ancora arrivata (`game:roundStart` viene emesso alla fine del
+   * countdown): senza, la sovrapposizione non comparirebbe mai perché si
+   * resterebbe nella schermata di riepilogo. La schermata di gioco sa mostrare
+   * il countdown anche senza griglia.
+   */
+  const onCountdown = (p: { seconds: number }) =>
+    set({ countdown: p.seconds, screen: 'mp-game', grid: null });
   const onError = (p: { message: string }) => set({ errorMessage: p.message });
 
   socket.on('room:update', onRoomUpdate);

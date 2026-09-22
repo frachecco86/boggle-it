@@ -188,6 +188,25 @@ export interface PlayerWordPayload {
   unique?: boolean;
 }
 
+/**
+ * Una parola trovata durante un round, con il momento in cui è stata trovata.
+ *
+ * Serve al riepilogo "arcade": il client ripercorre la partita in ordine
+ * cronologico e accende le parole una alla volta, come nel Boggle originale.
+ * `at` è in millisecondi **dall'inizio del round** (o della partita, per il
+ * riepilogo finale), non un timestamp assoluto: così il client non deve
+ * conoscere l'orologio del server.
+ */
+export interface WordEvent {
+  word: string;
+  /** Punti della parola, raddoppio già incluso. */
+  points: number;
+  /** Millisecondi dall'inizio del round/partita. */
+  at: number;
+  /** true se la parola è stata trovata da un solo giocatore (×2). */
+  unique?: boolean;
+}
+
 export interface RoundResultEntry {
   playerId: string;
   nickname: string;
@@ -196,6 +215,12 @@ export interface RoundResultEntry {
   words: string[];
   /** Parole trovate da un solo giocatore (punteggio raddoppiato). */
   uniqueWords?: string[];
+  /**
+   * Parole del round in ordine cronologico, per il replay del riepilogo.
+   * Presente solo quando il server può ricostruirla (partite in corso da questa
+   * versione in avanti). Assente = il client mostra il riepilogo classico.
+   */
+  timeline?: WordEvent[];
 }
 
 export interface RoundEndPayload {

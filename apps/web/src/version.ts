@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.16.1';
+export const APP_VERSION = '0.17.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -28,6 +28,43 @@ export interface ReleaseEntry {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.17.0',
+    date: '2026-09-22',
+    title: 'Riepilogo arcade, classifica separata e countdown a ogni round',
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Riepilogo di fine round in stile arcade.** In multiplayer, a fine round i concorrenti compaiono in basso con avatar e foto, e le parole indovinate si **accendono una alla volta** seguendo la timeline **reale** di quando sono state trovate, come se la partita venisse ripercorsa a velocità sostenuta. Il punteggio di ognuno si **accumula** fino al totale del round, con un suono a ogni scoperta e un accordo finale. Si può **saltare** con un tasto e passare al riepilogo completo. Le parole trovate da un solo giocatore restano marcate **×2**.',
+          '**Classifica separata fra single player e multiplayer.** In alto nella pagina Classifica ci sono tre tab — *Da solo*, *Con altri*, *Tutte* — e cambiano il senso di tutti i numeri sottostanti. La classifica **Totali** ora è disponibile anche per il multiplayer (prima sommava solo le partite in solitaria).',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Countdown 3-2-1 a ogni round**, non solo al primo: è parte del ritmo del gioco, come nel Boggle originale. Vale sia in single player sia in multiplayer; il timer del round parte solo alla fine del conto alla rovescia, quindi i secondi di gioco non si consumano.',
+          "**Swipe più stabile: le lettere non si accendono più 'sfiorando il pixel'.** La soglia per attivare una cella era *sotto* il confine geometrico fra due caselle, quindi la cella vicina si accendeva prima che il dito uscisse da quella corrente. Ora si deve superare il confine con un margine, l'annullamento dell'ultimo passo richiede un movimento indietro più deciso (isteresi vera: accendere è facile, spegnere no) e i **micro-movimenti del dito vengono accumulati** invece di essere valutati uno per uno. Risultato: niente accensioni né spegnimenti improvvisi mentre si striscia sul bordo, e i tremolii non fanno più 'sfarfallare' le lettere.",
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          "**Il suono degli ultimi secondi ora si sente davvero.** Prima era una sinusoide debolissima (~0,03 di volume effettivo): impercettibile su un telefono o sotto la musica. Ora è un **campanello** con due parziali e un attacco netto, chiaramente udibile ma sotto le esultanze delle parole, così non le copre. Rispetta sempre il muto.",
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La timeline del round viene **ricostruita sul server** come offset dall\'inizio del round (non timestamp assoluti): il client non deve conoscere l\'orologio del server né compensare la latenza.',
+          'La pianificazione del replay è **logica pura e testata** (`game/replay.ts`): rispetta l\'ordine cronologico reale, comprime la timeline in una finestra breve, impone una spaziatura minima fra le parole e ha tetti di sicurezza (mai oltre ~18 s) per non bloccare il round successivo.',
+          'Lo swipe ha ora un\'**isteresi garantita a livello di configurazione**: il tracker corregge da sé una combinazione di parametri che renderebbe lo spegnimento facile quanto l\'accensione, quindi il difetto non può rientrare da una futura messa a punto.',
+          'La timeline è **retro-compatibile**: i round senza timeline (o le partite registrate prima di questa versione) mostrano direttamente il riepilogo classico, senza animazione.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.16.1',
     date: '2026-09-22',

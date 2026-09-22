@@ -15,6 +15,16 @@ import type { GridSize } from './types.js';
 /** Modalità di gioco che generano una partita classificabile. */
 export type GameMode = 'solo' | 'multi';
 
+/**
+ * Filtro per modalità nella classifica.
+ *
+ * Perché serve: un punteggio multiplayer dipende dagli avversari (raddoppio
+ * sulle parole uniche, più teste che trovano parole). Mescolarlo con il single
+ * player rende la classifica poco leggibile, quindi le due modalità si
+ * consultano separatamente. `all` è il default retro-compatibile.
+ */
+export type LeaderboardMode = GameMode | 'all';
+
 /** Una partita conclusa, come salvata. */
 export interface GameRecord {
   id: string;
@@ -84,6 +94,8 @@ export interface LeaderboardFilters {
   gridSize?: GridSize;
   /** Se assente, include tutte le difficoltà. */
   difficulty?: Difficulty;
+  /** Modalità: single player, multiplayer o tutte. */
+  mode?: LeaderboardMode;
   period: LeaderboardPeriod;
 }
 
@@ -104,6 +116,8 @@ export interface LeaderboardEntry {
   playedAt: number;
   /** Numero di partite (solo per la classifica "totali"). */
   games?: number;
+  /** Modalità della partita migliore (o della voce aggregata). */
+  mode?: GameMode;
 }
 
 /** Risposta dell'endpoint leaderboard. */
@@ -112,6 +126,7 @@ export interface LeaderboardResponse {
   period: LeaderboardPeriod;
   gridSize?: GridSize;
   difficulty?: Difficulty;
+  mode?: LeaderboardMode;
   entries: LeaderboardEntry[];
   /** Totale partite considerate (dopo i filtri). */
   gamesConsidered: number;

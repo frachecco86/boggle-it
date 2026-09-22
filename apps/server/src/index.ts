@@ -17,6 +17,7 @@ import {
   type GridSize,
   type ErrorPayload,
   type LeaderboardKind,
+  type LeaderboardMode,
   type LeaderboardPeriod,
   type WordCatalogQuery,
   type SchedaStats,
@@ -506,7 +507,14 @@ app.get('/leaderboard', (req, res) => {
   const diffRaw = String(req.query.difficulty ?? '');
   const difficulty = isDifficulty(diffRaw) ? (diffRaw as Difficulty) : undefined;
 
-  const { entries, gamesConsidered } = profiles.leaderboard({ kind, period, gridSize, difficulty });
+  // Modalità: `solo`, `multi` o `all` (default). Separare single player e
+  // multiplayer è una scelta di leggibilità: i punteggi multiplayer dipendono
+  // dagli avversari.
+  const modeRaw = String(req.query.mode ?? 'all');
+  const mode: LeaderboardMode =
+    modeRaw === 'solo' || modeRaw === 'multi' ? modeRaw : 'all';
+
+  const { entries, gamesConsidered } = profiles.leaderboard({ kind, period, gridSize, difficulty, mode });
 
   // Se c'e' un token valido, aggiungiamo la posizione del giocatore per evidenziarla.
   const token = bearerToken(req);
@@ -519,6 +527,7 @@ app.get('/leaderboard', (req, res) => {
     period,
     gridSize,
     difficulty,
+    mode,
     entries,
     gamesConsidered,
     myProfileId: me?.id ?? null,
@@ -1233,21 +1242,23 @@ io.on('connection', (socket) => {
       scheduleRoundEnd(room);
     };
 
-    // Countdown 3-2-1 per il primo round
-    if (room.phase === 'lobby') {
-      room.phase = 'countdown';
-      broadcastState(room);
-      const seconds = Math.max(1, Math.round(COUNTDOWN_MS / 1000));
-      for (let s = seconds; s >= 1; s--) {
-        setTimeout(
-          () => io.to(room.code).emit('game:countdown', { seconds: s }),
-          (seconds - s) * 1000,
-        );
-      }
-      setTimeout(startRound, COUNTDOWN_MS);
-    } else {
-      startRound();
+    /*
+     * Countdown 3-2-1 a OGNI round: è parte del ritmo del gioco, non solo
+     * dell'avvio. Il timer del round parte solo alla fine del countdown, così i
+     * secondi di gioco non vengono consumati dal conto alla rovescia. I numeri
+     * arrivano dal server (stesso valore per tutti); animazione e suoni sono
+     * locali, così ognuno li sente senza ritardo di rete.
+     */
+    room.phase = 'countdown';
+    broadcastState(room);
+    const seconds = Math.max(1, Math.round(COUNTDOWN_MS / 1000));
+    for (let s = seconds; s >= 1; s--) {
+      setTimeout(
+        () => io.to(room.code).emit('game:countdown', { seconds: s }),
+        (seconds - s) * 1000,
+      );
     }
+    setTimeout(startRound, COUNTDOWN_MS);
   });
 
   socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId }) => {

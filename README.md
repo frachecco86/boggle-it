@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.6.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.17.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -50,18 +50,26 @@ risultato. Niente filtri né stili AI.
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
   clip audio personale, se ne hanno registrata una, a metà volume.
+- **Riepilogo di fine round in stile arcade** (multiplayer): i concorrenti in basso e le
+  parole che si accendono una alla volta seguendo la **timeline reale** della partita, con
+  punteggio che si accumula fino al totale del round. Saltabile, con suoni dedicati.
 - **3 difficoltà** (facile / normale / difficile) con tema visivo dedicato.
   La difficoltà controlla la banda di parole/punteggio della scheda; la dimensione è una scelta separata.
+- **Classifica separata** fra single player e multiplayer (tab *Da solo* / *Con altri* / *Tutte*),
+  con tre classifiche (miglior punteggio, totali, parola più lunga) per ogni modalità.
 - **Anteprima reale**: il server pesca una scheda di esempio dal catalogo con le impostazioni
   scelte e mostra quante parole si possono trovare (conteggio esatto, non stimato).
 - **Avatar**: 32 emoji selezionabili, visibili in classifica e nelle notifiche.
 - **Durata del round** selezionabile: 90, 120 o 180 secondi.
+- **Countdown 3-2-1 a ogni round** (single player e multiplayer), con animazione e suoni.
 - **Audio**: effetti sintetizzati con Web Audio (nessun asset da scaricare), motivi musicali
   crescenti in base alla lunghezza della parola, e musica di sottofondo CC0.
   Tutto disattivabile con volumi separati.
-- **Swipe preciso**: riconoscimento a settori angolari + deadzone + isteresi
-  (`game/cellTracker.ts`), con interpolazione dei movimenti veloci: le diagonali — anche
-  incrociate — non richiedono precisione millimetrica e non "sfarfallano" sul bordo.
+- **Swipe preciso**: riconoscimento a settori angolari + deadzone oltre il confine delle
+  celle + isteresi (`game/cellTracker.ts`), con interpolazione dei movimenti veloci e
+  **accumulo dei micro-movimenti**: le diagonali — anche incrociate — non richiedono
+  precisione millimetrica, le celle non si accendono "sfiorando il pixel" e non
+  "sfarfallano" sul bordo.
 - **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
   flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
   Tutte rispettano `prefers-reduced-motion`.
@@ -154,6 +162,9 @@ Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata)
 | Parola già trovata | Due note discendenti (ambra, non è un errore) |
 | Parola non valida | Tono basso filtrato, morbido |
 | Parola di un avversario | Ding discreto + badge "+N" accanto al nome |
+| Ultimi 10 secondi | Campanello per ogni secondo, con tono e volume crescenti |
+| Countdown di inizio round | Tick crescente per 3-2-1, accordo ascendente per "VIA!" |
+| Replay di fine round | Click per ogni parola che si accende, accordo finale |
 | `pnpm typecheck` | Type-check di tutti i pacchetti |
 
 ### Variabili d'ambiente del server
@@ -253,9 +264,13 @@ I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quin
 - **Swipe**: `Pointer Events` con `touch-action: none`. Il riconoscimento
   (`game/cellTracker.ts`) parte dall'ultima cella selezionata: guarda la direzione del
   vettore dito→centro, la classifica in 8 settori angolari (diagonali favorite), esige
-  una deadzone dal centro e un allineamento minimo, più severo quando cambia direzione
-  (isteresi). Ogni passo produce una cella adiacente, quindi il percorso è sempre valido.
-  I listener sono sul `window` con `setPointerCapture`: un eventi interrotto non lascia
+  una **deadzone oltre il confine fra le celle** (una cella si accende solo quando il dito
+  è entrato davvero in quella vicina) e un allineamento minimo, più severo quando cambia
+  direzione. L'**undo richiede un movimento indietro più deciso dell'attivazione**
+  (isteresi: accendere è facile, spegnere no) e i **micro-movimenti si accumulano** invece
+  di essere valutati uno per uno, così un tremolio sul bordo non fa sfarfallare le lettere.
+  Ogni passo produce una cella adiacente, quindi il percorso è sempre valido.
+  I listener sono sul `window` con `setPointerCapture`: un evento interrotto non lascia
   il controller "agganciato".
 - **Parole duplicate**: il punteggio base va a tutti; il raddoppio spetta a chi trova una
   parola che **nessun altro** ha trovato.

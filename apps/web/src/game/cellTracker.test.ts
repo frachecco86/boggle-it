@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CellPathTracker, type Layout } from './cellTracker.js';
+import { CellPathTracker, DEFAULT_TUNING, type Layout } from './cellTracker.js';
 
 const SIZE = 5;
 const PITCH = 80;
@@ -217,5 +217,109 @@ describe('CellPathTracker — tolleranza dello swipe', () => {
     t.move(center(3 * SIZE + 3));
     // Il percorso deve contenere la diagonale, non tornare indietro.
     expect([...t.currentPath]).toEqual([0, 6, 12, 18]);
+  });
+});
+
+/*
+ * Regressione sul terzo difetto segnalato giocando: le celle si accendevano e
+ * spegnevano con troppa facilità. Tre cause, tutte coperte qui:
+ *  1. la soglia di ATTIVAZIONE era sotto il confine geometrico fra le celle
+ *     (0.5), quindi la cella si accendeva prima che il dito uscisse da quella
+ *     corrente;
+ *  2. la soglia di UNDO era quasi uguale a quella di attivazione: nessuna
+ *     isteresi, quindi un tremolio spegneva e riaccendeva la stessa cella;
+ *  3. i micro-movimenti venivano processati uno per uno invece di accumularsi.
+ */
+describe('CellPathTracker — attivazione e isteresi', () => {
+  it('la soglia di attivazione sta OLTRE il confine fra le celle', () => {
+    // Il confine geometrico è a 0.5 passi: sotto quella distanza la cella vicina
+    // non deve accendersi, altrimenti si attiva "sfiorando il pixel".
+    expect(DEFAULT_TUNING.deadZone).toBeGreaterThan(0.5);
+    // L'undo deve essere più severo dell'attivazione (isteresi vera).
+    expect(DEFAULT_TUNING.backDeadZone).toBeGreaterThan(DEFAULT_TUNING.deadZone);
+  });
+
+  it('NON attiva la cella vicina appena oltre metà strada', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    // 52% del passo: oltre il centro geometrico, ma sotto la nuova soglia 0.56.
+    t.move({ x: center(0).x + PITCH * 0.52, y: center(0).y });
+    expect([...t.currentPath]).toEqual([0]);
+  });
+
+  it('attiva la cella vicina superando la soglia', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    t.move({ x: center(0).x + PITCH * 0.6, y: center(0).y });
+    expect([...t.currentPath]).toEqual([0, 1]);
+  });
+
+  it('un tremolio di pochi pixel sul confine non accende/spegne la cella', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    // Attiva la cella 1 in modo deciso.
+    t.move(center(1));
+    expect([...t.currentPath]).toEqual([0, 1]);
+    // Ora oscilla di pochi pixel attorno alla posizione, senza tornare davvero
+    // verso la cella 0: il percorso NON deve cambiare.
+    for (let i = 0; i < 12; i++) {
+      t.move({
+        x: center(1).x + (i % 2 ? -3 : 3),
+        y: center(1).y + (i % 2 ? 2 : -2),
+      });
+      expect([...t.currentPath]).toEqual([0, 1]);
+    }
+  });
+
+  it('i micro-movimenti si ACCUMULANO invece di essere ignorati', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    // Molti passi piccoli (2 px, sotto la soglia minMove ~4.8 px) che sommati
+    // superano una cella: il filtro anti-tremolio NON deve bloccare lo swipe.
+    const step = PITCH / 40; // 2 px
+    for (let x = step; x <= PITCH * 1.05; x += step) {
+      t.move({ x: center(0).x + x, y: center(0).y });
+    }
+    expect([...t.currentPath]).toEqual([0, 1]);
+  });
+
+  it('l\'undo richiede un movimento indietro DECISO', () => {
+    const { t, center } = tracker();
+    t.begin(center(0));
+    t.move(center(1));
+    t.move(center(2));
+    expect([...t.currentPath]).toEqual([0, 1, 2]);
+    // Torna indietro di poco (sotto backDeadZone): la cella 2 resta selezionata.
+    t.move({ x: center(2).x - PITCH * 0.3, y: center(2).y });
+    expect([...t.currentPath]).toEqual([0, 1, 2]);
+    // Torna indietro in modo deciso: l'ultimo passo viene annullato.
+    t.move(center(1));
+    expect([...t.currentPath]).toEqual([0, 1]);
+  });
+
+  it('garantisce l\'isteresi anche con una configurazione sbagliata', () => {
+    // Con una tuning che viola l'isteresi (backDeadZone <= deadZone) il tracker
+    // deve correggerla da solo, altrimenti la cella tremolerebbe sul confine.
+    const l = layout();
+    const t = new CellPathTracker(
+      {
+        getLayout: () => l,
+        areAdjacent: (a, b) => {
+          const ar = Math.floor(a / SIZE), ac = a % SIZE;
+          const br = Math.floor(b / SIZE), bc = b % SIZE;
+          const dr = Math.abs(ar - br), dc = Math.abs(ac - bc);
+          return dr <= 1 && dc <= 1 && (dr !== 0 || dc !== 0);
+        },
+        onPathChange: () => {},
+      },
+      { ...DEFAULT_TUNING, deadZone: 0.4, backDeadZone: 0.4 },
+    );
+    const center = (i: number) => l.centers[i]!;
+    t.begin(center(0));
+    t.move(center(1));
+    expect([...t.currentPath]).toEqual([0, 1]);
+    // Piccolo ritorno verso la cella 0: NON deve annullare (isteresi corretta).
+    t.move({ x: center(1).x - PITCH * 0.45, y: center(1).y });
+    expect([...t.currentPath]).toEqual([0, 1]);
   });
 });

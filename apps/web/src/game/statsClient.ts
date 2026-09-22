@@ -51,6 +51,7 @@ export async function fetchLeaderboard(
   const params = new URLSearchParams();
   if (filters.kind) params.set('kind', filters.kind);
   if (filters.period) params.set('period', filters.period);
+  if (filters.mode && filters.mode !== 'all') params.set('mode', filters.mode);
   if (filters.gridSize) params.set('gridSize', String(filters.gridSize));
   if (filters.difficulty) params.set('difficulty', filters.difficulty);
   try {

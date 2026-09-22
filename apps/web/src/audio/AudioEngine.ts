@@ -490,16 +490,15 @@ export class AudioEngine {
    * CRESCENTE, così si percepisce che il tempo sta finendo senza dover guardare.
    *
    * `remainingSeconds` è il numero di secondi rimasti (10 → 1). Il tono sale
-   * linearmente da ~440 Hz a ~880 Hz (un'ottava).
+   * linearmente da ~520 Hz a ~1040 Hz (un'ottava).
    *
-   * VOLUME VOLUTAMENTE BASSO: è un promemoria, non un allarme. Resta sotto la
-   * soglia degli altri effetti (il tick del countdown d'apertura è a 0.22, qui si
-   * va da 0.045 a 0.085) e suona sempre `sine`, il timbro più morbido: si nota
-   * mentre si gioca senza coprire le parole trovate né la musica di sottofondo.
-   * Negli ultimi 3 secondi il volume sale solo un po', per chiudere la corsa.
-   *
-   * Perché un parametro e non uno stato interno come nel countdown: qui il valore
-   * è noto e va usato per la frequenza, non solo per alternare due note.
+   * TIMBRO DEDICATO: prima era una `sine` debolissima (picco 0.045→0.085), che
+   * moltiplicata per il volume degli effetti (~0.6) scendeva a ~0.03 ed era
+   * impercettibile su un telefono o sotto la musica. Ora è un **campanello**
+   * (due oscillatori in rapporto di quinta + armonica acuta) con picco più alto
+   * e attacco netto: si sente chiaramente che il tempo scade, ma resta sotto le
+   * esultanze delle parole così non le copre. Rispetta sempre il muto.
+   * Negli ultimi 3 secondi il volume sale ancora, per chiudere la corsa.
    */
   playRoundTick(remainingSeconds: number): void {
     // Stessa condizione degli altri effetti pubblici: rispetta il muto.
@@ -508,21 +507,31 @@ export class AudioEngine {
     const total = 10;
     // 0 al decimo secondo rimasto, 1 all'ultimo: progressione lineare.
     const t = Math.min(1, Math.max(0, (total - remainingSeconds) / (total - 1)));
-    const freq = 440 * Math.pow(2, t); // 440 Hz → 880 Hz (una ottava)
-    const peak = 0.045 + 0.04 * t; // 0.045 → 0.085: discreto, mai invadente
+    const freq = 520 * Math.pow(2, t); // 520 Hz → 1040 Hz (una ottava)
+    // 0.16 → 0.30: chiaramente udibile, ma sotto le esultanze (0.19+).
+    const peak = 0.16 + 0.14 * t;
 
+    /*
+     * Campanello: oscillatore principale `triangle` (attacco netto) + una quinta
+     * sopra (`sine`, più tenue) + un'armonica acuta. Due parziali rendono il
+     * timbro riconoscibile anche a volume basso, dove una sola `sine` si perde
+     * sotto la musica di sottofondo.
+     */
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = 'sine'; // timbro morbido: nessun attacco tagliente
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0.0001, now);
-    // Attacco e rilascio dolci (senza lo scatto secco degli altri tick) e durata
-    // breve: un "bip" appena percettibile che non spezza il ritmo del gioco.
-    gain.gain.exponentialRampToValueAtTime(peak, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+    // Attacco rapido (~8 ms) e coda breve: un "din" secco, non un ronzio.
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
     osc.connect(gain).connect(this.sfxGain);
     osc.start(now);
-    osc.stop(now + 0.16);
+    osc.stop(now + 0.2);
+
+    // Parziali: quinta sopra e ottava+quinta, per un timbro di campanello.
+    this.blip(freq * 1.5, now, 0.16, 'sine', peak * 0.45);
+    this.blip(freq * 3, now, 0.1, 'sine', peak * 0.2);
   }
 
   /** Passo corrente del countdown (alterna le note dei tick). */
@@ -547,6 +556,35 @@ export class AudioEngine {
     osc.connect(gain).connect(this.sfxGain);
     osc.start(startTime);
     osc.stop(startTime + duration + 0.02);
+  }
+
+  /**
+   * Suono di svolgimento del replay di fine round: una parola si accende.
+   *
+   * Volutamente diverso dall'esultanza di gioco: qui il replay corre veloce e
+   * molte parole si susseguono in pochi secondi, quindi serve un "click" breve e
+   * pulito, non un motivo. Le parole uniche (punti doppi) hanno un timbro più
+   * brillante, così si nota a colpo d'orecchio quali hanno fatto la differenza.
+   */
+  playReveal(unique = false): void {
+    if (!this.settings.sfxEnabled || !this.unlocked || !this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    // Base più acuta per le uniche: suona "speciale".
+    const base = unique ? 1174.66 : 880; // D6 / A5
+    this.blip(base, now, 0.07, 'triangle', unique ? 0.16 : 0.1);
+    this.blip(base * 1.5, now, 0.05, 'sine', unique ? 0.07 : 0.04);
+  }
+
+  /**
+   * Chiusura del replay: piccolo accordo che segna "riepilogo completo".
+   * Distingue il momento in cui i totali sono definitivi.
+   */
+  playRevealEnd(): void {
+    if (!this.settings.sfxEnabled || !this.unlocked || !this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+    [523.25, 659.25, 783.99].forEach((f, i) =>
+      this.blip(f, now + i * 0.05, 0.3, 'triangle', 0.14),
+    );
   }
 
   /* ------------------------------------------------------------------ */
