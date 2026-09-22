@@ -60,10 +60,11 @@ dist-android/*
 !dist-android/*.aab
 
 # Indice lessicale (parola -> categoria grammaticale + voce Wikizionario):
-# DERIVATO, si rigenera con `pnpm --filter @boggle/dictionary build:full`
-# (~800 KB, troppo per essere versionato: il build di deploy lo salta e la
-# pagina Parole funziona anche senza tag).
-packages/dictionary/data/word-index.br
+# VERSIONATO. Contiene i tag grammaticali di ~352k parole e i link a Wikizionario.
+# Senza di esso i tag non sono ricostruibili nei build di deploy (Morph-it!, la
+# fonte, è gitignored): era il bug per cui in produzione la pagina Parole mostrava
+# tutte le voci come `n.c.`. ~740 KB compressi, vale il costo.
+!packages/dictionary/data/word-index.br
 packages/dictionary/data/word-index.txt
 # Dump grezzo di Wikizionario (40 MB): solo per rigenerare gli headword.
 packages/dictionary/data/itwiktionary.jsonl.gz

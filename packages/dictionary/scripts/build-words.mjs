@@ -155,6 +155,48 @@ function makePlayableFilter({ allowedEndings, abbreviations, blocked }) {
   };
 }
 
+/**
+ * Categorie di Morph-it considerate "rumore": nomi propri, simboli ed emoticon,
+ * abbreviazioni e interiezioni. Non sono lessico italiano componibile.
+ */
+const NOISE_TAGS = new Set(['NPR', 'SMI', 'ABR', 'INT']);
+
+/**
+ * Legge Morph-it e ritorna forma normalizzata → insieme delle categorie.
+ *
+ * Serve alla CLASSE RUMORE: una parola è rumore solo se TUTTE le sue analisi
+ * sono categorie di rumore (vedi `isNoiseOnly`).
+ */
+async function typesFromMorphIt(morphPath) {
+  const raw = new TextDecoder('latin1').decode(await readFile(morphPath));
+  const out = new Map();
+  for (const line of raw.split('\n')) {
+    if (!line) continue;
+    const parts = line.split('\t');
+    if (parts.length < 3) continue;
+    const w = normalizeWord(parts[0]);
+    if (!w) continue;
+    const tag = parts[2].split(':')[0].split('-')[0].trim().toUpperCase();
+    if (!tag) continue;
+    const set = out.get(w) ?? new Set();
+    set.add(tag);
+    out.set(w, set);
+  }
+  return out;
+}
+
+/**
+ * true se la parola è solo rumore: ha analisi in Morph-it e TUTTE sono NPR/SMI/ABR/INT.
+ * Una parola assente da Morph-it non è rumore (viene da un'altra fonte).
+ */
+function isNoiseOnly(morphTypes, word) {
+  const tags = morphTypes.get(word);
+  if (!tags || tags.size === 0) return false;
+  for (const t of tags) if (!NOISE_TAGS.has(t)) return false;
+  return true;
+}
+
+
 async function findMorphIt() {
   const preferred = path.join(DATA, 'morph-it_048.txt');
   if (existsSync(preferred)) return preferred;
@@ -377,10 +419,20 @@ async function buildFromExistingWords() {
   }
 
   /*
-   * Indice parole: i tag pieni richiedono Morph-it (assente nei build di deploy),
-   * quindi qui mettiamo tutte le parole in un unico bucket `n.c.` più i link di
-   * Wikizionario. Senza almeno questo, la tab Dizionario restava vuota.
+   * Indice parole (`word-index.br`): è VERSIONATO con i tag grammaticali pieni.
+   *
+   * Qui NON lo rigeneriamo se esiste: senza Morph-it i tag sarebbero tutti
+   * `n.c.` e sovrascriverebbero quelli buoni, che è esattamente il bug per cui
+   * in produzione la tab Dizionario mostrava solo `n.c.`. Lo generiamo solo se
+   * il file manca davvero (così il server ha almeno l'elenco delle parole).
    */
+  const indexPath = path.join(DATA, 'word-index.br');
+  if (existsSync(indexPath)) {
+    console.log('✓ word-index.br  conservato (indice versionato con i tag grammaticali)');
+    console.log('  (fonti grezze assenti: nessuna rigenerazione. Usa `build:full` per aggiornarlo!)');
+    return;
+  }
+
   const wiktionary = await loadWiktionary();
   const buckets = new Map();
   const linked = [];
@@ -397,13 +449,20 @@ async function buildFromExistingWords() {
   if (!wiktionary) {
     console.warn('  ⚠ wiktionary-heads.br assente: nessun link di dizionario e nessun tag.');
   }
-  console.log('  (fonti grezze assenti: tag grammaticali limitati. Usa `build:full` per la copertura piena!)');
+  console.log('  ⚠ indice generato SENZA Morph-it: i tag grammaticali saranno tutti `n.c.`');
 }
 
 async function main() {
   const morphPath = await findMorphIt();
 
-  // Nessuna fonte grezza ma dizionario presente: build offline.
+  /*
+   * Nessuna fonte grezza ma dizionario presente: build offline (Netlify, Docker).
+   *
+   * ORDINE IMPORTANTE: l'indice `word-index.br` è VERSIONATO con i tag pieni, e
+   * questo percorso non deve sovrascriverlo. Prima lo rigenerava con tutte le
+   * parole in `n.c.`, quindi in produzione i tag sparivano (la tab Dizionario
+   * mostrava solo `n.c.`). Ora, se l'indice versionato esiste, si conserva.
+   */
   if (!morphPath) {
     if (existsSync(path.join(DATA, 'words.txt'))) {
       await buildFromExistingWords();
@@ -413,6 +472,7 @@ async function main() {
       'Nessuna fonte disponibile. Esegui `pnpm --filter @boggle/dictionary build:full` per scaricare le fonti.',
     );
   }
+
 
   const words = new Set();
   const blocked = await loadBlocked();
@@ -501,6 +561,37 @@ async function main() {
     console.log(`  lista piatta scartata (non attestata): ${extendedDropped.toLocaleString('it-IT')}`);
   } else {
     console.warn('⚠ wiktionary-heads.br assente: nessun filtro sugli headword');
+  }
+
+  /*
+   * 2c. CLASSE RUMORE (nomi propri, sigle, simboli, interiezioni).
+   *
+   * Morph-it marca `Pli` come `NPR` (nome proprio: è la sigla del partito) e la
+   * lista piatta ne contiene migliaia (`ado`, `abi`, `agca`, `zenga`). Non sono
+   * lessico italiano: il giocatore non le riconosce.
+   *
+   * Una parola entra in questa classe se in TUTTE le sue analisi porta solo
+   * NPR/SMI/ABR/INT. Non basta "una delle analisi è NPR": `Roma` è sia nome
+   * proprio sia un sostantivo comune, e va tenuta.
+   *
+   * PERCHÉ NON SI SCARTA TUTTO: `achille`, `abruzzo`, `america`, `adamo` sono
+   * marcati NPR ma hanno una voce di Wikizionario e sono parole usate. Si scarta
+   * solo il rumore puro: né lessico comune (`60000_parole_italiane.txt`) né voce
+   * di Wikizionario. Sono ~730 voci, `pli` inclusa.
+   */
+  const noiseDropped = [];
+  if (morphPath) {
+    const morphNoise = await typesFromMorphIt(morphPath);
+    const commonSet = await loadCuratedList('60000_parole_italiane.txt');
+    // `commonSet` passa da `loadCuratedList`, che è pensato per le liste curate:
+    // qui va invece normalizzata come il resto, senza il minimo di 3 filtri a valle.
+    for (const w of words) {
+      if (!isNoiseOnly(morphNoise, w)) continue;
+      if (commonSet.has(w) || wiktionary?.byWord.has(w)) continue;
+      noiseDropped.push(w);
+    }
+    for (const w of noiseDropped) words.delete(w);
+    console.log(`  classe rumore (nomi propri/sigle, non attestati): −${noiseDropped.length.toLocaleString('it-IT')}`);
   }
 
   /*

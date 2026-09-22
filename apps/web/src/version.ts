@@ -39,6 +39,8 @@ export const RELEASES: ReleaseEntry[] = [
           '**`tua` (e `per`, `sul`, `del`, `nel`, `non`) ora si possono trovare.** Erano nel dizionario ma **escluse da ogni scheda** da una lista separata di "parole funzionali": il gioco le rifiutava sempre. Ora il dizionario e le schede usano **una sola lista** di parole giocabili.',
           '**Rimosse 48.376 parole che il gioco non accettava mai**: erano troncamenti delle fonti (`andar`, `alzar`, `maggior`, `normalit`) e abbreviazioni. Il lessico scende da 403.393 a 355.027 voci, ma ora **ogni voce è davvero giocabile** (verificato: 0 incoerenze).',
           '**Il Dizionario non è più vuoto in produzione.** L\'indice dei tag e dei link (`word-index.br`) non veniva generato né copiato nel build di deploy: la vista Dizionario mostrava 0 parole. Ora il build lo produce anche offline.',
+          '**I tag grammaticali ora sono corretti in produzione**: prima ogni parola risultava `n.c.` (non classificata) perché il build di deploy rigenerava l\'indice senza Morph-it. L\'indice con i tag pieni è ora versionato e il build offline non lo sovrascrive più.',
+          '**Rimosse 732 voci che non sono parole italiane** (nomi propri e sigle come `pli`, `abi`, `zenga`, `agca`): venivano da Morph-it, che le marca come nomi propri. Restano i nomi con uso reale e voce di dizionario (`adamo`, `cina`, `carlo`), perché la regola esclude solo chi non è attestato da nessuna fonte.',
         ],
       },
       {

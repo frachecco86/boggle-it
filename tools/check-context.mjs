@@ -19,6 +19,13 @@ const REQUIRED = [
   { name: 'abbreviations.txt', anyOf: ['abbreviations.txt'] },
   // Lessico comune: usato dal generatore schede per i livelli facili.
   { name: '60000_parole_italiane.txt', anyOf: ['60000_parole_italiane.txt'] },
+  // Indice lessicale: DEVE essere versionato. Contiene i tag grammaticali che
+  // Morph-it (gitignored) non può fornire nei build di deploy: senza, la pagina
+  // Parole mostra tutte le voci come `n.c.`.
+  { name: 'word-index.br', anyOf: ['word-index.br'] },
+  // Whitelist in consonante e abbreviazioni: regola di giocabilità, condivisa
+  // tra build del dizionario e generazione delle schede.
+  { name: 'consonant-endings.txt', anyOf: ['consonant-endings.txt'] },
 ];
 
 const MIN_WORDS_BR_BYTES = 100 * 1024; // il file reale è ~616 KB
