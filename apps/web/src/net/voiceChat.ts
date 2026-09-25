@@ -290,8 +290,19 @@ class VoiceChat {
     }
     if (!this.forwarding) return;
     if (!(data instanceof Int16Array)) return;
-    // Il buffer è stato trasferito dal worklet: si può passare al server così com'è.
-    this.socket.emit('voice:chunk', data.buffer);
+    /*
+     * Il buffer è stato trasferito dal worklet: si può passare al server così com'è,
+     * senza copiarlo.
+     *
+     * Il controllo `instanceof ArrayBuffer` serve al compilatore: in TypeScript 5.7+
+     * `data.buffer` ha tipo `ArrayBufferLike`, cioè **ArrayBuffer oppure
+     * SharedArrayBuffer**, mentre il protocollo accetta solo il primo (un buffer
+     * condiviso fra i due thread non avrebbe senso qui: il worklet lo trasferisce).
+     * Il controllo restringe il tipo senza copie.
+     */
+    const buffer = data.buffer;
+    if (!(buffer instanceof ArrayBuffer)) return;
+    this.socket.emit('voice:chunk', buffer);
   }
 
   /** Chiude il microfono (e i nodi) se non si parla da un po'. */

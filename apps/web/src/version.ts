@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.25.1';
+export const APP_VERSION = '0.25.2';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,30 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.25.2',
+    date: '2026-09-25',
+    title: 'La build passa anche con TypeScript 5.9',
+    promo: {
+      emoji: '🧩',
+      headline: 'Build riparata (davvero)',
+      text: 'Il controllo dei tipi con la versione di TypeScript usata sui server segnalava un tipo di buffer troppo generico nella voce di squadra. Sono dettagli tecnici, ma erano l\'ultimo ostacolo al rilascio: ora la build arriva in fondo.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Typecheck con TypeScript 5.9**: `data.buffer` di un `Int16Array` ha tipo `ArrayBufferLike`, che comprende anche `SharedArrayBuffer`, mentre il protocollo della voce accetta solo `ArrayBuffer`. Ora il buffer si restringe con un controllo a runtime (`instanceof ArrayBuffer`) **senza copiarlo**: se per qualche motivo arrivasse un buffer condiviso, il blocco viene semplicemente ignorato invece di essere inviato.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'TypeScript 5.7 ha reso generici i tipi degli array binari (`Int16Array<ArrayBufferLike>`), quindi codice che prima compilava ha smesso di compilare con 5.9: il file di lock installa **5.9.3**, mentre in sviluppo ne era in uso una 5.6.3 — ed è per questo che l\'errore si è visto solo in build. Le verifiche locali ora usano la stessa versione del file di lock.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.25.1',
     date: '2026-09-25',

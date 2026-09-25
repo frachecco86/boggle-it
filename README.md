@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.25.1** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.25.2** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
