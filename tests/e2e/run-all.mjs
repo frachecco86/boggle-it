@@ -37,6 +37,7 @@ const suites = [
   'multiplayer-reconnect.mjs',
   'multiplayer-rejoin.mjs',
   'opponent-privacy.mjs',
+  'voice.mjs',
 ];
 let failed = 0;
 for (const suite of suites) {

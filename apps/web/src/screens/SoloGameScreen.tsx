@@ -6,13 +6,17 @@ import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
-import { SchedaPreview } from '../components/SchedaPreview.js';
 import { CountdownOverlay } from '../components/CountdownOverlay.js';
 import { useFinalCountdown } from '../game/useFinalCountdown.js';
 import { RoundSummary } from './RoundSummary.js';
 
 /**
  * Partita single player completa (schede pre-calcolate dal server).
+ *
+ * Il round parte da solo (3-2-1 e si gioca): non c'è una schermata "Pronto?"
+ * intermedia, e soprattutto **non si vede la scheda prima di giocare** — la
+ * griglia che si apriva lì era quella esatta del round, cioè un vantaggio per
+ * chi giocava.
  *
  * Nota sulle parole: quelle TROVATE non compaiono nell'elenco mentre si gioca
  * (solo a fine round), per non rivelare troppo presto le soluzioni. Quello che
@@ -61,28 +65,6 @@ export function SoloGameScreen() {
     );
   }
 
-  if (state.phase === 'idle') {
-    return (
-      <div className="screen">
-        <BackHome />
-        <h2 className="screen__title">Pronto?</h2>
-        <p className="screen__hint">
-          Trova parole di almeno 3 lettere scorrendo sulle lettere adiacenti.
-        </p>
-        {/* Anteprima: mostra la scheda e cosa aspettarsi prima di iniziare. */}
-        <SchedaPreview
-          size={soloGridSize}
-          difficulty={soloDifficulty}
-          onPlay={(scheda) => game.start(scheda)}
-          playLabel="Inizia il round"
-        />
-        <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-          Torna alla home
-        </button>
-      </div>
-    );
-  }
-
   // Countdown di inizio: 3-2-1 con animazione e suoni.
   if (state.phase === 'countdown') {
     return (
@@ -106,7 +88,8 @@ export function SoloGameScreen() {
         isGameOver={state.phase === 'gameEnd'}
         saveStatus={state.saveStatus}
         onNext={game.nextRound}
-        onExit={() => setScreen(state.phase === 'gameEnd' ? 'solo-setup' : 'home')}
+        onReplay={() => game.start()}
+        onExit={() => setScreen('home')}
       />
     );
   }

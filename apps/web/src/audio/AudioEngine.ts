@@ -82,6 +82,14 @@ export class AudioEngine {
   private masterGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  /**
+   * Ingresso delle VOCI della stanza (multiplayer).
+   *
+   * Sta sotto il master come musica ed effetti, così il volume generale resta
+   * uno solo, ma è separato da `sfxGain`: le voci non devono essere zittite dal
+   * muto degli effetti né dal volume degli effetti.
+   */
+  private voiceGain: GainNode | null = null;
   private musicEl: HTMLAudioElement | null = null;
   private musicSource: MediaElementAudioSourceNode | null = null;
   private settings: AudioSettings = { ...DEFAULT_SETTINGS };
@@ -132,6 +140,10 @@ export class AudioEngine {
       this.musicGain.gain.value = 0;
       this.musicGain.connect(this.masterGain);
 
+      this.voiceGain = this.ctx.createGain();
+      this.voiceGain.gain.value = 1;
+      this.voiceGain.connect(this.masterGain);
+
       this.unlocked = true;
       void this.ctx.resume();
       // Se la musica era attiva, avviala ora che il contesto esiste.
@@ -143,6 +155,22 @@ export class AudioEngine {
 
   get isUnlocked(): boolean {
     return this.unlocked;
+  }
+
+  /**
+   * Il contesto audio condiviso, o `null` se l'audio non è ancora sbloccato.
+   *
+   * Serve a chi riproduce audio fuori dal motore — oggi le voci della stanza —
+   * per non creare un secondo `AudioContext`: due contesti sullo stesso telefono
+   * si contendono l'uscita audio e vanno sbloccati entrambi al primo gesto.
+   */
+  get context(): AudioContext | null {
+    return this.ctx;
+  }
+
+  /** Ingresso a cui collegare le voci dei giocatori (null finché non sbloccato). */
+  get voiceInput(): GainNode | null {
+    return this.voiceGain;
   }
 
   getSettings(): AudioSettings {

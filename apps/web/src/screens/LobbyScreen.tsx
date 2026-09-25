@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import type { Scheda } from '@boggle/shared';
+import { useState } from 'react';
 import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
@@ -8,10 +7,10 @@ import {
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
+import { roomShareText, roomUrl } from '../net/roomLink.js';
+import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
+import { Share2 } from 'lucide-react';
 import { AvatarPicker } from '../components/AvatarPicker.js';
-import { SchedaPreview } from '../components/SchedaPreview.js';
-import { loadScheda } from '../game/schedeLoader.js';
-import { GridPreview } from '../components/GridPreview.js';
 import { MusicPicker } from '../components/MusicPicker.js';
 
 /** Lobby multiplayer: codice stanza, giocatori, impostazioni host. */
@@ -30,34 +29,13 @@ export function LobbyScreen() {
     playerId,
   } = useAppStore();
   const [copied, setCopied] = useState(false);
+  /** Messaggio momentaneo sotto il codice stanza ("Link copiato!"). */
+  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+  // Chi sta parlando adesso: l'indicatore compare accanto al nome.
+  const speakers = useVoiceSpeakers();
 
   const isHost = room?.hostId === playerId;
 
-  /**
-   * Carica la scheda scelta dall'host, per mostrarne griglia e statistiche a TUTTI.
-   * La scheda è la stessa per tutti: si gioca quella.
-   */
-  const [pendingScheda, setPendingScheda] = useState<Scheda | null>(null);
-  const [pendingLoading, setPendingLoading] = useState(false);
-  const pendingId = room?.pendingSchedaId;
-  useEffect(() => {
-    if (!pendingId) {
-      setPendingScheda(null);
-      return;
-    }
-    let alive = true;
-    setPendingLoading(true);
-    loadScheda(pendingId)
-      .then((s) => {
-        if (alive) setPendingScheda(s ?? null);
-      })
-      .finally(() => {
-        if (alive) setPendingLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [pendingId]);
   const canStart = (room?.players.filter((p) => p.connected).length ?? 0) >= 1;
 
   const copyCode = async () => {
@@ -69,6 +47,50 @@ export function LobbyScreen() {
     } catch {
       setCopied(false);
     }
+  };
+
+  /** Avviso momentaneo accanto al codice (si spegne da solo). */
+  const flashInvite = (message: string) => {
+    setInviteFeedback(message);
+    window.setTimeout(() => setInviteFeedback(null), 2500);
+  };
+
+  /** Copia il LINK della stanza: è quello che si incolla in una chat. */
+  const copyInviteLink = async () => {
+    if (!roomCode) return;
+    try {
+      await navigator.clipboard.writeText(roomUrl(roomCode));
+      flashInvite('Link copiato! Incollalo dove vuoi.');
+    } catch {
+      // Clipboard negata (contesto non sicuro o permesso negato): si mostra il
+      // link, così si può copiarlo a mano invece di restare senza nulla.
+      flashInvite(roomUrl(roomCode));
+    }
+  };
+
+  /**
+   * Tasto Condividi: apre il foglio di condivisione del sistema (WhatsApp,
+   * Telegram, mail…) e, dove non esiste, copia il link.
+   *
+   * Il link condiviso è quello da cui si sta giocando: chi lo apre trova l'app
+   * con il codice già scritto nel campo "Entra".
+   */
+  const shareInvite = async () => {
+    if (!roomCode) return;
+    const link = roomUrl(roomCode);
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: 'Sbooble', text: roomShareText(roomCode), url: link });
+        return;
+      } catch (err) {
+        // L'utente ha chiuso il foglio di condivisione: non è un errore e non si
+        // deve copiare nulla al posto suo.
+        if ((err as DOMException | null)?.name === 'AbortError') return;
+        // Altri motivi (permesso negato, share non disponibile in questo
+        // contesto): si ripiega sul copia, che funziona sempre.
+      }
+    }
+    await copyInviteLink();
   };
 
   if (!room) {
@@ -89,11 +111,27 @@ export function LobbyScreen() {
       <BackHome confirm onLeave={leaveRoom} />
       <h2 className="screen__title">Sala d'attesa</h2>
 
-      <button className="room-code" onClick={copyCode} title="Copia codice">
+      <button className="room-code" onClick={copyCode} title="Copia il codice" aria-label={`Codice stanza ${roomCode}: copia il codice`}>
         <span className="room-code__label">Codice stanza</span>
         <span className="room-code__value">{roomCode}</span>
-        <span className="room-code__hint">{copied ? 'Copiato!' : 'Tocca per copiare'}</span>
+        <span className="room-code__hint">{copied ? 'Codice copiato!' : 'Tocca per copiare il codice'}</span>
       </button>
+
+      {/* Invito: il link apre l'app con il codice già scritto. */}
+      <div className="lobby__invite">
+        <button className="btn btn--primary lobby__invite-btn" onClick={() => void shareInvite()}>
+          <Share2 size={18} aria-hidden />
+          Condividi l'invito
+        </button>
+        <button className="btn btn--ghost lobby__invite-copy" onClick={() => void copyInviteLink()}>
+          Copia il link
+        </button>
+        {inviteFeedback && (
+          <p className="lobby__invite-feedback" role="status">
+            {inviteFeedback}
+          </p>
+        )}
+      </div>
 
       <section className="lobby__section">
         <h3 className="summary__label">
@@ -106,7 +144,10 @@ export function LobbyScreen() {
               <span className="player-row__avatar" aria-hidden>
                 {p.photoUrl ? <img src={p.photoUrl} alt="" /> : p.avatar}
               </span>
-              <span className="player-row__name">{p.nickname}</span>
+              <span className="player-row__name">
+                {p.nickname}
+                {speakers.includes(p.id) && <SpeakingIndicator name={p.nickname} />}
+              </span>
               {p.isHost && <span className="badge">host</span>}
               {p.id === playerId && <span className="badge badge--you">tu</span>}
               {!p.connected && <span className="badge badge--off">offline</span>}
@@ -222,8 +263,6 @@ export function LobbyScreen() {
               hint="La traccia la sentono tutti i giocatori."
             />
 
-            <GridPreview gridSize={room.gridSize} difficulty={room.difficulty} />
-
             <p className="settings-host__hint">Le modifiche sono visibili a tutti in tempo reale.</p>
           </div>
         ) : (
@@ -236,29 +275,31 @@ export function LobbyScreen() {
         )}
       </section>
 
-      {/* Anteprima della scheda: la vedono TUTTI, così nessuno è sorpreso.
-          Solo l'host può pescarne un'altra. */}
-      {room.pendingSchedaId ? (
-        <SchedaPreview
-          size={room.gridSize}
-          difficulty={room.difficulty}
-          scheda={pendingScheda}
-          canShuffle={isHost}
-          busy={pendingLoading}
-          multiplayer
-          onPlay={() => startRoom()}
-          playLabel="Avvia partita"
-        />
-      ) : (
-        isHost && (
-          <div className="lobby__pick">
-            <p className="screen__hint">Pesca una scheda per vedere cosa aspettarti.</p>
-            <button className="btn btn--secondary" onClick={shuffleScheda}>
-              🎲 Scegli la scheda
-            </button>
-          </div>
-        )
-      )}
+      {/*
+       * Scheda del round: si sa SOLO che è pronta. La griglia, le parole e il
+       * record non si mostrano più qui: la scheda scelta dall'host è quella che
+       * si gioca, quindi vederla prima era un vantaggio per chi la guardava
+       * (e in "Sfoglia le schede" si sarebbero potute leggere tutte le parole).
+       * L'host può ripescare a caso, senza sbirciare.
+       */}
+      <div className="lobby__scheda">
+        <span className="lobby__scheda-state">
+          {room.pendingSchedaId ? (
+            <>
+              <span aria-hidden>🎲</span> Scheda pronta: si scopre quando parte il round
+            </>
+          ) : (
+            <>
+              <span aria-hidden>🎲</span> Nessuna scheda pronta per il round
+            </>
+          )}
+        </span>
+        {isHost && (
+          <button className="btn btn--ghost" onClick={shuffleScheda}>
+            {room.pendingSchedaId ? 'Cambia scheda' : 'Scegli la scheda'}
+          </button>
+        )}
+      </div>
 
       {isHost ? (
         <button className="btn btn--primary btn--big" disabled={!canStart} onClick={startRoom}>

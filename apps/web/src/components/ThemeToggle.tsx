@@ -27,6 +27,10 @@ function initialTheme(): Theme {
  *
  * La scelta è salvata e ha priorità sulla preferenza di sistema, che viene usata
  * solo al primo avvio.
+ *
+ * È un interruttore (`role="switch"`), non un pulsante che cambia icona: la
+ * pallina scorre e porta l'icona del tema attivo. L'altezza è la stessa degli
+ * altri comandi della barra in alto (vedi `--topbar-h` in `styles.css`).
  */
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(initialTheme);
@@ -47,14 +51,15 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="theme-toggle"
+      className="theme-switch"
+      role="switch"
+      aria-checked={isDark}
       onClick={toggle}
       title={isDark ? 'Passa al tema chiaro' : 'Passa al tema scuro'}
-      aria-label={isDark ? 'Attiva tema chiaro' : 'Attiva tema scuro'}
-      aria-pressed={isDark}
+      aria-label="Tema scuro"
     >
-      <span className="theme-toggle__icon" aria-hidden>
-        {isDark ? '☀️' : '🌙'}
+      <span className="theme-switch__knob" aria-hidden>
+        {isDark ? '🌙' : '☀️'}
       </span>
     </button>
   );

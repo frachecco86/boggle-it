@@ -3,6 +3,7 @@ import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty, type GridSize } from '
 import { SERVER_BASE } from '../net/socket.js';
 import { useAppStore } from '../state/store.js';
 import { MusicAdmin } from '../components/MusicAdmin.js';
+import { BackHome } from '../components/BackHome.js';
 
 interface SchedaMetaDTO {
   id: string;
@@ -157,6 +158,8 @@ export function AdminScreen() {
   if (!authed) {
     return (
       <div className="screen admin">
+        {/* Tasto Home nella barra in alto, come in tutte le altre schermate. */}
+        <BackHome />
         <h2 className="screen__title">Amministrazione schede</h2>
         <p className="screen__hint">
           Accedi con l'utente e la password admin (variabili d'ambiente{' '}
@@ -192,9 +195,6 @@ export function AdminScreen() {
           >
             {busy ? 'Verifico…' : 'Entra'}
           </button>
-          <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-            Torna alla home
-          </button>
         </div>
       </div>
     );
@@ -202,13 +202,12 @@ export function AdminScreen() {
 
   return (
     <div className="screen admin">
+      {/* Il tasto Home è quello della barra in alto: qui non ne serve un secondo. */}
+      <BackHome />
       <div className="admin__topbar">
         <h2 className="screen__title">Schede ({list?.total ?? '…'})</h2>
         <button className="btn btn--ghost" onClick={() => void logout()}>
           Esci
-        </button>
-        <button className="btn btn--ghost" onClick={() => setScreen('home')}>
-          Home
         </button>
       </div>
 

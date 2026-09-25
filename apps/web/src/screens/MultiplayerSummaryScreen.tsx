@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
+import { Podium } from '../components/Podium.js';
+import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
 import { RoundReplay } from '../components/RoundReplay.js';
 
 /** Riepilogo multiplayer: classifica finale o di round + parole per giocatore. */
@@ -24,16 +26,17 @@ export function MultiplayerSummaryScreen() {
   const [replayDone, setReplayDone] = useState(false);
   const showReplay = !isFinal && hasTimeline && !replayDone;
 
+  // Avatar e foto dei giocatori: i risultati portano solo il nickname.
+  const players = room?.players.map((p) => ({ id: p.id, avatar: p.avatar, photoUrl: p.photoUrl }));
+  // Chi sta parlando adesso: l'indicatore compare accanto al nome.
+  const speakers = useVoiceSpeakers();
+
   if (showReplay) {
     return (
       <div className="screen summary">
         <BackHome onLeave={leaveRoom} />
         <h2 className="screen__title">Fine round {room?.currentRound ?? ''}</h2>
-        <RoundReplay
-          results={results}
-          players={room?.players.map((p) => ({ id: p.id, avatar: p.avatar, photoUrl: p.photoUrl }))}
-          onDone={() => setReplayDone(true)}
-        />
+        <RoundReplay results={results} players={players} onDone={() => setReplayDone(true)} />
       </div>
     );
   }
@@ -43,13 +46,19 @@ export function MultiplayerSummaryScreen() {
       <BackHome onLeave={leaveRoom} />
       <h2 className="screen__title">{isFinal ? 'Classifica finale' : `Fine round ${room?.currentRound ?? ''}`}</h2>
 
+      {/* A fine partita il podio: i primi tre, chi ha vinto e i punti. */}
+      {isFinal && <Podium results={results} players={players} meId={playerId} />}
+
       <ul className="results-list">
         {results.map((r, i) => (
           <li key={r.playerId} className={`result-row${r.playerId === playerId ? ' result-row--you' : ''}`}>
             <span className="result-row__rank">{i + 1}</span>
             <div className="result-row__body">
               <div className="result-row__head">
-                <span className="result-row__name">{r.nickname}</span>
+                <span className="result-row__name">
+                  {r.nickname}
+                  {speakers.includes(r.playerId) && <SpeakingIndicator name={r.nickname} />}
+                </span>
                 <span className="result-row__score">{isFinal ? r.totalScore : r.roundScore}</span>
               </div>
               <div className="chip-list chip-list--compact">

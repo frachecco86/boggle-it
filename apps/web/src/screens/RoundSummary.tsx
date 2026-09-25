@@ -14,6 +14,8 @@ interface RoundSummaryProps {
   /** Tutte le parole della scheda, per mostrare anche quelle fuori lista. */
   allWords?: string[];
   onNext: () => void;
+  /** A fine partita: ricomincia con le stesse impostazioni. */
+  onReplay?: () => void;
   onExit: () => void;
   /**
    * Esito della registrazione della partita in classifica (solo a fine partita).
@@ -32,8 +34,24 @@ interface RoundSummaryProps {
  * di quanto c'era ancora da scoprire.
  */
 export function RoundSummary(props: RoundSummaryProps) {
-  const { round, rounds, score, totalScore, words, missedWords, isGameOver, allWords, onNext, onExit, saveStatus } =
-    props;  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const {
+    round,
+    rounds,
+    score,
+    totalScore,
+    words,
+    missedWords,
+    isGameOver,
+    allWords,
+    onNext,
+    onReplay,
+    onExit,
+    saveStatus,
+  } = props;
+  /** A fine partita il tasto principale rigioca (se chi chiama lo permette). */
+  const replay = onReplay ?? onExit;
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [filterLength, setFilterLength] = useState<number | 'all'>('all');
   /** Mostra/nasconde le parole mancate (l'elenco completo può essere lungo). */
   const [showMissed, setShowMissed] = useState(true);
@@ -218,7 +236,7 @@ export function RoundSummary(props: RoundSummaryProps) {
             Prossimo round
           </button>
         ) : (
-          <button className="btn btn--primary btn--big" onClick={onExit}>
+          <button className="btn btn--primary btn--big" onClick={replay}>
             Rigioca
           </button>
         )}

@@ -1,8 +1,9 @@
+import { House } from 'lucide-react';
 import { useAppStore } from '../state/store.js';
 
 interface BackHomeProps {
   /** Destinazione dopo la conferma (default: home). */
-  to?: 'home' | 'solo-setup';
+  to?: 'home';
   /** Se true chiede conferma prima di uscire (partita/stanza in corso). */
   confirm?: boolean;
   /**
@@ -16,11 +17,15 @@ interface BackHomeProps {
 }
 
 /**
- * Tasto "torna alla home" in alto a sinistra, presente in ogni schermata.
+ * Tasto "torna alla home", nella barra in alto a sinistra, in ogni schermata.
  *
  * Perché un componente condiviso: prima ogni schermata aveva una sua variante
  * ("← Home", "Torna alla home", o nulla). Qui c'è una sola implementazione, con
- * etichetta e conferma coerenti.
+ * comportamento coerente (uscita dalla stanza, conferma) e **un solo aspetto**.
+ *
+ * Il tasto è **minimale**: solo l'icona della casa, alta come gli altri comandi
+ * della barra (`--topbar-h`), senza etichetta. Il nome resta per chi usa un
+ * lettore di schermo o passa il mouse.
  */
 export function BackHome({ to = 'home', confirm = false, onLeave }: BackHomeProps) {
   const setScreen = useAppStore((s) => s.setScreen);
@@ -38,8 +43,14 @@ export function BackHome({ to = 'home', confirm = false, onLeave }: BackHomeProp
   };
 
   return (
-    <button className="btn btn--ghost back-home" type="button" onClick={handleClick} title="Torna alla home">
-      <span aria-hidden>←</span> Home
+    <button
+      className="back-home"
+      type="button"
+      onClick={handleClick}
+      title="Torna alla home"
+      aria-label="Torna alla home"
+    >
+      <House size={17} aria-hidden />
     </button>
   );
 }

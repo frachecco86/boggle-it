@@ -11,10 +11,12 @@ import type {
   RoomState,
   RoundResultEntry,
   SfxSlot,
+  VoiceAudioPayload,
 } from '@boggle/shared';
 import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket, SERVER_BASE } from '../net/socket.js';
+import { voiceChat } from '../net/voiceChat.js';
 
 /**
  * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
@@ -177,7 +179,6 @@ import {
 
 export type Screen =
   | 'home'
-  | 'solo-setup'
   | 'solo-game'
   | 'lobby'
   | 'mp-game'
@@ -241,6 +242,22 @@ interface AppState {
   roundResults: RoundResultEntry[] | null;
   missedWords: string[];
   finalScores: RoundResultEntry[] | null;
+  /*
+   * Voce di stanza ("tieni premuto per parlare").
+   *
+   * Stato effimero, NON salvato: si riferisce alla stanza aperta e al momento
+   * presente. `voiceMuted` in particolare non viene ricordato fra le sessioni:
+   * ereditare un microfono silenziato da ieri sarebbe una sorpresa sgradevole
+   * ("parlo e non mi sente nessuno").
+   */
+  /** Id dei giocatori che stanno parlando adesso. */
+  voiceSpeakers: string[];
+  /** Sto trasmettendo in questo momento (tasto premuto). */
+  voiceTalking: boolean;
+  /** Microfono silenziato per scelta locale. */
+  voiceMuted: boolean;
+  /** Avviso momentaneo accanto al tasto (permesso negato, canale pieno…). */
+  voiceNotice: string | null;
   errorMessage: string | null;
   /** Profilo attivo (loggato) e profili salvati sul dispositivo. */
   profiles: SavedProfile[];
@@ -333,6 +350,10 @@ export const useAppStore = create<AppState>()(
       roundResults: null,
       missedWords: [],
       finalScores: null,
+      voiceSpeakers: [],
+      voiceTalking: false,
+      voiceMuted: false,
+      voiceNotice: null,
       errorMessage: null,
       schedaId: null,
       musicCatalog: audio.getCatalog(),
@@ -981,6 +1002,15 @@ export function bindSocketEvents(): () => void {
     set({ roundResults: p.results, missedWords: p.missedWords, screen: 'summary' });
   const onGameEnd = (p: { finalScores: RoundResultEntry[] }) => set({ finalScores: p.finalScores, screen: 'summary' });
   /*
+   * Voce di un altro giocatore della stanza.
+   *
+   * L'audio non passa dallo store: sarebbero 2 KB sedici volte al secondo, e un
+   * aggiornamento di stato a ogni pacchetto. Va dritto al motore audio, che lo
+   * accoda e lo suona. Lo store riceve solo l'elenco di CHI sta parlando, per
+   * gli indicatori.
+   */
+  const onVoiceAudio = (p: VoiceAudioPayload) => voiceChat.receive(p);
+  /*
    * Countdown 3-2-1 a ogni round: il numero arriva dal server.
    *
    * Si passa SUBITO alla schermata di gioco, anche se la griglia del nuovo round
@@ -1033,6 +1063,7 @@ export function bindSocketEvents(): () => void {
   socket.on('game:roundEnd', onRoundEnd);
   socket.on('game:gameEnd', onGameEnd);
   socket.on('game:countdown', onCountdown);
+  socket.on('voice:audio', onVoiceAudio);
   socket.on('error', onError);
   socket.on('connect', onConnect);
 
@@ -1043,6 +1074,7 @@ export function bindSocketEvents(): () => void {
     socket.off('game:roundEnd', onRoundEnd);
     socket.off('game:gameEnd', onGameEnd);
     socket.off('game:countdown', onCountdown);
+    socket.off('voice:audio', onVoiceAudio);
     socket.off('error', onError);
     socket.off('connect', onConnect);
   };

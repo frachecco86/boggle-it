@@ -113,7 +113,8 @@ In caso di parola trovata da più giocatori, ognuno prende i punti base.
 - Round da **180 secondi** (3 min) con countdown visibile.
 - Dopo ogni round: schermata risultati parziale con classifica e parole che gli altri hanno trovato.
 - Numero round configurabile (default **3**).
-- A fine partita: classifica finale + riepilogo per giocatore (parole trovate e mancate).
+- A fine partita: **podio** dei primi tre (avatar, nome, punti, corona al vincitore) e classifica
+  finale + riepilogo per giocatore (parole trovate e mancate).
 
 ---
 
@@ -194,7 +195,12 @@ separate da quelle versionate, e aggiunte subito al catalogo in memoria.
 ## 5. Modalità
 
 ### 5.1 Single player
-- Selezione formato griglia (4×4 / 5×5 / 6×6), difficoltà e numero round.
+- **Un solo menù** per le impostazioni (griglia 4×4 / 5×5 / 6×6, difficoltà, durata, round):
+  si apre come foglio sovrapposto dalla home e sta **in una schermata senza scorrere**.
+- **Si parte con un tocco**: «Gioca da solo» sorteggia la scheda e fa partire il countdown.
+  Non esiste più una schermata intermedia di conferma.
+- **La scheda non si vede prima**: griglia e parole si scoprono **solo quando il round
+  comincia** (né in home né altrove), così nessuno parte avvantaggiato.
 - Ogni round pesca una **scheda** casuale dal catalogo del server.
 - Timer, griglia, punteggio, lista parole trovate.
 - Validazione contro le parole della scheda (nessun dizionario nel client).
@@ -213,15 +219,25 @@ separate da quelle versionate, e aggiunte subito al catalogo in memoria.
 - Gestione disconnessione: il giocatore viene marcato "offline"; la partita continua.
 - Riconnessione con lo stesso `playerId` recupera lo stato della stanza.
 - **Riconnessione trasparente**: se il socket si riconnette da solo (rete instabile, app in background), il client rientra in stanza con `room:rejoin` e riprende a inviare parole. Prima il server perdeva il legame e rispondeva "Non in una stanza".
+- **Voce in stanza**: tasto col microfono in basso a destra, si **tiene premuto** per parlare; gli altri
+  sentono la voce quasi in diretta (~0,2 s). Tre barrette accanto al nome mostrano chi parla; un secondo
+  tasto silenzia il proprio microfono. L'audio **non viene registrato** e il server lo inoltra soltanto.
+  Limiti: max 4 voci insieme, pacchetti PCM 16 kHz mono da 64 ms (vedi §8).
 
 ---
 
 ## 6. Interfaccia e flusso
 
 ### 6.1 Schermate
-1. **Home** — titolo, numero di schede disponibili, bottoni "Gioca da solo" / "Crea partita" / "Entra con codice", link a "Sfoglia le schede" e "Admin", credits dizionario.
-2. **Setup single player** — griglia N, difficoltà, durata, numero round, "Inizia".
-3. **Lobby multiplayer** — codice stanza grande e copiabile, lista giocatori, impostazioni host, "Avvia".
+1. **Home** — titolo, numero di schede disponibili, «Gioca da solo» (parte subito) e
+   «Impostazioni partita» (apre il foglio), campo codice + «Entra», link a «Sfoglia le
+   schede» e «Admin», credits dizionario.
+2. **Impostazioni partita** — foglio sovrapposto alla home: griglia, difficoltà, durata,
+   round, «Regole e punteggi», e le due partenze «Gioca da solo» / «Crea la stanza».
+   Le stesse scelte valgono per single player e stanza.
+3. **Lobby multiplayer** — codice stanza grande e copiabile, invito con link, lista
+   giocatori, impostazioni host, «Avvia». Della scheda si sa solo **che è pronta**: non si
+   vede prima del round.
 4. **Gioco** — griglia centrale, timer, punteggio, input parola corrente, lista parole trovate, classifica (MP).
 5. **Riepilogo round** — punteggi del round, parole per giocatore (badge ×2 sulle uniche), "Prossimo round".
 6. **Riepilogo finale** — classifica, statistiche, "Rigioca" / "Torna alla home".
@@ -255,10 +271,11 @@ sbooble/
 ├── apps/
 │   ├── web/                    # React + Vite + TS
 │   │   ├── src/
-│   │   │   ├── components/     # GridBoard, Timer, WordList, GridPreview, ...
-│   │   │   ├── screens/        # Home, SoloSetup, SoloGame, Lobby, MP, Summary,
+│   │   │   ├── components/     # GridBoard, Timer, WordList, MatchSettings, Podium,
+│   │   │   │                   #   VoiceControls, RichText, ...
+│   │   │   ├── screens/        # Home, SoloGame, Lobby, MP, Summary,
 │   │   │   │                   #   Scheda (soluzioni), Admin
-│   │   │   ├── game/           # cellTracker (swipe), useSoloGame, useGridPreview
+│   │   │   ├── game/           # cellTracker (swipe), useSoloGame
 │   │   │   ├── net/            # socket client
 │   │   │   └── state/          # store (zustand)
 │   └── server/                 # Node + Express + Socket.IO
@@ -266,6 +283,7 @@ sbooble/
 │       │   └── gen-schede.ts   # generatore schede (CLI)
 │       └── src/
 │           ├── rooms.ts        # stanza, round, punteggio (raddoppio)
+│           ├── voice.ts        # canale voce della stanza (limiti e inoltro)
 │           ├── schede.ts       # catalogo schede (carica/serve/persisti)
 │           ├── dictionary.ts   # dizionario + pool di generazione (lazy)
 │           └── index.ts        # HTTP + Socket.IO + admin
@@ -293,6 +311,9 @@ sbooble/
 - `room:start` `{ roomCode }` (solo host)
 - `game:submitWord` `{ word, path }` → `{ accepted, reason?, word?, points? }`
 - `room:leave` `{ roomCode }`
+- `voice:start` → `{ ok }` | `{ code, message }` — apre il canale voce (rifiuta se le 4 voci sono occupate)
+- `voice:chunk` `ArrayBuffer` (1024 campioni Int16 = 64 ms a 16 kHz) — inoltrato agli altri della stanza
+- `voice:stop` — rilascia il posto nel canale
 
 **Server → Client**
 - `room:update` `{ players, hostId, gridSize, rounds, phase }`
@@ -300,6 +321,7 @@ sbooble/
 - `game:playerWord` `{ playerId, avatar, word, points, score, self }` (broadcast per classifica live)
 - `game:roundEnd` `{ round, results, missedWords, nextRoundInMs }`
 - `game:gameEnd` `{ finalScores }`
+- `voice:audio` `{ playerId, data }` — voce di un altro giocatore (a chi parla non torna indietro)
 - `error` `{ code, message }`
 
 Timer autorevole: il server emette `endsAt` come timestamp; il client calcola il countdown
@@ -309,7 +331,7 @@ locale compensando la latenza. Il server chiude il round a prescindere dal clien
 
 ## 9. Fuori scope v0.1 (roadmap v0.2+)
 - Account, login, profili, storico partite (persistenza)
-- Chat in stanza, emoji/reazioni
+- Chat in stanza, emoji/reazioni — la **voce** in stanza è arrivata nella v0.19.0; mancano la chat scritta e le reazioni
 - Bot / avversari AI
 - Bonus (parole uniche, più lunga) e regole opzionali
 - Classifiche globali e matchmaking pubblico

@@ -1,5 +1,6 @@
 import { APP_VERSION, CHANGE_LABELS, RELEASES } from '../version.js';
 import { BackHome } from '../components/BackHome.js';
+import { RichText } from '../components/RichText.js';
 
 /**
  * Pagina delle novità: ogni versione con le funzionalità introdotte.
@@ -31,6 +32,25 @@ export function ChangelogScreen() {
           </header>
           <h3 className="release__title">{release.title}</h3>
 
+          {/*
+           * Card promozionale: due-tre righe per chi vuole sapere in fretta cosa
+           * porta la versione. Sta SOPRA l'elenco delle modifiche perché è il
+           * punto d'ingresso: chi cerca i dettagli li trova subito sotto.
+           */}
+          {release.promo && (
+            <aside className="promo">
+              <span className="promo__emoji" aria-hidden>
+                {release.promo.emoji ?? '✨'}
+              </span>
+              <div className="promo__body">
+                <p className="promo__headline">{release.promo.headline}</p>
+                <p className="promo__text">
+                  <RichText text={release.promo.text} />
+                </p>
+              </div>
+            </aside>
+          )}
+
           {release.changes.map((group) => (
             <section key={group.kind} className="release__group">
               <h4 className={`release__kind release__kind--${group.kind}`}>
@@ -38,7 +58,11 @@ export function ChangelogScreen() {
               </h4>
               <ul className="release__items">
                 {group.items.map((item) => (
-                  <li key={item}>{item}</li>
+                  <li key={item}>
+                    {/* Le note usano `**grassetto**`, `*corsivo*` e `` `codice` ``:
+                        senza `RichText` si vedevano gli asterischi a schermo. */}
+                    <RichText text={item} />
+                  </li>
                 ))}
               </ul>
             </section>

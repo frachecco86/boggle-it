@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.17.1** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.25.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -45,6 +45,15 @@ risultato. Niente filtri né stili AI.
   il single player.
 - **App Android** (Capacitor): single player, foto e audio funzionano **offline** (schede e
   tracce incluse nell'APK); multiplayer e sincronizzazione profili quando c'è rete.
+- **Pagina Novità leggibile**: ogni versione si apre con una **card di riassunto** in
+linguaggio non tecnico (due-tre righe), e grassetti, corsivi e frammenti di codice delle
+note sono finalmente formattati; il dettaglio tecnico resta sotto, per chi lo vuole.
+- **Home compatta**: logo, testi e pulsanti misurati per stare in **una schermata di
+telefono** senza scorrere (niente da cercare sotto il bordo); due soglie di altezza per i
+telefoni più bassi.
+- **Invito con un link**: in sala d'attesa il tasto **Condividi l'invito** apre il foglio di
+condivisione del telefono con il link della stanza (`?stanza=CODICE`); chi lo apre trova il
+codice già nel campo “Entra”. Dove la condivisione non c'è, il link si copia negli appunti.
 - **Single player**: partita multi-round con riepilogo parole trovate e mancate.
 - **Multiplayer**: stanza con codice a 6 caratteri, griglia e timer sincronizzati,
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
@@ -56,12 +65,24 @@ risultato. Niente filtri né stili AI.
 - **Riepilogo di fine round in stile arcade** (multiplayer): i concorrenti in basso e le
   parole che si accendono una alla volta seguendo la **timeline reale** della partita, con
   punteggio che si accumula fino al totale del round. Saltabile, con suoni dedicati.
+- **Podio di fine partita** (multiplayer): i primi tre con avatar, nome e punti, il vincitore
+  **al centro** con corona e alone; le pedane salgono a scaglioni e cadono dei coriandoli.
+  Con **due giocatori** il vincitore resta al centro (il terzo posto è vuoto); con **più di tre**
+  gli altri si elencano subito sotto il podio, con posizione e punti.
+- **Voce in stanza** (multiplayer): tasto col **microfono** in basso a destra — si **tiene
+  premuto** e si parla, e gli altri sentono la voce **quasi in diretta** (~0,2 s: è una
+  conversazione, non un messaggio vocale). Tre barrette accanto al nome mostrano chi sta
+  parlando, un secondo tasto **silenzia** il proprio microfono. Nessuna registrazione: il
+  server fa solo da ponte e non conserva l'audio.
 - **3 difficoltà** (facile / normale / difficile) con tema visivo dedicato.
   La difficoltà controlla la banda di parole/punteggio della scheda; la dimensione è una scelta separata.
 - **Classifica separata** fra single player e multiplayer (tab *Da solo* / *Con altri* / *Tutte*),
   con tre classifiche (miglior punteggio, totali, parola più lunga) per ogni modalità.
-- **Anteprima reale**: il server pesca una scheda di esempio dal catalogo con le impostazioni
-  scelte e mostra quante parole si possono trovare (conteggio esatto, non stimato).
+- **Impostazioni in una schermata**: griglia, difficoltà, durata e round stanno in un **foglio
+  sovrapposto** che si apre dalla home — quattro righe compatte e i due pulsanti sempre in vista,
+  senza scorrere. Le stesse scelte valgono per la partita singola e per la stanza.
+- **Single player a un tocco**: «Gioca da solo» sorteggia la scheda e fa partire il countdown.
+  La scheda **non si vede prima del round** (né in home né in sala d'attesa): niente vantaggi.
 - **Avatar**: 32 emoji selezionabili, visibili in classifica e nelle notifiche.
 - **Durata del round** selezionabile: 90, 120 o 180 secondi.
 - **Countdown 3-2-1 a ogni round** (single player e multiplayer), con animazione e suoni.
@@ -189,10 +210,11 @@ sbooble/
 ├── apps/
 │   ├── web/                  React 18 + Vite + TypeScript
 │   │   └── src/
-│   │       ├── components/   GridBoard (swipe + trail SVG), Timer, WordList
-│   │       ├── screens/      Home, SoloSetup, SoloGame, Lobby, Multiplayer, Summary
+│   │       ├── components/   GridBoard (swipe + trail SVG), Timer, WordList,
+│   │       │                 MatchSettings (foglio impostazioni), Podium
+│   │       ├── screens/      Home, SoloGame, Lobby, Multiplayer, Summary
 │   │       ├── game/         SwipeController (Pointer Events), useSoloGame
-│   │       ├── net/          socket client
+│   │       ├── net/          socket client, link d'invito della stanza
 │   │       └── state/        store zustand + binding eventi Socket.IO
 │   └── server/               Node + Express + Socket.IO
 │       └── src/

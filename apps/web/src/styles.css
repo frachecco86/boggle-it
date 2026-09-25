@@ -17,6 +17,21 @@
   --radius: 18px;
   --radius-lg: 28px;
   --shadow: 0 10px 28px rgba(45, 60, 110, 0.14);
+  /*
+   * Altezza dei comandi della barra in alto (interruttore del tema a sinistra,
+   * Classifica/Parole/versione a destra). Una sola misura per tutti: le icone
+   * restano alla stessa altezza e i due gruppi sono allineati fra loro.
+   */
+  --topbar-h: 28px;
+  /*
+   * Margine sinistro della barra in alto. Il tasto Home (quando c'è) si mette
+   * subito dopo l'interruttore del tema, che resta sempre nello stesso punto:
+   * se l'interruttore si spostasse fra una schermata e l'altra, si vedrebbe un
+   * salto a ogni navigazione.
+   */
+  --topbar-left: 10px;
+  /* Misure dell'interruttore del tema: pallina + 2px di margine per lato. */
+  --knob: 22px;
   /* Font giocosi, self-hostati (funzionano anche offline nell'app Android). */
   --font: 'Baloo 2', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-display: 'Fredoka', 'Baloo 2', system-ui, sans-serif;
@@ -99,11 +114,20 @@ body {
   width: min(1100px, 100%);
   margin: 0 auto;
   /*
+   * Padding superiore: la barra in alto è FISSA (interruttore del tema, tasto
+   * Home, Classifica/Parole/versione) e finisce a 36px + safe area. Il contenuto
+   * deve cominciare sotto, altrimenti il primo titolo le finisce dietro.
+   *
+   * Nota storica: prima il tasto Home stava nel flusso della pagina (un pulsante
+   * "← Home" alto ~60px) e questo padding era di 22px. Ora il tasto è nella
+   * barra: i 44px qui sotto lo sostituiscono e **avanzano ~45px** di altezza per
+   * il contenuto di ogni schermata.
+   *
    * Padding inferiore maggiorato: in basso a sinistra ci sono i controlli audio
    * flottanti (`.floating-controls`). Senza questo spazio coprirebbero la fine
    * del contenuto (nella home, la riga Admin/Profili).
    */
-  padding: 22px 18px 86px;
+  padding: calc(44px + env(safe-area-inset-top, 0px)) 18px 86px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -262,6 +286,32 @@ body {
   gap: 8px;
 }
 
+/*
+ * Invito aperto da un link: il codice è già nel campo, quindi si dice cosa fare
+ * invece di lasciare l'utente a chiedersi perché c'è un codice scritto.
+ * Riga singola e compatta: deve stare dentro la schermata come tutto il resto.
+ */
+.join__invite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  border: 1px solid var(--primary-soft);
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.join__invite strong {
+  color: var(--primary);
+  letter-spacing: 0.08em;
+}
+
 .join__input {
   letter-spacing: 4px;
   text-align: center;
@@ -276,6 +326,259 @@ body {
   text-align: center;
   opacity: 0.75;
   line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* Home compatta: deve stare in UNA schermata di telefono               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Perché un blocco unico: la home è la prima cosa che si vede e va misurata
+ * come un tutto. Nella versione "aerea" servivano ~980px (logo da 86px, testata
+ * spostata di 6vh, pulsanti da 54px, footer su due righe) e su un telefono
+ * moderno — ~750px utili sotto le barre del browser — il codice stanza e le voci
+ * in fondo restavano fuori schermo.
+ *
+ * Il budget di altezza a 390×745 è questo (misure reali su Chromium headless):
+ *   padding alto 44 · testata 126 · card profilo 100 · azioni 165
+ *   audio 43 · voci in fondo 35 · crediti 52 · spaziature 50 · padding basso 84
+ *   → **~700px** contro i **745px** utili di un iPhone 15 in Safari.
+ *
+ * I crediti occupano quattro righe «strette»: accorciarli vorrebbe dire togliere
+ * l'attribuzione del dizionario, che è obbligatoria (Morph-it!, CC BY-SA).
+ *
+ * Le misure non sono stime: sono state verificate su Chromium headless (DevTools
+ * Protocol) confrontando l'altezza del contenuto con quella della finestra a
+ * 390×745, 430×800, 412×800, 375×640, 375×553 e 360×600.
+ */
+.screen.home {
+  /*
+   * Il padding alto tiene la testata SOTTO la barra fissa (Classifica/Parole/
+   * versione, interruttore del tema e tasto Home): quella barra sta a `top: 8px`
+   * ed è alta 28px, quindi finisce a 36px. Senza questo spazio la margherita
+   * finiva DIETRO al pulsante "Classifica" (verificato: il fiore era tagliato a
+   * metà). `safe-area-inset-top` come nella barra: sui telefoni con notch in
+   * modalità app la barra scende, e la testata deve scendere con lei.
+   */
+  padding: calc(44px + env(safe-area-inset-top, 0px)) 16px 84px;
+  gap: 10px;
+  /*
+   * La home occupa tutta l'altezza disponibile: così i crediti (ultimo figlio,
+   * con `margin-top: auto`) restano in fondo alla schermata invece di lasciare
+   * una fascia vuota sopra i controlli audio.
+   */
+  flex: 1;
+}
+
+.home__header {
+  margin-top: 0;
+}
+
+/* Marchio: margherita e nome sulla stessa riga, centrati. */
+.home__lockup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.home__logo {
+  width: clamp(32px, 9vw, 40px);
+  margin: 0;
+  filter: drop-shadow(0 5px 12px rgba(255, 179, 212, 0.5));
+}
+
+.home .title {
+  font-size: clamp(2rem, 9.5vw, 2.9rem);
+}
+
+.home__author {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.home__tagline {
+  margin: 5px 0 0;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.home__schede {
+  margin: 3px 0 0;
+  font-size: 0.78rem;
+}
+
+/* Card del profilo: meno margini interni e avatar più contenuto. */
+.home .profile-card {
+  padding: 10px;
+  gap: 10px;
+}
+
+.home .avatar-picker {
+  gap: 6px;
+}
+
+.home .avatar-picker__current {
+  padding: 5px 9px;
+}
+
+.home .avatar-picker__emoji {
+  font-size: 1.5rem;
+}
+
+.home .avatar-picker__grid {
+  max-width: 280px;
+  gap: 3px;
+  padding: 8px;
+}
+
+.home .avatar-picker__option {
+  font-size: 1.15rem;
+}
+
+.home .field {
+  gap: 3px;
+}
+
+/*
+ * Etichetta su UNA riga: "IL TUO NOME" a 0.82rem con le lettere spaziate andava a
+ * capo nella colonna stretta della card, allungandola di ~16px (visto nello
+ * screenshot a 390px).
+ */
+.home .field__label {
+  font-size: 0.72rem;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.home .field__input {
+  padding: 9px 12px;
+}
+
+.home .profile-card .btn--tiny {
+  padding: 4px 9px;
+}
+
+/* Azioni principali: 44px per pulsante invece di 54 (restano comodi al dito). */
+.home__actions {
+  margin-top: 0;
+  gap: 8px;
+}
+
+.home__actions .btn--big {
+  padding: 11px 18px;
+  font-size: 1rem;
+}
+
+/* Riga audio: solo l'apertura del pannello, quindi va tenuta bassa. */
+.home .audio-settings {
+  margin-top: 0;
+}
+
+.home .audio-settings__toggle {
+  padding: 8px 12px;
+  font-size: 0.86rem;
+}
+
+/* Voci in fondo: pulsanti piccoli, non tre pulsanti grandi. */
+.home__links {
+  margin-top: 0;
+  gap: 6px;
+}
+
+.home__links .btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: 10px;
+}
+
+/*
+ * Crediti: l'attribuzione del dizionario è **obbligatoria** (Morph-it!, CC BY-SA),
+ * quindi non si nasconde: si scrive più piccolo, su due righe strette.
+ */
+.home__footer {
+  padding-top: 8px;
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+/*
+ * Telefoni bassi (iPhone SE, Android con barre del browser): si stringe ancora.
+ * Si rinuncia al motto e al conteggio delle schede — decorativi, e il conteggio
+ * si trova comunque nella pagina delle schede — non a un comando.
+ */
+@media (max-height: 740px) {
+  .screen.home {
+    padding: calc(40px + env(safe-area-inset-top, 0px)) 16px 76px;
+    gap: 7px;
+  }
+
+  .home__logo {
+    width: 30px;
+  }
+
+  .home .title {
+    font-size: clamp(1.8rem, 8.5vw, 2.4rem);
+  }
+
+  .home__tagline {
+    display: none;
+  }
+
+  .home__actions .btn--big {
+    padding: 10px 16px;
+  }
+
+  .home__footer {
+    padding-top: 8px;
+    font-size: 0.62rem;
+  }
+}
+
+@media (max-height: 620px) {
+  .home__schede {
+    display: none;
+  }
+
+  .home .title {
+    font-size: 1.7rem;
+  }
+
+  .home .avatar-picker__emoji {
+    font-size: 1.4rem;
+  }
+
+  /* Il profilo si crea anche dalla voce "Profili" in fondo: qui il tasto sparisce. */
+  .home .profile-card .btn--tiny {
+    display: none;
+  }
+
+  /* Ultima stretta per i telefoni bassi con le barre del browser aperte. */
+  .home__logo {
+    width: 28px;
+  }
+
+  .screen.home {
+    padding: calc(38px + env(safe-area-inset-top, 0px)) 14px 66px;
+    gap: 5px;
+  }
+
+  .home__actions .btn--big {
+    padding: 8px 14px;
+    font-size: 0.95rem;
+  }
+
+  .home .field__input {
+    padding: 7px 10px;
+  }
+
+  .home .audio-settings__toggle {
+    padding: 6px 10px;
+  }
+
+  .home__footer {
+    font-size: 0.56rem;
+  }
 }
 
 /* ---------- Campi e bottoni ---------- */
@@ -501,6 +804,30 @@ body {
   padding: 12px;
   box-shadow: var(--shadow);
   user-select: none;
+  /*
+   * La griglia è un quadrato: limitare la LARGHEZZA limita anche l'altezza.
+   *
+   * Perché serve: su uno schermo largo la colonna della griglia era più larga
+   * che alta, quindi il quadrato (celle 1fr + `aspect-ratio: 1`) usciva sotto il
+   * bordo dello schermo e l'ultima riga si vedeva solo scorrendo — proprio
+   * mentre si gioca. Qui la griglia prende il minore fra lo spazio in larghezza e
+   * quello in altezza (~230px fra barra, timer, anteprima parola e margini), e
+   * resta interamente visibile. Sui telefoni il limite non morde (la larghezza è
+   * già il vincolo) e `svh` tiene conto delle barre del browser.
+   */
+  width: min(100%, calc(100svh - 230px));
+  margin-inline: auto;
+  /*
+   * Da qui in poi le misure dei caratteri sono in `cqw` (percentuale della
+   * larghezza di questo riquadro): la lettera è una frazione ESATTA della cella,
+   * quindi riempie il quadrato allo stesso modo in ogni formato e su ogni
+   * schermo. Prima la dimensione veniva da una formula sul viewport, che non
+   * sapeva quanto fosse grande la cella: su desktop le lettere occupavano il 36%
+   * della cella (celle grandi e vuote) e su telefono il 51%.
+   */
+  container-type: inline-size;
+  --grid-gap: 8px;
+  --tile-ratio: 0.64;
 }
 
 .grid-trail {
@@ -537,23 +864,35 @@ body {
 
 .grid-cells {
   display: grid;
-  gap: 8px;
+  gap: var(--grid-gap, 8px);
   position: relative;
   z-index: 1;
 }
 
-/* Le lettere riempiono quasi tutta la tile, come Boggle/Ruzzle.
-   La dimensione è calcolata da --grid-size: più la griglia è grande, più il
-   carattere scala, così il rapporto lettera/cella resta alto a ogni formato. */
+/* Le lettere riempiono quasi tutta la tile, come Boggle/Ruzzle. */
 .tile {
   aspect-ratio: 1;
   display: grid;
   place-content: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  /*
+   * Angoli "un po' meno smussati" di prima (erano 18px fissi): la smussatura
+   * ora è proporzionale al lato del quadrato, con un minimo e un massimo. Su un
+   * telefono (celle da ~76px) sono 9px invece di 18: quadrati più netti, come
+   * nel Boggle. Su celle grandi non diventa mai esagerata.
+   */
+  border-radius: clamp(9px, 9%, 18px);
   box-shadow: 0 2px 6px rgba(45, 60, 110, 0.07);
+  /*
+   * Prima riga: ripiego per i browser senza container queries (la vecchia
+   * formula sul viewport). La seconda la sostituisce dove `cqw` è supportato.
+   */
   font-size: calc(min(64vw, 420px) / var(--grid-size, 4) * 0.62);
+  font-size: calc(
+    var(--tile-ratio, 0.64) * (100cqw - (var(--grid-size, 4) - 1) * var(--grid-gap, 8px)) /
+      var(--grid-size, 4)
+  );
   line-height: 0.9;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -576,27 +915,17 @@ body {
   text-shadow: none;
 }
 
-/* Dimensioni dedicate: il "Qu" resta leggibile e le griglie grandi restano compatte. */
-.grid-board[style*='--grid-size: 5'] .tile {
-  font-size: calc(min(64vw, 420px) / 5 * 0.66);
+/*
+ * Nelle griglie più grandi le celle sono più piccole: la lettera occupa una
+ * frazione leggermente maggiore, così le parole corte (e il "Qu") restano
+ * leggibili anche su 6×6.
+ */
+.grid-board[style*='--grid-size: 5'] {
+  --tile-ratio: 0.66;
 }
 
-.grid-board[style*='--grid-size: 6'] .tile {
-  font-size: calc(min(64vw, 420px) / 6 * 0.7);
-  border-radius: 10px;
-}
-
-/* Desktop: usa anche l'altezza disponibile, così le lettere restano grandi. */
-@media (min-width: 821px) {
-  .tile {
-    font-size: calc(min(42vw, 58vh, 460px) / var(--grid-size, 4) * 0.64);
-  }
-  .grid-board[style*='--grid-size: 5'] .tile {
-    font-size: calc(min(42vw, 58vh, 460px) / 5 * 0.68);
-  }
-  .grid-board[style*='--grid-size: 6'] .tile {
-    font-size: calc(min(42vw, 58vh, 460px) / 6 * 0.72);
-  }
+.grid-board[style*='--grid-size: 6'] {
+  --tile-ratio: 0.68;
 }
 
 @keyframes tile-in {
@@ -941,11 +1270,216 @@ body {
   opacity: 0.45;
 }
 
+/* ------------------------------------------------------------------ */
+/* Voce nella stanza (in basso a destra)                               */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Perché in basso a destra: è l'angolo che il pollice raggiunge senza cambiare
+ * presa, e i controlli audio stanno già a sinistra. La colonna è stretta (un
+ * tasto solo per volta) per non finire sopra le notifiche degli avversari, che
+ * sono al centro.
+ */
+.voice-controls {
+  position: fixed;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.voice-controls__buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
+.voice-controls__btn {
+  display: grid;
+  place-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.voice-controls__mute {
+  width: 34px;
+  height: 34px;
+  color: var(--text-dim);
+}
+
+.voice-controls__mute:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* Microfono silenziato: il tasto resta "acceso" per non lasciare dubbi. */
+.voice-controls__mute--on {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.voice-controls__talk {
+  width: 54px;
+  height: 54px;
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--primary) 45%, transparent);
+  /*
+   * Il tasto va TENUTO premuto: senza `touch-action` e senza togliere la
+   * selezione, un tocco prolungato su Android fa partire lo scorrimento o la
+   * selezione del testo e il rilascio non arriva mai (la voce resterebbe aperta).
+   */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.voice-controls__talk:hover {
+  transform: translateY(-1px);
+}
+
+/* Mentre si trasmette: colore d'allarme e anelli che si allargano. */
+.voice-controls__talk--live {
+  background: var(--danger);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 60%, transparent);
+  animation: voice-live 1.4s ease-out infinite;
+}
+
+.voice-controls__talk--muted {
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.voice-controls__notice {
+  margin: 0;
+  max-width: min(70vw, 260px);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: right;
+  animation: screen-in 0.25s ease-out;
+}
+
+@keyframes voice-live {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+}
+
+/*
+ * Nella partita il riquadro dei comandi è più alto della barra audio: si riserva
+ * spazio in fondo alla pagina perché l'ultima riga della classifica non resti
+ * coperta (la pagina scorre, ma non si deve "indovinare" che c'è altro sotto).
+ */
+.screen.game {
+  padding-bottom: 150px;
+}
+
+/* ---------- "Sta parlando" ---------- */
+
+.speaking {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.speaking__bar {
+  width: 3px;
+  border-radius: 2px;
+  background: var(--primary);
+  /* Le barrette crescono dal basso, come un equalizzatore. */
+  transform-origin: bottom;
+  animation: speaking-bar 0.9s ease-in-out infinite;
+}
+
+.speaking__bar:nth-child(1) {
+  height: 6px;
+  animation-delay: 0s;
+}
+
+.speaking__bar:nth-child(2) {
+  height: 11px;
+  animation-delay: 0.15s;
+}
+
+.speaking__bar:nth-child(3) {
+  height: 8px;
+  animation-delay: 0.3s;
+}
+
+@keyframes speaking-bar {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 /* ---------- Tasto Home condiviso ---------- */
 
+/*
+ * Tasto Home: **nella barra in alto**, subito dopo l'interruttore del tema.
+ *
+ * Perché così: prima ogni schermata apriva con un pulsante "← Home" grande
+ * (~60px) che occupava la prima riga della pagina, spostava il titolo e rubava
+ * altezza al contenuto. Ora è un tasto tondo, alto come tutto il resto della
+ * barra (`--topbar-h`) e senza etichetta: l'icona della casa basta, e chi non la
+ * riconosce ha il `title` e l'`aria-label`.
+ */
 .back-home {
-  align-self: flex-start;
-  margin-bottom: 8px;
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  /* Subito dopo l'interruttore del tema (larghezza = pallina × 2 + 12px). */
+  left: calc(var(--topbar-left) + var(--knob) * 2 + 12px + 6px);
+  z-index: 51;
+  width: var(--topbar-h);
+  height: var(--topbar-h);
+  padding: 0;
+  display: grid;
+  place-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.12s;
+}
+
+.back-home:hover {
+  color: var(--primary);
+  border-color: var(--primary-soft);
+}
+
+.back-home:active {
+  transform: scale(0.94);
 }
 
 /* ---------- Lobby / classifiche ---------- */
@@ -986,6 +1520,67 @@ body {
 .room-code__hint {
   font-size: 0.76rem;
   opacity: 0.8;
+}
+
+/*
+ * Invito alla stanza: condividi (foglio del sistema) e copia (ripiego che funziona
+ * ovunque, compresa la WebView dell'app).
+ */
+.lobby__invite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(420px, 100%);
+  margin: -4px auto 0;
+  text-align: center;
+}
+
+.lobby__invite-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: min(280px, 100%);
+}
+
+.lobby__invite-copy {
+  align-self: center;
+}
+
+/*
+ * Qui ci finisce anche il link intero, quando la clipboard non è disponibile:
+ * `overflow-wrap` evita che una stringa lunga senza spazi allarghi la pagina.
+ */
+.lobby__invite-feedback {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--primary);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Stato della scheda del round: si sa SOLO che è pronta. La griglia e le parole
+ * non si mostrano prima del round, altrimenti chi guarda ha un vantaggio.
+ */
+.lobby__scheda {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-dim);
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.lobby__scheda-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .lobby__section,
@@ -1270,6 +1865,246 @@ body {
   flex-direction: column;
   gap: 10px;
   margin-top: 8px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Podio di fine partita (multiplayer)                                 */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Il podio mostra i primi tre: il vincitore al centro, sulla pedana più alta.
+ * È l'ordine VISIVO (2°, 1°, 3°), non quello della classifica.
+ */
+.podium {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 0;
+}
+
+.podium__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.podium__title strong {
+  color: var(--primary);
+}
+
+/*
+ * Le tre pedane, con il vincitore al centro.
+ *
+ * `align-items: flex-end` allinea i BLOCCHI in basso: è l'altezza diversa dei
+ * blocchi a formare il podio, mentre avatar e nome restano sopra il proprio.
+ */
+.podium__steps {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 440px;
+  /* Spazio per la corona del vincitore e per i coriandoli che cadono. */
+  padding-top: 30px;
+}
+
+.podium__place {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* Entrata a scaglioni: prima il 3°, poi il 2° e infine il vincitore. */
+  animation: podium-rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+  animation-delay: var(--delay, 0s);
+}
+
+/* Chi guarda: pedana col bordo d'accento, come la sua riga in classifica. */
+.podium__place--you .podium__block {
+  border-color: var(--primary);
+}
+
+.podium__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.podium__avatar-wrap {
+  position: relative;
+  display: block;
+}
+
+.podium__avatar {
+  display: grid;
+  place-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface-2);
+  font-size: 1.6rem;
+  overflow: hidden;
+}
+
+.podium__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.podium__place--2 .podium__avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 1.4rem;
+}
+
+.podium__place--3 .podium__avatar {
+  width: 42px;
+  height: 42px;
+  font-size: 1.25rem;
+}
+
+/* Corona del vincitore: dondola piano, per un effetto vivo ma discreto. */
+.podium__crown {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  font-size: 1.05rem;
+  animation: podium-crown 1.8s ease-in-out infinite;
+}
+
+.podium__name {
+  max-width: 100%;
+  font-weight: 700;
+  font-size: 0.86rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podium__score {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--warning);
+}
+
+.podium__block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 2px solid var(--border);
+  border-bottom: none;
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 18%, var(--surface)),
+    color-mix(in srgb, var(--primary) 4%, var(--surface))
+  );
+  box-shadow: var(--shadow);
+}
+
+.podium__place--1 .podium__block {
+  height: 96px;
+}
+
+.podium__place--2 .podium__block {
+  height: 70px;
+}
+
+.podium__place--3 .podium__block {
+  height: 52px;
+}
+
+.podium__medal {
+  font-size: 1.2rem;
+}
+
+.podium__rank {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+/* Alone pulsante sul vincitore: è l'unico elemento che "respira". */
+.podium__place--1 .podium__avatar {
+  border-color: var(--warning);
+  animation: podium-glow 2s ease-in-out infinite;
+}
+
+.podium__confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.podium__confetti-piece {
+  position: absolute;
+  top: -16px;
+  animation: podium-fall 2.6s linear infinite;
+}
+
+@keyframes podium-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes podium-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 60%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--warning) 0%, transparent);
+  }
+}
+
+@keyframes podium-crown {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0) rotate(-7deg);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px) rotate(7deg);
+  }
+}
+
+@keyframes podium-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(150px) rotate(220deg);
+  }
 }
 
 .results-list {
@@ -2392,7 +3227,10 @@ body {
 
 .versionbar,
 .topbar__item {
-  padding: 5px 10px;
+  height: var(--topbar-h);
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
@@ -2414,8 +3252,6 @@ body {
 }
 
 .topbar__item {
-  display: inline-flex;
-  align-items: center;
   gap: 6px;
 }
 
@@ -2489,6 +3325,125 @@ body {
   font-size: 1.02rem;
 }
 
+/* ------------------------------------------------------------------ */
+/* Card promozionale della versione                                    */
+/* ------------------------------------------------------------------ */
+/*
+ * Perché una card a parte e non un paragrafo in più: la pagina Novità serve a
+ * due pubblici diversi — chi vuole sapere in tre secondi se c'è qualcosa di
+ * bello, e chi vuole il dettaglio. La card è la risposta al primo: colore pieno,
+ * testo breve, nessun gergo. Il dettaglio resta sotto, in tono normale, così non
+ * compete con il riassunto.
+ *
+ * Il colore è `--primary`, che cambia con la difficoltà scelta: la card si
+ * adatta al tema del momento senza colori fissi nel codice.
+ */
+.promo {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 2px 0 16px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    color-mix(in srgb, var(--primary) 62%, #4a6dff) 100%
+  );
+  color: #fff;
+  box-shadow: 0 14px 30px color-mix(in srgb, var(--primary) 32%, transparent);
+  overflow: hidden;
+  animation: screen-in 0.35s ease-out;
+}
+
+/* Riflesso diagonale: dà l'idea della "card in vetrina" senza immagini. */
+.promo::after {
+  content: '';
+  position: absolute;
+  top: -60%;
+  right: -20%;
+  width: 60%;
+  height: 220%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0));
+  transform: rotate(18deg);
+  pointer-events: none;
+}
+
+.promo__emoji {
+  flex-shrink: 0;
+  display: grid;
+  place-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.promo__body {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+}
+
+.promo__headline {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.06rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.promo__text {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+/*
+ * Frammenti di codice nelle note (`room:join`, `version.ts`…): si riconoscono a
+ * colpo d'occhio grazie al carattere a spaziatura fissa e allo sfondo, senza
+ * rubare attenzione al testo.
+ */
+.rich-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Nella card promozionale lo sfondo è colorato: il chip si adatta. */
+.promo .rich-code {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+/* Su schermi stretti l'emoji va sopra al testo: il titolo non va a capo. */
+@media (max-width: 420px) {
+  .promo {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/*
+ * Le statistiche personali stanno DOPO la classifica: una riga di separazione e
+ * un po' d'aria, così non sembrano la continuazione dell'elenco dei giocatori.
+ */
+.leaderboard__stats {
+  margin-top: 6px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
 .release__group {
   margin-bottom: 12px;
 }
@@ -2527,12 +3482,9 @@ body {
   padding: 1px 5px;
 }
 
-/* Le pagine con la versione fissa in alto non devono finirci sotto. */
-.screen {
-  padding-top: 30px;
-}
-
-/* ---------- Editor foto: stili AI, progresso, gruppi ---------- */
+/* ------------------------------------------------------------------ */
+/* Editor foto: stili AI, progresso, gruppi                            */
+/* ------------------------------------------------------------------ */
 
 .photo-editor__group {
   display: flex;
@@ -3565,36 +4517,67 @@ body {
 /* Switch del tema (alto a sinistra)                                   */
 /* ------------------------------------------------------------------ */
 
-.theme-toggle {
+/*
+ * Interruttore del tema (alto a sinistra).
+ *
+ * È un vero interruttore: la pista è il pulsante stesso e la pallina scorre da
+ * un lato all'altro. La pallina porta l'icona del tema ATTIVO (☀️ chiaro, 🌙
+ * scuro), quindi si legge lo stato a colpo d'occhio senza decodificare un'icona.
+ *
+ * L'altezza è `--topbar-h`, la stessa di Classifica/Parole/versione: prima era un
+ * cerchio da 38px, più alto del resto della barra (28px) e visibilmente stonato.
+ */
+.theme-switch {
   position: fixed;
   top: calc(8px + env(safe-area-inset-top, 0px));
-  left: 10px;
+  left: var(--topbar-left);
   z-index: 51;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-content: center;
+  width: calc(var(--knob) * 2 + 12px);
+  height: var(--topbar-h);
+  padding: 2px;
+  display: flex;
+  align-items: center;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(6px);
   cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  transition: border-color 0.15s, transform 0.12s, background 0.2s;
+  transition: border-color 0.15s, background 0.25s;
 }
 
-.theme-toggle:hover {
+.theme-switch:hover {
   border-color: var(--primary-soft);
-  transform: translateY(-1px) rotate(12deg);
 }
 
-.theme-toggle:active {
-  transform: scale(0.94);
+.theme-switch:active {
+  transform: scale(0.96);
 }
 
-.theme-toggle__icon {
-  transition: transform 0.3s ease;
+.theme-switch__knob {
+  width: var(--knob);
+  height: var(--knob);
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  line-height: 1;
+  /* Scatto morbido con un lieve rimbalzo: dà l'idea dell'interruttore fisico. */
+  transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1), background 0.25s,
+    border-color 0.25s;
+}
+
+/* Tema scuro: la pallina va a destra e la pista si tinge d'accento. */
+[data-theme='dark'] .theme-switch {
+  background: color-mix(in srgb, var(--primary) 20%, var(--surface));
+}
+
+[data-theme='dark'] .theme-switch__knob {
+  /* Corsa = spazio interno (2 palline + 6px) meno la pallina. */
+  transform: translateX(calc(var(--knob) + 6px));
+  border-color: var(--primary-soft);
+  background: color-mix(in srgb, var(--primary) 30%, var(--surface));
 }
 
 /* ------------------------------------------------------------------ */
@@ -4599,4 +5582,178 @@ body {
   display: flex;
   justify-content: center;
   min-height: 40px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Foglio delle impostazioni partita                                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Perché un foglio sovrapposto e non un blocco in fondo alla home: le scelte
+ * sono quattro (griglia, difficoltà, durata, round) e in linea spingevano il
+ * contenuto fuori dallo schermo, con la pagina che scorreva proprio mentre si
+ * sceglieva. Da qui partono entrambe le modalità, quindi è anche l'unico posto
+ * dove si scelgono le impostazioni: prima il single player ne apriva una
+ * seconda schermata con le stesse domande.
+ *
+ * L'altezza massima è legata alla finestra (`svh`, cioè con le barre del browser
+ * visibili): il foglio sta in una schermata e, se il contenuto fosse più alto
+ * (telefono molto basso), scorre LUI invece di spingere la pagina.
+ */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: color-mix(in srgb, #0a0b12 45%, transparent);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+  animation: fade-in 0.2s ease-out;
+}
+
+.sheet__panel {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: calc(100svh - 40px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -12px 40px rgba(20, 26, 50, 0.28);
+  animation: sheet-up 0.28s cubic-bezier(0.2, 1, 0.4, 1);
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sheet__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.sheet__close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sheet__close:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Etichetta e scelte sulla STESSA riga: quattro righe invece di otto. */
+.sheet__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sheet__label {
+  flex: 0 0 74px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.sheet__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/*
+ * "A seguire": dal quarto posto in poi, quando i giocatori sono più di tre.
+ *
+ * Sta sotto le pedane, su una riga sola per giocatore, in tono sommesso (testo
+ * piccolo, colore attenuato) così non ruba la scena al podio ma dice subito che
+ * la partita non finiva lì. Il nome può essere lungo: si accorcia con i puntini
+ * invece di allargare la riga.
+ */
+.podium__rest {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.podium__rest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.podium__rest-row--you {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--text);
+}
+
+.podium__rest-rank {
+  flex: 0 0 30px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.podium__rest-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.podium__rest-score {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--warning);
 }

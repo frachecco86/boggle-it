@@ -7,6 +7,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    /*
+     * Il worklet della voce (`src/audio/worklets/voice-capture.worklet.js`) NON
+     * va mai incorporato come data URL: è un file che il browser carica da solo
+     * con `audioWorklet.addModule()`, e un `data:` URL dipende dal CSP della
+     * pagina e dalle regole della WebView (nell'app Android). Sotto la soglia di
+     * default (~4 KB) Vite lo incorporerebbe, quindi gli si chiede esplicitamente
+     * di restare un file con hash nel nome.
+     */
+    assetsInlineLimit: (filePath) => (filePath.endsWith('.worklet.js') ? false : undefined),
+  },
   // Il `.env` sta nella ROOT del monorepo (vedi docs/ANDROID.md e
   // .env.android.example), non in `apps/web/`. Senza questo Vite leggerebbe solo
   // `apps/web/.env` e `VITE_SERVER_URL` verrebbe silenziosamente ignorato,

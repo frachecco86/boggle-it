@@ -154,10 +154,15 @@ export function LeaderboardScreen() {
         ))}
       </div>
 
-      {/* Statistiche personali complete: parole per lunghezza, split solo/multi
-          e storico partite. Componente a parte perché è una sezione ricca. */}
-      {myStats && myStats.games > 0 && <MyStats stats={myStats} />}
-
+      {/*
+       * Statistiche personali ("Le tue statistiche") IN FONDO, sotto la classifica.
+       *
+       * Perché non in cima: chi apre questa pagina vuole vedere la **classifica** —
+       * chi è davanti, con quanti punti — mentre le statistiche personali sono un
+       * approfondimento che si legge dopo (e occupano molto spazio: griglia di
+       * numeri, parole per lunghezza, storico partite). Mettendole sopra, la
+       * classifica finiva sotto la piega della schermata.
+       */}
       {!token && (
         <p className="leaderboard__note">
           Gioca con un profilo per entrare in classifica. La classifica è visibile a tutti.
@@ -271,6 +276,14 @@ export function LeaderboardScreen() {
           {games.toLocaleString('it-IT')} partite {modeLabel(mode)} considerate
           {hasFilters ? ' con i filtri attuali' : ''}. Miglior punteggio per giocatore.
         </p>
+      )}
+
+      {/* Dopo la classifica: le statistiche personali complete (parole per
+          lunghezza, split solo/multi, storico partite). */}
+      {myStats && myStats.games > 0 && (
+        <div className="leaderboard__stats">
+          <MyStats stats={myStats} />
+        </div>
       )}
     </div>
   );

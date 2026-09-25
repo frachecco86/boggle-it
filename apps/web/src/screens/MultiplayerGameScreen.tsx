@@ -7,6 +7,7 @@ import { FoundCounter } from '../components/FoundCounter.js';
 import { OpponentFeed } from '../components/OpponentFeed.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
+import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
 import { useAppStore } from '../state/store.js';
 import { audio } from '../audio/AudioEngine.js';
 import { useFinalCountdown } from '../game/useFinalCountdown.js';
@@ -32,6 +33,8 @@ export function MultiplayerGameScreen() {
   const [myWords, setMyWords] = useState<FoundWord[]>([]);
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
   const [flashError, setFlashError] = useState(false);
+  // Chi sta parlando adesso: l'indicatore compare accanto al nome in classifica.
+  const speakers = useVoiceSpeakers();
   const flashTimer = useRef<number | null>(null);
   const feedbackTimer = useRef<number | null>(null);
 
@@ -231,6 +234,7 @@ export function MultiplayerGameScreen() {
                   </span>
                   <span className="player-row__name">
                     {p.nickname}
+                    {speakers.includes(p.id) && <SpeakingIndicator name={p.nickname} />}
                     {badge && (
                       <span key={badge.id} className="score-pop" aria-label={`+${badge.points} punti`}>
                         +{badge.points}

@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { HomeScreen } from './screens/HomeScreen.js';
-import { SoloSetupScreen } from './screens/SoloSetupScreen.js';
 import { SoloGameScreen } from './screens/SoloGameScreen.js';
 import { SchedaScreen } from './screens/SchedaScreen.js';
 import { AdminScreen } from './screens/AdminScreen.js';
@@ -12,6 +11,7 @@ import { WordsScreen } from './screens/WordsScreen.js';
 import { VersionBar } from './components/VersionBar.js';
 import { ThemeToggle } from './components/ThemeToggle.js';
 import { FloatingControls } from './components/FloatingControls.js';
+import { VoiceControls } from './components/VoiceControls.js';
 import { LobbyScreen } from './screens/LobbyScreen.js';
 import { MultiplayerGameScreen } from './screens/MultiplayerGameScreen.js';
 import { MultiplayerSummaryScreen } from './screens/MultiplayerSummaryScreen.js';
@@ -28,9 +28,10 @@ import { audio, installAudioUnlock } from './audio/AudioEngine.js';
  */
 export function App() {
   const screen = useAppStore((s) => s.screen);
-  const setScreen = useAppStore((s) => s.setScreen);
   const soloDifficulty = useAppStore((s) => s.soloDifficulty);
   const roomDifficulty = useAppStore((s) => s.room?.difficulty);
+  // La voce esiste solo in multiplayer: senza stanza i comandi non compaiono.
+  const inRoom = useAppStore((s) => Boolean(s.room));
   const audioSettings = useAppStore((s) => s.audioSettings);
 
   // Collega gli eventi Socket.IO allo store.
@@ -81,8 +82,8 @@ export function App() {
       <ThemeToggle />
       <VersionBar />
       <FloatingControls />
+      {inRoom && <VoiceControls />}
       {screen === 'home' && <HomeScreen />}
-      {screen === 'solo-setup' && <SoloSetupScreen onStart={() => setScreen('solo-game')} />}
       {screen === 'solo-game' && <SoloGameScreen />}
       {screen === 'scheda' && <SchedaScreen />}
       {screen === 'admin' && <AdminScreen />}

@@ -240,6 +240,77 @@ export interface ErrorPayload {
   message: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Voce in stanza (tieni premuto per parlare)                          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Perché PCM grezzo e non WebRTC: la voce serve "quasi in diretta" dentro una
+ * partita, senza aggiungere signaling, STUN e TURN. I parametri qui sotto sono
+ * il contratto fra chi parla e chi ascolta, quindi vivono nel pacchetto condiviso:
+ * se il client cambiasse frequenza o dimensione dei pacchetti senza che il server
+ * lo sappia, la validazione li rifiuterebbe a metà partita.
+ */
+
+/**
+ * Frequenza di campionamento della voce, in Hz.
+ *
+ * 16 kHz mono è la qualità tipica della telefonia: sufficiente a capire le parole
+ * e quattro volte più leggero dei 48 kHz del contesto audio del browser. Il
+ * client campiona a questa frequenza e il browser la ricampiona in riproduzione.
+ */
+export const VOICE_SAMPLE_RATE = 16000;
+
+/**
+ * Campioni per pacchetto: 1024 a 16 kHz = **64 ms**.
+ *
+ * È il compromesso fra ritardo (pacchetti piccoli = più reattivo, ma più overhead
+ * e più eventi al secondo) e robustezza (pacchetti grandi = un pacchetto perso si
+ * sente di meno). 64 ms tiene il ritardo totale intorno ai 200 ms, che è la
+ * soglia sotto la quale una conversazione sembra naturale.
+ */
+export const VOICE_CHUNK_SAMPLES = 1024;
+
+/** Byte di un pacchetto (campioni Int16): la dimensione che il server accetta. */
+export const VOICE_CHUNK_BYTES = VOICE_CHUNK_SAMPLES * 2;
+
+/**
+ * Massimo di pacchetti al secondo accettati da un singolo giocatore.
+ *
+ * Il ritmo nominale è ~16/s (un pacchetto ogni 64 ms): 40 lascia spazio agli
+ * scatti della rete senza aprire la porta a chi vorrebbe inondare la stanza.
+ */
+export const VOICE_MAX_CHUNKS_PER_SECOND = 40;
+
+/**
+ * Massimo di giocatori che possono parlare **contemporaneamente** in una stanza.
+ *
+ * Ogni voce costa ~32 KB/s a ogni ascoltatore: senza un tetto, otto microfoni
+ * aperti insieme farebbero 256 KB/s per dispositivo, che su rete mobile si sente
+ * (e non serve: in una stanza si parla uno alla volta).
+ */
+export const VOICE_MAX_TALKERS = 4;
+
+/**
+ * Dopo quanti millisecondi di silenzio un parlante è considerato fermo.
+ *
+ * Vale per il server (libera il posto se il client muore senza mandare `stop`) e
+ * per gli indicatori "sta parlando" dei client: un pacchetto ogni 64 ms, quindi
+ * 400 ms di silenzio significano che ha smesso.
+ */
+export const VOICE_SILENCE_MS = 400;
+
+export interface VoiceStartAck {
+  ok: true;
+}
+
+export interface VoiceAudioPayload {
+  /** Chi sta parlando. */
+  playerId: string;
+  /** Pacchetto PCM Int16 little-endian a `VOICE_SAMPLE_RATE` Hz. */
+  data: ArrayBuffer;
+}
+
 /** Eventi client -> server. */
 export interface ClientToServerEvents {
   'room:create': (payload: RoomCreatePayload, ack: (res: RoomCreateAck | ErrorPayload) => void) => void;
@@ -261,6 +332,18 @@ export interface ClientToServerEvents {
   'room:shuffleScheda': (payload: { code: string }) => void;
   'game:submitWord': (payload: SubmitWordPayload, ack: (res: SubmitWordAck) => void) => void;
   'room:leave': (payload: { code: string }) => void;
+  /**
+   * Apre il canale voce per chi tiene premuto il tasto.
+   *
+   * L'ack può rifiutare (canale pieno): in quel caso il client NON deve inviare
+   * pacchetti, altrimenti riempirebbe la rete della stanza senza che nessuno
+   * stia ascoltando.
+   */
+  'voice:start': (ack: (res: VoiceStartAck | ErrorPayload) => void) => void;
+  /** Pacchetto audio (ArrayBuffer Int16 grezzo), inoltrato agli altri della stanza. */
+  'voice:chunk': (data: ArrayBuffer) => void;
+  /** Chiude il canale voce (il tasto è stato rilasciato). */
+  'voice:stop': () => void;
 }
 
 /** Eventi server -> client. */
@@ -271,5 +354,7 @@ export interface ServerToClientEvents {
   'game:roundEnd': (payload: RoundEndPayload) => void;
   'game:gameEnd': (payload: GameEndPayload) => void;
   'game:countdown': (payload: { seconds: number }) => void;
+  /** Voce di un altro giocatore della stanza (a chi parla non torna indietro). */
+  'voice:audio': (payload: VoiceAudioPayload) => void;
   error: (payload: ErrorPayload) => void;
 }

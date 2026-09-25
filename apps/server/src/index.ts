@@ -31,6 +31,7 @@ import { DATA_DIR, EXTRA_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
 import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
+import { VoiceRelay } from './voice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -1001,7 +1002,52 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 /** Associazioni socket <-> stanza/giocatore. */
 const socketState = new Map<string, { code: string; playerId: string }>();
 
+/**
+ * Canale voce delle stanze (tieni premuto per parlare).
+ *
+ * Un'istanza sola per tutto il server: tiene solo CHI ha il microfono aperto ora
+ * (nessun audio, nessuna registrazione, nessun riferimento al contenuto).
+ */
+const voiceRelay = new VoiceRelay();
+
+/**
+ * Byte di un pacchetto voce, qualunque sia il contenitore binario.
+ *
+ * Socket.IO non consegna sempre lo stesso tipo: al server Node arriva un
+ * `Buffer`, al browser un `ArrayBuffer` (e un client non ufficiale potrebbe
+ * mandare una vista). Qui non si indovina: si accettano tutti e tre e si misura
+ * il contenuto, che è l'unica cosa che conta per la validazione.
+ */
+function voiceByteLength(data: unknown): number {
+  if (data instanceof ArrayBuffer) return data.byteLength;
+  if (ArrayBuffer.isView(data)) return data.byteLength;
+  return 0;
+}
+
+/** Porta il pacchetto al tipo dichiarato (`ArrayBuffer`) prima di inoltrarlo. */
+function toVoicePayload(data: unknown): ArrayBuffer {
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  }
+  return new ArrayBuffer(0);
+}
+
 const errorPayload = (code: string, message: string): ErrorPayload => ({ code, message });
+
+/**
+ * Ack "a prova di client malformato".
+ *
+ * Socket.IO non intercetta le eccezioni dentro i gestori: un client che emette un
+ * evento SENZA callback faceva esplodere il server con "ack is not a function".
+ * Non è teoria: basta `socket.emit('voice:start')` senza callback per far cadere
+ * tutto il processo — partite in corso comprese (verificato scrivendo il test
+ * end-to-end della voce). Con questo wrapper l'ack mancante diventa una
+ * non-operazione: il client non riceve risposta, il server resta in piedi.
+ */
+function safeAck<T>(ack: ((res: T) => void) | undefined): (res: T) => void {
+  return typeof ack === 'function' ? ack : () => {};
+}
 
 /** Profilo a partire da un token Socket.IO, o null se assente/non valido. */
 function resolveProfile(token: unknown) {
@@ -1160,6 +1206,7 @@ function clampMaxPlayers(v: unknown): number {
 
 io.on('connection', (socket) => {
   socket.on('room:create', (payload, ack) => {
+    ack = safeAck(ack);
     try {
       const gridSize = isValidGridSize(payload?.gridSize) ? payload.gridSize : 4;
       const rounds = clampRounds(payload?.rounds);
@@ -1189,6 +1236,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('room:join', (payload, ack) => {
+    ack = safeAck(ack);
     const code = String(payload?.code ?? '').toUpperCase().trim();
     const room = registry.get(code);
     if (!room) return ack(errorPayload('ROOM_NOT_FOUND', 'Stanza non trovata'));
@@ -1232,6 +1280,7 @@ io.on('connection', (socket) => {
    * ricostruzione `game:submitWord` rispondeva "Non in una stanza".
    */
   socket.on('room:rejoin', (payload, ack) => {
+    ack = safeAck(ack);
     const code = String(payload?.code ?? '').toUpperCase().trim();
     const room = registry.get(code);
     if (!room) return ack(errorPayload('ROOM_NOT_FOUND', 'Stanza non trovata'));
@@ -1333,6 +1382,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('game:submitWord', (payload, ack) => {
+    ack = safeAck(ack);
     const st = socketState.get(socket.id);
     if (!st) return ack({ accepted: false, reason: 'Non in una stanza' });
     const room = registry.get(st.code);
@@ -1375,11 +1425,48 @@ io.on('connection', (socket) => {
   socket.on('room:leave', ({ code }) => {
     const st = socketState.get(socket.id);
     if (!st || st.code !== code.toUpperCase()) return;
+    // Uscendo si chiude anche l'eventuale microfono aperto: lasciare il posto
+    // occupato impedirebbe agli altri di parlare per i successivi 3 secondi.
+    voiceRelay.forget(socket.id);
     handleLeave(socket.id, st.code, st.playerId, true);
   });
 
+  /*
+   * Voce in stanza: "tieni premuto per parlare".
+   *
+   * Il server fa da ponte e non conserva nulla: `start` riserva un posto,
+   * `chunk` inoltra un pacchetto, `stop` lo libera. I limiti (quante voci
+   * insieme, quanti pacchetti al secondo, quali dimensioni sono valide) stanno
+   * tutti in `VoiceRelay`, così restano testabili senza socket.
+   */
+  socket.on('voice:start', (ack) => {
+    ack = safeAck(ack);
+    const st = socketState.get(socket.id);
+    if (!st) return ack(errorPayload('NOT_IN_ROOM', 'Non in una stanza'));
+    const res = voiceRelay.start(socket.id, st.code, st.playerId);
+    if (!res.ok) return ack(errorPayload('VOICE_BUSY', res.message));
+    ack({ ok: true });
+  });
+
+  socket.on('voice:chunk', (data) => {
+    const bytes = voiceByteLength(data);
+    const target = voiceRelay.chunk(socket.id, bytes);
+    if (!target) return;
+    /*
+     * `socket.to` e non `io.to`: a chi parla la propria voce NON torna
+     * indietro. Rimandarla al mittente, con le casse accese, sarebbe un eco
+     * sulla propria voce a ogni frase.
+     */
+    socket.to(target.code).emit('voice:audio', { playerId: target.playerId, data: toVoicePayload(data) });
+  });
+
+  socket.on('voice:stop', () => voiceRelay.stop(socket.id));
+
   socket.on('disconnect', () => {
     const st = socketState.get(socket.id);
+    // Il microfono aperto va liberato anche quando la connessione cade
+    // (telefono in background, rete persa): nessuno manderà `voice:stop`.
+    voiceRelay.forget(socket.id);
     if (!st) return;
     socketState.delete(socket.id);
     const room = registry.get(st.code);
@@ -1394,6 +1481,8 @@ io.on('connection', (socket) => {
 });
 
 function handleLeave(socketId: string, code: string, playerId: string, explicit: boolean) {
+  // Chi esce dalla stanza perde anche l'eventuale microfono aperto.
+  voiceRelay.forget(socketId);
   const room = registry.get(code);
   if (!room) return;
   if (explicit) {

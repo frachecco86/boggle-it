@@ -31,7 +31,13 @@ interface UseSoloGameOptions {
 }
 
 export interface SoloGameState {
-  phase: 'idle' | 'countdown' | 'playing' | 'roundEnd' | 'gameEnd';
+  /**
+   * Fasi della partita. Non c'è uno stato "pronto": si entra direttamente nel
+   * countdown, perché una schermata di conferma prima di giocare era (a) una
+   * seconda schermata per iniziare e (b) il posto dove si vedeva la scheda in
+   * anticipo.
+   */
+  phase: 'countdown' | 'playing' | 'roundEnd' | 'gameEnd';
   round: number;
   grid: Grid | null;
   /** Scheda giocata nel round corrente (griglia + tutte le parole trovabili). */
@@ -64,9 +70,7 @@ export interface SoloGameState {
 export function useSoloGame(options: UseSoloGameOptions) {
   const { gridSize, difficulty, rounds, roundDurationMs } = options;
 
-  const [phase, setPhase] = useState<SoloGameState['phase']>('idle');
-  /** Scheda scelta nell'anteprima, in attesa che il countdown finisca. */
-  const pendingSchedaRef = useRef<Scheda | null>(null);
+  const [phase, setPhase] = useState<SoloGameState['phase']>('countdown');
   /**
    * Numero del round che il countdown avvierà.
    *
@@ -110,7 +114,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
   );
 
   const startRound = useCallback(
-    async (roundNumber: number, prescelta?: Scheda) => {
+    async (roundNumber: number) => {
       setLoading(true);
       setLoadError(null);
       setPhase('playing');
@@ -118,9 +122,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setFeedback(null);
       setMissedWords([]);
       try {
-        // La scheda può arrivare dall'anteprima (scelta dal giocatore) oppure
-        // essere pescata a caso per i round successivi.
-        const next = prescelta ?? (await loadRandomScheda(gridSize, difficulty));
+        // La scheda si pesca a caso: nessun giocatore la conosce in anticipo.
+        const next = await loadRandomScheda(gridSize, difficulty);
         if (!next) throw new Error('Nessuna scheda disponibile');
         setScheda(next);
         // Serve al catalogo Parole per il filtro "solo la scheda in corso".
@@ -140,30 +143,25 @@ export function useSoloGame(options: UseSoloGameOptions) {
   );
 
   /**
-   * Avvia la partita. `prescelta` è la scheda scelta nell'anteprima.
+   * Avvia (o riavvia) la partita.
    *
    * Non si parte subito: si entra in `countdown`, che mostra 3-2-1 con animazione
    * e suoni. Al termine `beginRound` fa partire davvero il timer, così i secondi
    * di gioco non si consumano durante il conto alla rovescia.
+   *
+   * La scheda NON si scegle più prima: viene pescata a caso alla fine del
+   * countdown, quindi nessuno la vede in anticipo.
    */
-  const start = useCallback(
-    (prescelta?: Scheda) => {
-      savedRef.current = false;
-      setRoundScores([]);
-      // La scheda resta in attesa: la userà beginRound.
-      pendingSchedaRef.current = prescelta ?? null;
-      pendingRoundRef.current = 1;
-      setPhase('countdown');
-    },
-    [],
-  );
+  const start = useCallback(() => {
+    savedRef.current = false;
+    setRoundScores([]);
+    pendingRoundRef.current = 1;
+    setPhase('countdown');
+  }, []);
 
   /** Chiamato dal countdown quando ha finito: qui parte il round vero. */
   const beginRound = useCallback(() => {
-    const prescelta = pendingSchedaRef.current ?? undefined;
-    const roundNumber = pendingRoundRef.current;
-    pendingSchedaRef.current = null;
-    void startRound(roundNumber, prescelta);
+    void startRound(pendingRoundRef.current);
   }, [startRound]);
 
   // Timer
@@ -241,7 +239,6 @@ export function useSoloGame(options: UseSoloGameOptions) {
      * countdown (in `beginRound`), così i secondi di gioco non si consumano
      * durante il conto alla rovescia.
      */
-    pendingSchedaRef.current = null;
     pendingRoundRef.current = round + 1;
     setPhase('countdown');
   }, [round, rounds, score, startRound]);

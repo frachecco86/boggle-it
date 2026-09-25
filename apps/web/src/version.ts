@@ -10,17 +10,36 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.17.1';
+export const APP_VERSION = '0.25.0';
 
 export interface ReleaseEntry {
   version: string;
   date: string;
   title: string;
+  /**
+   * Riassunto promozionale della versione, per chi apre la pagina Novità e vuole
+   * capire in tre secondi cosa ci guadagna.
+   *
+   * Opzionale: le versioni più vecchie non ce l'hanno (e non è un problema — il
+   * dettaglio tecnico sotto resta la fonte completa). Il testo è scritto in
+   * linguaggio **non tecnico**: niente nomi di file, niente "payload", niente
+   * percentuali di banda. Chi vuole i dettagli li trova nella scheda stessa.
+   */
+  promo?: ReleasePromo;
   /** Sezioni: tipo di modifica → elenco di voci. */
   changes: Array<{
     kind: 'feature' | 'improvement' | 'fix' | 'tech';
     items: string[];
   }>;
+}
+
+export interface ReleasePromo {
+  /** Titolo breve e accattivante ("Parla con chi gioca con te"). */
+  headline: string;
+  /** Due o tre righe: cosa cambia per chi gioca, in parole semplici. */
+  text: string;
+  /** Simbolo della card; se manca si usa una stellina. */
+  emoji?: string;
 }
 
 /**
@@ -29,9 +48,298 @@ export interface ReleaseEntry {
  */
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: '0.25.0',
+    date: '2026-09-25',
+    title: 'Si gioca subito: impostazioni in un foglio, scheda mai in anticipo',
+    promo: {
+      emoji: '🎛️',
+      headline: 'Una schermata, un tocco, si gioca',
+      text: 'Le impostazioni della partita (griglia, difficoltà, durata, round) ora stanno tutte in una schermata sola: niente più scorrimento per arrivare al pulsante. E per giocare da soli basta un tocco: prima servivano due schermate e si vedeva in anticipo la scheda della partita — un vantaggio bello grosso.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Impostazioni in un foglio**: griglia, difficoltà, durata e round stanno tutte in un pannello sovrapposto che si apre dalla home — quattro righe compatte, il pulsante sempre in vista.',
+          '**Un solo menù per due modalità**: le stesse scelte valgono sia per la partita singola sia per la stanza multiplayer. Prima il single player chiedeva le stesse cose una seconda volta.',
+          '**Regole e punteggi** si aprono dal foglio delle impostazioni: chi ha già giocato non se li ritrova in mezzo ai piedi, chi è nuovo li trova dove sceglie la partita.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Si gioca da solo con un tocco**: il pulsante «Gioca da solo» in home sorteggia la scheda e fa partire il conto alla rovescia. Sparira la schermata intermedia con il pulsante «Pronto?».',
+          '**La scheda non si vede prima**: né in home, né nella stanza d\'attesa. Si scoprono la griglia e le parole **solo quando il round comincia**, così nessuno parte avvantaggiato. Nella stanza d\'attesa si legge soltanto che la scheda è pronta (e l\'host può cambiarla).',
+          '**Nella sala d\'attesa** la griglia d\'anteprima è stata sostituita da una riga di stato: «la scheda si scopre quando parte il round».',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**Podio con due giocatori**: il vincitore resta **al centro**, come nella partita a tre (prima scivolava a destra: 2° a sinistra, 1° a destra, e la corona cambiava posto a ogni partita).',
+          '**Podio con più di tre giocatori**: i primi tre salgono sul podio e gli altri (dal quarto in poi) compaiono subito sotto, in una riga compatta con posizione e punti. Prima dal podio sparivano, e sembrava che la partita fosse finita in tre.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le impostazioni vivono in `MatchSettings.tsx` (un pannello solo); la schermata `SoloSetupScreen` e le anteprime (`GridPreview`, `SchedaPreview`, `useGridPreview`) sono state **rimosse**: il codice che non serve più non va mantenuto.',
+          '`useSoloGame` non ha più la fase `idle` né una scheda prescelta: al via si sorteggia la scheda e si comincia. Meno stato da tenere allineato, meno modi di sbagliare.',
+          'Il podio è più robusto: il posto vuoto del terzo (con due giocatori) viene disegnato esplicitamente, gli altri giocatori sono elencati nel podio stesso. Il caso a un giocatore resta senza podio: un podio con una persona sola non è un podio.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.24.0',
+    date: '2026-09-25',
+    title: 'La griglia riempie le celle (e i quadrati sono più netti)',
+    promo: {
+      emoji: '🔠',
+      headline: 'Lettere grandi come il quadrato',
+      text: 'Le lettere ora riempiono davvero le caselle, su ogni schermo e in ogni formato (4×4, 5×5, 6×6) — e su desktop la griglia non esce più dallo schermo. I quadrati hanno angoli più netti, come nel Boggle.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le lettere riempiono le caselle.** La dimensione del carattere veniva da una formula sul **viewport**, che non sapeva quanto fosse grande la cella: su un tablet o un computer le lettere occupavano il **36-44%** della casella (quadrati grandi e mezzi vuoti) e su telefono il **51%**; e in 6×6 il rapporto era diverso da quello in 4×4. Ora la lettera è una **frazione esatta della cella** (64% in 4×4, 66% in 5×5, 68% in 6×6), quindi la griglia si riempie allo stesso modo su ogni schermo e in ogni formato.',
+          '**Su schermi larghi la griglia non esce più dallo schermo.** La griglia è quadrata (caselle 1fr + `aspect-ratio: 1`) e veniva dimensionata solo sulla larghezza della colonna: su desktop era alta più dello schermo e l\'**ultima riga restava sotto il bordo** — da raggiungere scorrendo, proprio mentre si gioca. Ora prende il minore fra lo spazio in larghezza e quello in altezza: resta interamente visibile.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Quadrati meno smussati**: gli angoli passano da **18px fissi** a una smussatura proporzionale al lato (`clamp(9px, 9%, 18px)`). Su un telefono sono **9px** invece di 18 — caselle più nette, come nel Boggle — e su caselle grandi non diventano mai esagerate. Stessa proporzione (4px invece di 5px) per le caselle piccole dell\'anteprima.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il riquadro della griglia è ora un **container di query** (`container-type: inline-size`): le misure sono in `cqw`, cioè in percentuale della larghezza reale della griglia. È quello che rende la formula "frazione della cella" possibile in CSS puro, senza misurare nulla in JavaScript.',
+          'Resta un **ripiego** per i browser senza container queries: la vecchia formula sul viewport, che viene sostituita dove `cqw` è supportato.',
+          'Verificato sul browser reale (headless, DevTools Protocol) su **telefono 390×745, tablet 820×1100 e desktop 1280×900**, per 4×4, 5×5 e 6×6: rapporto lettera/cella **64/66/68%** in tutti e nove i casi (prima 51/56/61% su telefono, 36/39/42% su tablet, 41/44/47% su desktop).',
+          'Le regole per formato ora sono **una variabile** (`--tile-ratio`) invece di tre copie della stessa formula: prima un formato nuovo o un cambio di gap richiedeva di aggiornare tre punti dello stile, ed era il tipo di duplicazione che fa divergere le griglie fra loro.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.23.0',
+    date: '2026-09-25',
+    title: 'Il tasto Home entra nella barra in alto',
+    promo: {
+      emoji: '🏠',
+      headline: 'Torna indietro con un tocco',
+      text: 'Un tasto tondo con la casetta, in alto a sinistra accanto all\'interruttore del tema: c\'è in ogni pagina, è alto come le altre icone e non ruba più la prima riga della schermata.',
+    },
+    changes: [
+      {
+        kind: 'improvement',
+        items: [
+          '**Il tasto Home è nella barra in alto e non occupa più la prima riga.** Prima ogni schermata apriva con un pulsante **“← Home”** grande (~60px) che spostava il titolo verso il basso: ogni pagina perdeva una fascia intera solo per il ritorno. Ora è un tasto **tondo e minimale** (solo l\'icona della casa) subito dopo l\'interruttore del tema, **alto come tutti gli altri comandi della barra** e allineato con loro.',
+          '**Ogni schermata guadagna ~45px di contenuto**: titoli, elenchi e griglie cominciano più in alto, senza il pulsante di ritorno in mezzo.',
+          '**Il tasto c\'è in tutte le pagine, senza doppioni.** Il pannello **Admin** era l\'unico senza (aveva un suo pulsante “Home” nella riga del titolo, e un “Torna alla home” nella schermata di accesso): ora usa lo stesso tasto della barra, come le altre.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**Niente più contenuti sotto la barra.** Togliendo il pulsante dal flusso della pagina, il primo elemento di ogni schermata sarebbe finito **dietro** alla barra fissa (interruttore, Home, Classifica/Parole/versione): il margine superiore delle pagine è stato ricalcolato, con `safe-area-inset-top` per i telefoni con notch in modalità app.',
+          '**Rimossa una regola duplicata** che teneva il margine superiore a 30px in un punto e a 22px in un altro (a seconda di quale vinceva nel foglio di stile): due valori per la stessa cosa sono esattamente ciò che fa riapparire i difetti dopo una modifica.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Verificato sul browser reale su **11 schermate** (home, classifica, novità, parole, scheda, profili, profilo, impostazioni single player, admin, sala d\'attesa, partita): il tasto è sempre a **72px da sinistra, 8px dall\'alto, 28×28px**, stessa altezza e stessa riga dell\'interruttore del tema, con **41px di spazio** prima di “Classifica”; il primo contenuto di ogni pagina comincia a **44px** o più, quindi mai sotto la barra.',
+          'Verificato anche il comportamento: il tasto **chiede conferma** durante una partita o in una stanza (con “no” si resta in partita, con “sì” si esce e si torna alla home) e **notifica il server** quando si lascia una stanza, come prima.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.22.0',
+    date: '2026-09-25',
+    title: 'In classifica si vede prima la classifica',
+    promo: {
+      emoji: '🥇',
+      headline: 'Prima chi è davanti a te',
+      text: 'Aprendo la Classifica vedi subito la graduatoria dei giocatori. Le tue statistiche (partite, parole, storico) sono scese sotto: ci sono sempre, ma non ti nascondono più la classifica.',
+    },
+    changes: [
+      {
+        kind: 'improvement',
+        items: [
+          '**La classifica dei giocatori è la prima cosa che si vede.** Prima, in cima alla pagina, c\'era il riquadro **“Le tue statistiche”** — un blocco lungo (numeri personali, parole per lunghezza, storico partite) che spingeva la **graduatoria sotto la piega**: su un telefono bisognava scorrere per vedere chi era in testa, che è il motivo per cui si apre quella pagina. Ora l\'ordine è: filtri → **classifica** → statistiche personali.',
+          '**Le statistiche restano complete e in evidenza**, sotto la classifica, separate da una riga: niente è stato tolto né nascosto in un pannello.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Verificato sul browser reale (non a occhio): l\'ordine dei blocchi nel DOM è `… tabs → filters → leaderboard__list → note → leaderboard__stats` e la posizione verticale delle statistiche (561px) è sotto quella della classifica (397px) a 390×745.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.21.0',
+    date: '2026-09-25',
+    title: 'Le novità si leggono a colpo d\'occhio',
+    promo: {
+      emoji: '✨',
+      headline: 'Cosa c\'è di nuovo, in tre righe',
+      text: 'Nella pagina Novità ogni versione si apre con un riassunto chiaro: cosa cambia per chi gioca, senza termini tecnici. Se poi vuoi i dettagli, sono lì sotto.',
+    },
+    changes: [
+      {
+        kind: 'improvement',
+        items: [
+          '**Ogni versione ha una card di riassunto** in cima: un titolo e due-tre righe in **linguaggio non tecnico** che dicono cosa ci guadagni a giocare (es. «Parla con chi gioca con te», «La partita non si perde più»). Prima bisognava leggere l\'elenco puntato — spesso pieno di dettagli per sviluppatori — per capire se la versione valeva la pena.',
+          '**I dettagli tecnici restano dove sono**: la card riassume, l\'elenco sotto documenta. Niente è stato tolto.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**I grassetti e i corsivi ora si vedono davvero.** Le note di rilascio sono scritte con grassetti, corsivi e frammenti di codice fin dall\'inizio, ma la pagina li mostrava **così com\'erano, con gli asterischi e i backtick in vista**: 251 grassetti, 21 corsivi e 201 frammenti di codice finivano a schermo come simboli. Ora sono formattati come si deve.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il campo `promo` è **opzionale**: le versioni più vecchie non ce l\'hanno e la pagina le mostra come prima (nessuna card vuota, nessun segnaposto inventato).',
+          'Il testo promozionale vive **accanto** alle note di rilascio (`version.ts`), non in un file separato: due elenchi paralleli finirebbero per disallinearsi, ed è esattamente il tipo di divergenza che questa pagina dovrebbe evitare.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.20.0',
+    date: '2026-09-25',
+    title: 'Invita con un link (e la home sta in una schermata)',
+    promo: {
+      emoji: '🔗',
+      headline: 'Invita chi vuoi con un link',
+      text: 'Mandi il link della stanza in chat e chi lo apre trova il codice già pronto: un tocco ed è in partita con te. E la schermata iniziale non si scorre più: c\'è tutto sotto il pollice.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Invita gli amici con un link, non solo con un codice.** In sala d\'attesa c\'è il tasto **Condividi l\'invito**: si apre il foglio di condivisione del telefono (WhatsApp, Telegram, mail…) con già scritti il messaggio e il **link della stanza**. Chi lo riceve apre il gioco e trova il **codice già nel campo “Entra”**, con una riga che spiega cosa fare: un tocco e sei dentro.',
+          '**Se la condivisione non c\'è, il link si copia.** Sui browser desktop (e nella WebView dell\'app Android) il foglio di condivisione può non esistere: in quel caso il link finisce negli **appunti** con l\'avviso “Link copiato! Incollalo dove vuoi”. C\'è anche un tasto **Copia il link** separato, per chi preferisce gli appunti alla condivisione. Se persino gli appunti sono negati, il link viene **mostrato a schermo** invece di sparire in silenzio.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**La home entra in una schermata sola.** Prima servivano ~980px: su un telefono moderno (~750px utili sotto le barre del browser) il codice stanza e le voci in fondo restavano **fuori schermo**, e per giocare in due bisognava scorrere. Ora la home è ~700px: l\'icona della **margherita passa da 86px a 40-48px**, il titolo e i testi si stringono, i due pulsanti principali scendono da 54px a 44px e i crediti vanno su righe più piccole. **Niente più scorrimento** su iPhone 15 / Pixel 8 e nell\'app.',
+          '**Sui telefoni bassi (iPhone SE, barre del browser invadenti) si stringe ancora**, con due soglie di altezza: sotto 740px sparisce il motto (decorativo) e sotto 620px anche il conteggio delle schede, che si trova comunque nella pagina delle schede. I comandi restano tutti.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il link è `?stanza=CODICE` sull\'indirizzo da cui si gioca, **non** su quello del server delle stanze: chi apre il link carica l\'app (che sa già a quale server parlare) e poi entra nella stanza. Funziona sia col frontend e il server sullo stesso dominio, sia con il frontend su CDN e il server altrove.',
+          'Il parametro viene **tolto dall\'indirizzo appena letto**: un invito si consuma una volta sola, altrimenti tornando alla home dopo una partita ricomparirebbe il codice della stanza precedente nel campo “Entra”, come se l\'invito fosse appena arrivato.',
+          'Costruzione e lettura del link sono **logica pura e testata** (`net/roomLink.ts`, 10 test): codice normalizzato (4-6 caratteri, niente simboli), invito precedente sostituito invece che accumulato, frammento rimosso, indirizzi manomessi che non fanno esplodere nulla.',
+          'Nessun plugin nativo aggiunto per la condivisione: si usa `navigator.share` quando c\'è e la clipboard come ripiego. Un `@capacitor/share` darebbe il foglio di sistema anche nella WebView dell\'app, ma richiede una ricompilazione nativa: se serve, è il passo successivo.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.19.0',
+    date: '2026-09-25',
+    title: 'Parla con la stanza: tieni premuto il microfono',
+    promo: {
+      emoji: '🎤',
+      headline: 'Parla con chi gioca con te',
+      text: 'Tieni premuto il microfono e parla: ti sentono tutti, come al telefono. Vedi chi sta parlando, puoi zittirti quando vuoi. Nessuna registrazione: la voce vive solo mentre la dici.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**La voce arriva in multiplayer.** In basso a destra c\'è un tasto con il **microfono**: si **tiene premuto** e si parla, e gli altri della stanza sentono la voce **mentre si parla** — circa **0,2 secondi** di ritardo, quindi è una conversazione, non un messaggio vocale da ascoltare dopo. Funziona in lobby (per accordarsi prima di partire), durante la partita e a fine partita.',
+          '**Si vede chi sta parlando**: accanto al nome, in classifica e in lobby, compaiono **tre barrette animate**. Con più giocatori è l\'unico modo per sapere chi ha la voce, e non serve guardare il tasto.',
+          '**Tasto per silenziarsi** (sopra al microfono): spegne il proprio microfono per la sessione, per quando in casa c\'è rumore. Il silenziamento **non viene ricordato** alla sessione successiva: ritrovarsi col microfono chiuso da ieri sarebbe una sorpresa sgradevole.',
+          '**Niente registrazioni e niente archivio.** L\'audio esiste solo mentre viene pronunciato: il server lo **inoltra e basta**, non lo salva da nessuna parte, e chi non è nella stanza non riceve nulla.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Il tasto non ha etichetta**: durante una partita lo spazio è poco e l\'icona del microfono dice già tutto. Si **illumina e pulsa** mentre trasmette, così si capisce che il microfono è aperto anche senza guardare l\'indicatore del sistema.',
+          '**Il rilascio viene intercettato su tutta la finestra**, non solo sul tasto: se il dito scivola fuori dal pulsante, se arriva una telefonata o se l\'app va in background, la voce si ferma comunque. Un microfono che resta aperto perché il dito è uscito dal pulsante sarebbe il difetto peggiore di questa funzione.',
+          '**Il microfono si chiude da solo dopo un minuto** di silenzio (e uscendo dalla stanza), per non tenere la traccia audio aperta per una partita intera se non si parla mai.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Audio in PCM a 16 kHz mono, pacchetti da 64 ms** (~32 KB/s per voce). Niente WebRTC: per un “tieni premuto” dentro una partita non servono signaling, STUN e TURN, e la differenza di ritardo (0,2 s contro 0,05 s) non vale la complicazione. L\'audio esce da un **AudioWorklet** che decima e impacchetta i campioni mentre si parla, quindi il ritardo è quello di un pacchetto, non quello di una clip registrata.',
+          'Chi ascolta accoda i pacchetti con un **buffer di 120 ms** (`net/voiceChat.ts`): assorbe i ritardi della rete senza rendere la voce “lontana”. Se la coda supera i 600 ms (rete bloccata, pagina in background) ci si riallinea, perché meglio un taglio che una voce in ritardo di due secondi.',
+          '**La voce di chi parla non torna mai indietro** (il server usa `socket.to` invece di `io.to`): con le casse accese sarebbe un eco sulla propria voce a ogni frase.',
+          'I limiti stanno tutti in `VoiceRelay` (`apps/server/src/voice.ts`), logica **pura** rispetto al tempo e quindi testata senza socket e senza timer: al massimo **4 voci insieme** (ogni voce aperta costa banda a tutti gli ascoltatori, non solo a chi parla), massimo **40 pacchetti al secondo** per giocatore e pacchetti di dimensione valida. Il posto di chi parla si libera al rilascio del tasto o dopo 3 secondi di silenzio, così un client che sparisce non blocca il canale.',
+          'Verifica **end-to-end** (`tests/e2e/voice.mjs`): pacchetti ricevuti da tutti tranne chi parla, nessun audio da chi non ha aperto il canale, pacchetti malformati scartati, tetto alle voci, posto liberato da rilascio e da disconnessione. Il test ha scoperto un difetto **serio e preesistente**: un client che emetteva un evento **senza callback** faceva cadere l\'intero server (`ack is not a function`, bastava un `emit`). Tutti i gestori con ack usano ora un ack sicuro.',
+          'Il worklet è un **file a parte** con hash nel nome (`vite.config.ts`, `assetsInlineLimit`): sotto la soglia di default Vite lo avrebbe incorporato come `data:` URL, che dipende dal CSP della pagina e dalle regole della WebView nell\'app Android.',
+          'Il worklet non può importare le costanti condivise (vive in un contesto a sé), quindi le ricopia: un test (`voiceCapture.test.ts`) verifica che frequenza e dimensione dei pacchetti **non divergano** da quelle del server, altrimenti la voce smetterebbe di funzionare in partita.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.18.0',
+    date: '2026-09-25',
+    title: 'Podio di fine partita e barra in alto allineata',
+    promo: {
+      emoji: '🏆',
+      headline: 'La premiazione sul podio',
+      text: 'A fine partita i primi tre salgono sul podio con i loro avatar: corona al vincitore, alone che pulsa e coriandoli. Il podio sale a scaglioni, dal terzo al primo.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Podio di fine partita in multiplayer.** Alla fine della partita i primi tre compaiono su un podio, con **avatar o foto**, nome e punti: il vincitore è al centro, sulla pedana più alta, con la **corona** e un alone che pulsa. Le pedane **salgono** una dopo l\'altra (dal terzo al primo) e qualche coriandolo cade sulla scena. Il podio **non sostituisce** la classifica: sotto resta l\'elenco completo con tutte le parole di ognuno.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Barra in alto allineata.** L\'icona del tema era un cerchio da 38px, più alto di Classifica, Parole e versione (28px): si vedeva subito che le icone non erano alla stessa altezza. Ora c\'è **una sola misura** per tutti i comandi della barra (`--topbar-h`), quindi i due gruppi — a sinistra e a destra — sono allineati e nessuna icona sporge.',
+          '**Il tema ora è un vero interruttore.** Prima era un pulsante che scambiava l\'icona 🌙/☀️; ora la **pallina scorre** da un lato all\'altro e porta l\'icona del tema attivo, con un rimbalzo morbido al cambio. Lo stato si legge a colpo d\'occhio, senza dover interpretare quale delle due icone sia quella corrente.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'L\'interruttore del tema è un elemento con `role="switch"` e `aria-checked`: i lettori di schermo lo annunciano come interruttore (acceso/spento), non come pulsante generico.',
+          'Le animazioni del podio (entrata a scaglioni, alone, coriandoli) usano **solo CSS** e ricadono nel blocco globale `prefers-reduced-motion`, che le disattiva per chi lo richiede.',
+          'Il podio è un componente a sé (`components/Podium.tsx`): la schermata di riepilogo resta dedicata a classifica e parole.',
+        ],
+      },
+    ],
+  },
+
+  {
     version: '0.17.1',
     date: '2026-09-22',
     title: 'Rientro automatico in partita quando la rete si riconnette',
+    promo: {
+      emoji: '📶',
+      headline: 'La partita non si perde più',
+      text: 'Se la rete fa i capricci o il telefono va in background, il gioco rientra da solo nella stanza: riprendi a giocare con i tuoi punti, senza rifare nulla.',
+    },
     changes: [
       {
         kind: 'fix',
@@ -52,6 +360,11 @@ export const RELEASES: ReleaseEntry[] = [
     version: '0.17.0',
     date: '2026-09-22',
     title: 'Riepilogo arcade, classifica separata e countdown a ogni round',
+    promo: {
+      emoji: '🎬',
+      headline: 'Il riepilogo diventa uno show',
+      text: 'A fine round la partita si rivede come in TV: i concorrenti in basso e le parole che si accendono una alla volta, col punteggio che sale. E il 3-2-1 c\'è a ogni round.',
+    },
     changes: [
       {
         kind: 'feature',
@@ -89,6 +402,11 @@ export const RELEASES: ReleaseEntry[] = [
     version: '0.16.1',
     date: '2026-09-22',
     title: 'Più parole valide, tag corretti e feedback negli ultimi 10 secondi',
+    promo: {
+      emoji: '⏱️',
+      headline: 'Più parole, meno sorprese',
+      text: 'Quasi 14.000 parole in più che prima il gioco rifiutava senza spiegazione, e un promemoria sonoro negli ultimi dieci secondi: sai sempre quanto tempo ti resta.',
+    },
     changes: [
       {
         kind: 'fix',
@@ -124,6 +442,11 @@ export const RELEASES: ReleaseEntry[] = [
     version: '0.16.0',
     date: '2026-09-22',
     title: 'Una sola lista di parole, 3 livelli, difficoltà misurata in parole',
+    promo: {
+      emoji: '🎯',
+      headline: 'Tre livelli, tutti onesti',
+      text: 'Facile vuol dire davvero facile: ogni schermata ha il numero di parole dichiarato (~126, ~59 o ~28) e il punteggio massimo non balla più da una partita all\'altra.',
+    },
     changes: [
       {
         kind: 'fix',
@@ -157,6 +480,11 @@ export const RELEASES: ReleaseEntry[] = [
     version: '0.15.0',
     date: '2026-09-22',
     title: 'Dizionario verificato, schede equilibrate, pagina Parole a due viste',
+    promo: {
+      emoji: '📖',
+      headline: 'Schede equilibrate, dizionario affidabile',
+      text: 'Stessa difficoltà, stessa sfida: il punteggio massimo di una scheda non fa più salti enormi. E nella pagina Parole vedi cosa si può comporre e cosa esiste nel dizionario.',
+    },
     changes: [
       {
         kind: 'feature',
