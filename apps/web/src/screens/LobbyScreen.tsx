@@ -9,7 +9,7 @@ import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
 import { roomShareText, roomUrl } from '../net/roomLink.js';
 import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
-import { Share2 } from 'lucide-react';
+import { Share2 } from '../components/icons.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { MusicPicker } from '../components/MusicPicker.js';
 

@@ -1,4 +1,4 @@
-import { House } from 'lucide-react';
+import { House } from './icons.js';
 import { useAppStore } from '../state/store.js';
 
 interface BackHomeProps {

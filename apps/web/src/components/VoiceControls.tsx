@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Mic, MicOff } from 'lucide-react';
+import { Mic, MicOff } from './icons.js';
 import { useAppStore } from '../state/store.js';
 import { voiceChat } from '../net/voiceChat.js';
 

@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.25.0';
+export const APP_VERSION = '0.25.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,31 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.25.1',
+    date: '2026-09-25',
+    title: 'La build riparte (e le icone non dipendono più da nessuno)',
+    promo: {
+      emoji: '🔧',
+      headline: 'Build riparata',
+      text: 'La 0.25.0 non riusciva a installarsi sui server: mancava un aggiornamento del file di lock delle dipendenze. Ora le poche icone dell\'interfaccia sono disegnate dentro l\'app, quindi il file di lock resta valido e la build passa.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Build bloccata**: l\'installazione si fermava con un errore perché `apps/web/package.json` chiedeva una libreria di icone che non era stata registrata nel file di lock (`pnpm-lock.yaml`). Il server di build installa con `--frozen-lockfile`, quindi si rifiuta di procedere quando i due file non combaciano — ed è giusto così: meglio un errore chiaro in build che un\'app con dipendenze diverse da quelle previste.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le quattro icone dell\'interfaccia (casa, microfono, microfono spento, condividi) sono ora **SVG in linea** in `components/icons.tsx`, con gli stessi tratti della libreria: quattro icone non valgono una dipendenza in più da tenere allineata. Il bundle web cala di ~5 kB e l\'app resta senza dipendenze esterne per le icone.',
+          '`icons.test.tsx` verifica i tratti disegnando i componenti in HTML statico, **senza browser**: se qualcuno modifica un\'icona, il test lo dice.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.25.0',
     date: '2026-09-25',
