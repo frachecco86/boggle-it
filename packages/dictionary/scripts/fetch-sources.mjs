@@ -30,6 +30,17 @@ const EXTENDED_IT_URL =
  */
 const BLOCKED_URL =
   'https://raw.githubusercontent.com/napolux/paroleitaliane/master/paroleitaliane/lista_badwords.txt';
+/*
+ * Lista di FREQUENZA italiana (OpenSubtitles 2018), ~800k righe `parola conteggio`
+ * dalla piu' frequente. Serve al generatore delle schede: le tre fasce di
+ * difficolta' sono le prime 5k / 20k / 60k parole giocabili di questa lista.
+ *
+ * Licenza: CC BY-SA 4.0 (FrequencyWords di hermitdave). Il file NON e' versionato
+ * (9,7 MB): l'output filtrato e' `data/frequency-it.txt`, prodotto da
+ * `scripts/build-frequency.mjs`.
+ */
+const FREQUENCY_URL =
+  'https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/it/it_full.txt';
 
 /**
  * Download robusto basato su curl.
@@ -92,13 +103,23 @@ async function fetchBlocked() {
   await download(BLOCKED_URL, dest);
   return dest;
 }
+
+/** Lista di frequenza (FrequencyWords, OpenSubtitles 2018, CC BY-SA 4.0). */
+async function fetchFrequency() {
+  console.log('→ FrequencyWords (lista di frequenza) …');
+  const dest = path.join(DATA, 'frequency-it.raw.txt');
+  await download(FREQUENCY_URL, dest);
+  return dest;
+}
+
 async function main() {
   await mkdir(DATA, { recursive: true });
-  const [morph, parole, extended, blocked] = await Promise.all([
+  const [morph, parole, extended, blocked, frequency] = await Promise.all([
     fetchMorphIt(),
     fetchParole(),
     fetchExtended(),
     fetchBlocked(),
+    fetchFrequency(),
   ]);
   const target = path.join(DATA, 'morph-it_048.txt');
   if (path.resolve(morph) !== path.resolve(target)) {
@@ -107,6 +128,7 @@ async function main() {
   void parole;
   void extended;
   void blocked;
+  void frequency;
   await writeFile(
     path.join(DATA, '.sources.json'),
     JSON.stringify(
@@ -115,6 +137,7 @@ async function main() {
         parole: '60000_parole_italiane.txt',
         extended: '280000_parole_italiane.txt',
         blocked: 'blocked-words.txt',
+        frequency: 'frequency-it.raw.txt',
       },
       null,
       2,

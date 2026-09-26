@@ -114,7 +114,12 @@ function shuffleWith<T>(arr: T[], rng: () => number): T[] {
   return arr;
 }
 
-function buildGrid(size: GridSize, faces: string[]): Grid {
+/**
+ * Costruisce la griglia a partire dall'elenco delle facce (una per cella,
+ * gia' mescolate). Esportata perché il generatore di schede compone la griglia
+ * con la distribuzione di lettere della fascia, non con le fasce di `COMPOSITION`.
+ */
+export function buildGrid(size: GridSize, faces: string[]): Grid {
   const tiles: Tile[] = faces.map((letter, index) => ({
     index,
     row: Math.floor(index / size),

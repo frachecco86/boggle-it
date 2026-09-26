@@ -1,63 +1,93 @@
 import { describe, expect, it } from 'vitest';
-import { createSchedaPool, rowsToGrid, scoreForWord, wordFromPath } from './index.js';
-import { generateScheda, solvingTrieFor } from './schedaGen.js';
-import { buildTrie } from './solver.js';
+import { acceptedWords, createSchedaPool, rowsToGrid, scoreForWord, wordFromPath } from './index.js';
+import { BAND_SIZES, bandNameFor, generateScheda } from './schedaGen.js';
 import type { Difficulty, GridSize } from './index.js';
 
-/** Lessico di prova: poche parole comuni, abbastanza per una 4x4. */
+/*
+ * Lessico di prova: poche parole, abbastanza per una 4x4.
+ *
+ * La stessa lista vale sia da dizionario completo sia da "lista di frequenza":
+ * le fasce risultano più corte dei 5k/20k/60k reali e il pool lo segnala con un
+ * warning — nei test è voluto, l'algoritmo non deve dipendere dalle dimensioni.
+ */
 const FULL = [
   'casa', 'caso', 'cose', 'costa', 'costa', 'cassa', 'cassaforte', 'asta', 'asso',
   'ora', 'ore', 'ora', 'oro', 'resa', 'resta', 'resto', 'stare', 'storia', 'torre',
   'arte', 'rate', 'seta', 'tesa', 'eros', 'erto', 'orto', 'orso', 'rosa', 'sasso',
   'festa', 'festa', 'testa', 'tessa', 'corsa', 'corso', 'sorte', 'sorta',
 ];
-const COMMON = ['casa', 'caso', 'cose', 'costa', 'asta', 'ora', 'oro', 'resta', 'testa', 'rosa'];
+const FREQUENCY = [
+  'casa', 'caso', 'cose', 'costa', 'asta', 'ora', 'oro', 'resta', 'testa', 'rosa',
+  ...FULL,
+];
 
 function pool() {
-  return createSchedaPool({ fullWords: FULL, commonWords: COMMON, maxWordLength: 12 });
+  return createSchedaPool({ fullWords: FULL, frequencyWords: FREQUENCY, maxWordLength: 12 });
 }
 
 describe('generatore schede', () => {
-  it('tutti i livelli risolvono sul dizionario completo', () => {
+  it('ogni difficoltà ha la sua fascia di frequenza, sempre più larga', () => {
     /*
-     * Scelta di prodotto: la difficoltà è la DENSITÀ di parole, non il lessico.
-     * Tutti i livelli usano il dizionario completo, così un livello "facile" è
-     * ricco di parole e uno "difficile" ne ha poche.
+     * Le fasce sono 5k / 20k / 60k parole più frequenti: la difficoltà non è il
+     * lessico ma QUANTE parole entrano nella fascia, più la composizione della
+     * griglia (vocali e lettere rare).
      */
-    expect(solvingTrieFor('facile')).toBe('full');
-    expect(solvingTrieFor('normale')).toBe('full');
-    expect(solvingTrieFor('difficile')).toBe('full');
+    expect(bandNameFor('facile')).toBe('facile');
+    expect(bandNameFor('normale')).toBe('normale');
+    expect(bandNameFor('difficile')).toBe('difficile');
+    expect(BAND_SIZES.facile).toBeLessThan(BAND_SIZES.normale);
+    expect(BAND_SIZES.normale).toBeLessThan(BAND_SIZES.difficile);
+  });
+
+  it('il pool costruisce le fasce dal dizionario completo', () => {
+    const p = pool();
+    expect(p.bandCounts.facile).toBeGreaterThan(0);
+    expect(p.bandCounts.facile).toBeLessThanOrEqual(p.bandCounts.difficile);
   });
 
   it('genera una scheda coerente con la sua griglia', () => {
     const p = pool();
-    const tries = { full: buildTrie(FULL, { maxLength: 12 }) };
-    // Tentativi finché una griglia 4x4 soddisfa i requisiti minimi.
     const scheda = generateScheda({
       size: 4,
       difficulty: 'normale',
-      tries,
+      tries: p.tries,
       rng: Math.random,
       id: 'test-001',
       maxAttempts: 500,
     });
-    // Il lessico di prova è minuscolo: possiamo non trovare una scheda di qualità.
-    if (!scheda) return;
-    expect(scheda.id).toBe('test-001');
-    expect(scheda.grid.split('\n')).toHaveLength(4);
-    expect(scheda.words.length).toBeGreaterThan(0);
+    expect(scheda).not.toBeNull();
+    expect(scheda!.id).toBe('test-001');
+    expect(scheda!.grid.split('\n')).toHaveLength(4);
+
+    /*
+     * Due elenchi: `words` (parole attese della fascia) e `allWords` (tutte
+     * quelle accettate, dizionario intero). Il secondo contiene il primo.
+     */
+    const allWords = acceptedWords(scheda!);
+    const acceptedSet = new Set(allWords);
+    expect(allWords.length).toBeGreaterThan(0);
+    for (const word of scheda!.words) {
+      expect(acceptedSet.has(word)).toBe(true);
+    }
+
     // Ogni parola dichiarata deve esistere sulla griglia per davvero.
-    const grid = rowsToGrid(scheda.grid);
-    const all = new Set(grid.tiles.map((t) => t.letter));
-    expect(all.size).toBeGreaterThan(0);
-    for (const word of scheda.words) {
+    const grid = rowsToGrid(scheda!.grid);
+    const letters = new Set(grid.tiles.map((t) => t.letter));
+    expect(letters.size).toBeGreaterThan(0);
+    for (const word of allWords) {
       // lettere tutte presenti in griglia (condizione necessaria, non sufficiente)
-      for (const ch of word) expect(all.has(ch) || ch === 'u').toBe(true);
+      for (const ch of word) expect(letters.has(ch) || ch === 'u').toBe(true);
     }
-    // Ordinamento per lunghezza decrescente.
-    for (let i = 1; i < scheda.words.length; i++) {
-      expect(scheda.words[i - 1]!.length).toBeGreaterThanOrEqual(scheda.words[i]!.length);
+    // Ordinamento per lunghezza decrescente e `longest` coerente.
+    for (let i = 1; i < allWords.length; i++) {
+      expect(allWords[i - 1]!.length).toBeGreaterThanOrEqual(allWords[i]!.length);
     }
+    expect(scheda!.longest).toBe(allWords[0]!.length);
+  });
+
+  it('acceptedWords ripiega sulle parole attese per le schede di formato 1', () => {
+    expect(acceptedWords({ words: ['casa'] })).toEqual(['casa']);
+    expect(acceptedWords({ words: ['casa'], allWords: ['casa', 'caso'] })).toEqual(['casa', 'caso']);
   });
 
   it('il pool genera schede con id progressivi', () => {

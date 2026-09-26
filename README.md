@@ -240,6 +240,7 @@ sempre: un client manomesso non può inventare parole o percorsi.
 |---|---|---|
 | [Morph-it! 0.48](https://docs.sslmit.unibo.it/doku.php?id=resources:morph-it) (UniBO) | forme flesse, coniugazioni verbali | CC BY-SA 2.0 / LGPL |
 | [paroleitaliane](https://github.com/napolux/paroleitaliane) (napolux) | lessico comune | MIT |
+| [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (hermitdave) | fasce di frequenza d'uso (5k/20k/60k) per la difficoltà | CC BY-SA 4.0 |
 | [OpenGameArt](https://opengameart.org) (MintoDog, HydroGene, Bobjt, Wolfgang_, TinyWorlds) | 6 tracce musicali | CC0 1.0 |
 | [Google Fonts](https://fonts.google.com) (Baloo 2, Fredoka) | font dell'interfaccia | OFL 1.1 |
 | [Wikizionario](https://it.wiktionary.org/wiki/Appendice:Abbreviazioni) | abbreviazioni | CC BY-SA 3.0 |
@@ -249,6 +250,8 @@ Pipeline di build (`packages/dictionary/scripts/`):
 1. `fetch-sources.mjs` scarica le fonti grezze in `data/` (con retry: il sito UniBO è instabile).
 2. `build-words.mjs` normalizza (minuscolo, accenti → vocale base, solo `a-z`, 3-16 lettere),
    unisce le fonti, deduplica, ordina e produce `words.txt` + `words.br`.
+3. `build-frequency.mjs` ritaglia dalla lista di frequenza le prime 60.000 parole **giocabili**
+   e scrive `frequency-it.txt` (versionato): sono le fasce usate dal generatore delle schede.
 
 Risultato tipico: **386.946 parole**, 4,3 MB raw → **616 KB Brotli** (14%).
 

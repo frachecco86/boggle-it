@@ -282,7 +282,9 @@ export function HomeScreen() {
       </div>
 
       <footer className="home__footer">
-        Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni Wikizionario.
+        Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni
+        Wikizionario. Fasce di difficoltà: frequenza d'uso da FrequencyWords
+        (OpenSubtitles 2018, CC BY-SA 4.0).
         <br />
         Musica: “Happy Adventure” di TinyWorlds (CC0). Suoni generati nel browser.
       </footer>

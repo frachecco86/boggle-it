@@ -18,6 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadWordIndex, type WordIndex } from './wordIndex.js';
 import {
+  acceptedWords,
   schedaFileName,
   schedaKey,
   schedaWordPoints,
@@ -75,7 +76,8 @@ export function toMeta(scheda: Scheda): SchedaMeta {
     difficulty: scheda.difficulty,
     grid: scheda.grid,
     longest: scheda.longest,
-    wordCount: scheda.words.length,
+    // Conteggio delle parole che il giocatore può trovare (insieme accettato).
+    wordCount: acceptedWords(scheda).length,
   };
 }
 

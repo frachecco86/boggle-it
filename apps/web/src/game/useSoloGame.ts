@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  acceptedWords,
   isValidPath,
   pathMatchesWord,
   rowsToGrid,
@@ -216,10 +217,12 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setFeedback({ kind: 'duplicate', word, reason: 'Già trovata' });
       return;
     }
-    // Validazione contro le parole della SCHEDA, non contro il dizionario intero:
-    // la scheda dice esattamente cosa è componibile e valido.
-    const inScheda = schedaRef.current?.words.includes(word) ?? false;
-    if (!inScheda) {
+    // Validazione contro l'insieme ACCETTATO della scheda: con le schede di
+    // formato 2 è tutto il dizionario componibile sulla griglia, quindi una
+    // parola rara fuori fascia vale lo stesso. Le schede di formato 1 ripiegano
+    // sulle sole parole attese.
+    const accepted = schedaRef.current ? acceptedWords(schedaRef.current) : [];
+    if (!accepted.includes(word)) {
       audio.play('invalid');
       setFeedback({ kind: 'invalid', word, reason: 'Non una parola valida' });
       return;
@@ -303,7 +306,9 @@ export function useSoloGame(options: UseSoloGameOptions) {
         // `totalScore` ora è corretto: `roundScores` contiene già l'ultimo round.
         score: totalScore,
         words: words.length,
-        wordCount: schedaRef.current?.words.length ?? 0,
+        // Parole che si potevano trovare (insieme accettato): è il totale della
+        // scheda che il server mostra nelle statistiche.
+        wordCount: schedaRef.current ? acceptedWords(schedaRef.current).length : 0,
         longest,
         difficulty,
         gridSize,

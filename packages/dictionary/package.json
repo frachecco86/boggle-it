@@ -12,10 +12,11 @@
   },
   "scripts": {
     "fetch": "node scripts/fetch-sources.mjs",
-    "build": "node scripts/ensure-words.mjs && node scripts/build-words.mjs",
+    "build": "node scripts/ensure-words.mjs && node scripts/build-words.mjs && node scripts/build-frequency.mjs",
     "build:full": "node scripts/fetch-sources.mjs && node scripts/build-words.mjs",
     "typecheck": "tsc --noEmit",
-    "ensure": "node scripts/ensure-words.mjs"
+    "ensure": "node scripts/ensure-words.mjs",
+    "build:frequency": "node scripts/build-frequency.mjs"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run --passWithNoTests",
     "gen:schede": "tsx scripts/gen-schede.ts",
-    "verify:schede": "tsx scripts/verify-schede.ts"
+    "verify:schede": "tsx scripts/verify-schede.ts",
+    "measure:schede": "tsx scripts/measure-schede.ts"
   },
   "dependencies": {
     "@boggle/dictionary": "workspace:*",

@@ -12,8 +12,10 @@ dist/
 
 # Dati dizionario: fonti grezze e output non compresso (words.br E' versionato:
 # e' il dizionario compresso, ~830 KB, e rende i deploy riproducibili).
-# 60000_parole_italiane.txt È versionato (MIT, ~556 KB): serve al generatore schede
-# per i livelli facili e rende il build Docker riproducibile offline.
+# 60000_parole_italiane.txt È versionato (MIT, ~556 KB): entra nel dizionario
+# completo (`build-words.mjs`) e rende il build Docker riproducibile offline.
+# Le FASCE di difficoltà delle schede NON vengono da questo file (è alfabetico):
+# vengono da `frequency-it.txt`, vedi sotto.
 packages/dictionary/data/morph-it_048.txt
 # Lista estesa (280k): serve SOLO a rigenerare words.txt (`build:full`). Le sue
 # parole sono già dentro words.br, quindi il deploy non ne ha bisogno. 3 MB nel
@@ -21,6 +23,11 @@ packages/dictionary/data/morph-it_048.txt
 # non vale il peso. `blocked-words.txt` È invece versionato: e' un file di policy
 # (5 KB) e deve restare leggibile e modificabile nel repository.
 packages/dictionary/data/280000_parole_italiane.txt
+# Lista di frequenza grezza (FrequencyWords, 9,7 MB): si scarica con
+# `pnpm --filter @boggle/dictionary fetch`. L'output filtrato delle fasce
+# (`frequency-it.txt`, 60k parole giocabili) È versionato: serve al generatore
+# delle schede e non deve dipendere dalla rete.
+packages/dictionary/data/frequency-it.raw.txt
 packages/dictionary/data/current_version/
 packages/dictionary/data/words.txt
 packages/dictionary/data/.sources.json

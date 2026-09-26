@@ -7,7 +7,7 @@ import { createDictionaryFromText, type Dictionary } from '@boggle/dictionary';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA = path.resolve(__dirname, '../../../packages/dictionary/data/words.txt');
-const COMMON_WORDS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/60000_parole_italiane.txt');
+const FREQUENCY_WORDS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/frequency-it.txt');
 const CONSONANT_ENDINGS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/consonant-endings.txt');
 const ABBREVIATIONS_PATH = path.resolve(__dirname, '../../../packages/dictionary/data/abbreviations.txt');
 
@@ -94,14 +94,15 @@ export async function getSchedaPool(): Promise<SchedaPool> {
     poolBuilding = (async () => {
       if (!cachedWords) await loadServerDictionary();
       const startedAt = Date.now();
-      const [commonText, endingsText, abbrText] = await Promise.all([
-        existsSync(COMMON_WORDS_PATH) ? readFile(COMMON_WORDS_PATH, 'utf8') : Promise.resolve(''),
+      const [frequencyText, endingsText, abbrText] = await Promise.all([
+        existsSync(FREQUENCY_WORDS_PATH) ? readFile(FREQUENCY_WORDS_PATH, 'utf8') : Promise.resolve(''),
         existsSync(CONSONANT_ENDINGS_PATH) ? readFile(CONSONANT_ENDINGS_PATH, 'utf8') : Promise.resolve(''),
         existsSync(ABBREVIATIONS_PATH) ? readFile(ABBREVIATIONS_PATH, 'utf8') : Promise.resolve(''),
       ]);
       cachedPool = createSchedaPool({
         fullWords: cachedWords ?? [],
-        commonWords: commonText.split('\n'),
+        // Fasce di frequenza: servono al generatore di schede dell'admin.
+        frequencyWords: frequencyText.split('\n'),
         allowedConsonantEndings: endingsText.split('\n'),
         abbreviations: abbrText.split('\n'),
         maxWordLength: SCHEDA_MAX_WORD_LENGTH,

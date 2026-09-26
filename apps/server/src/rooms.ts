@@ -1,4 +1,5 @@
 import {
+  acceptedWords,
   DEFAULT_MUSIC_ID,
   generateGrid,
   generateRoomCode,
@@ -126,10 +127,17 @@ export class Room {
   /** Tutte le parole valide trovate nel round corrente (per il riepilogo mancate). */
   roundFoundWords = new Set<string>();
   /**
-   * Tutte le parole trovabili sulla scheda del round corrente.
-   * Arrivano pre-calcolate dalla scheda: nessun solver a runtime.
+   * Tutte le parole ACCETTATE sulla griglia del round corrente.
+   *
+   * Sono pre-calcolate nella scheda (`allWords`, dizionario intero): nessun
+   * solver a runtime. Con le schede di formato 1 valgono le sole parole attese.
    */
   roundValidWords: Set<string> = new Set();
+  /**
+   * Parole ATTESE della fascia di difficoltà: quelle che il riepilogo mostra come
+   * "parole che esistevano". È un sottoinsieme di `roundValidWords`.
+   */
+  roundExpectedWords: Set<string> = new Set();
 
   private readonly dictionary: Dictionary;
 
@@ -243,7 +251,8 @@ export class Room {
     this.phase = 'playing';
     this.grid = scheda ? rowsToGrid(scheda.grid) : generateGrid(this.gridSize, Math.random, this.difficulty);
     this.schedaId = scheda?.id ?? null;
-    this.roundValidWords = new Set(scheda?.words ?? []);
+    this.roundValidWords = new Set(scheda ? acceptedWords(scheda) : []);
+    this.roundExpectedWords = new Set(scheda?.words ?? []);
     this.roundFoundWords = new Set();
     for (const p of this.players.values()) {
       p.roundScore = 0;
@@ -279,10 +288,10 @@ export class Room {
       return { accepted: false, reason: 'Parola non corrispondente al percorso' };
     }
     if (normalized.length < 3) return { accepted: false, reason: 'Parola troppo corta' };
-    // Validazione contro le parole della SCHEDA (quando disponibile): è la stessa
-    // fonte usata dal client, quindi non ci sono divergenze né parole "strane"
-    // che il dizionario accetterebbe ma la scheda no. Fallback al dizionario per
-    // le stanze avviate senza scheda (test o catalogo vuoto).
+    // Validazione contro l'insieme ACCETTATO della scheda (dizionario intero):
+    // una parola rara fuori fascia vale lo stesso. È la stessa fonte usata dal
+    // client, quindi non ci sono divergenze. Fallback al dizionario per le
+    // stanze avviate senza scheda (test o catalogo vuoto).
     const validOnScheda =
       this.roundValidWords.size > 0
         ? this.roundValidWords.has(normalized)
@@ -290,7 +299,7 @@ export class Room {
     if (!validOnScheda) {
       return {
         accepted: false,
-        reason: this.roundValidWords.size > 0 ? 'Non una parola di questa scheda' : 'Parola non nel dizionario',
+        reason: this.roundValidWords.size > 0 ? 'Non componibile su questa griglia' : 'Parola non nel dizionario',
       };
     }
     if (player.roundWords.has(normalized)) return { accepted: false, reason: 'Parola gia\' trovata' };

@@ -1,23 +1,35 @@
 /**
- * Una "scheda": una griglia pre-generata e pre-risolta, con TUTTE le parole
- * trovabili. I giocatori non giocano griglie generate al volo: pescano una scheda
- * dal catalogo, così ogni partita è deterministica, riproducibile e verificata.
+ * Una "scheda": una griglia pre-generata e pre-risolta, con le parole trovabili.
+ * I giocatori non giocano griglie generate al volo: pescano una scheda dal
+ * catalogo, così ogni partita è deterministica, riproducibile e verificata.
  *
  * Le schede sono generate offline (`pnpm gen:schede`) e versionate in
- * `packages/shared/schede/`. Ogni scheda garantisce:
- *  - parole di varia lunghezza, incluse parole lunghe (≥ 7) quando possibile;
- *  - nei livelli facili, un'alta quota di parole comuni (non astruse): la griglia
- *    è risolta contro il lessico comune, non contro il dizionario intero.
+ * `packages/shared/schede/`. Ogni scheda porta DUE elenchi di parole:
+ *  - `words`: le parole della FASCIA della difficoltà (5k / 20k / 60k parole più
+ *    frequenti). Sono le parole "attese": su queste si misura la densità della
+ *    scheda, e sono quelle mostrate nel riepilogo ("parole che esistevano").
+ *  - `allWords`: TUTTE le parole componibili sulla griglia secondo il dizionario
+ *    intero. È l'insieme che il gioco ACCETTA: se trovi una parola rara fuori
+ *    fascia vale lo stesso (vedi `schedaGen.ts`).
  *
  * Lato admin le schede si possono aggiungere a runtime; il server le persiste su
- * file (vedi `SCHEDE_DIR`) e le serve dallo stesso catalogo.
+ * file (vedi `SCHEDE_DIR`) e le serve dallo stesso catalogo. Le schede scritte
+ * con il formato 1 (senza `allWords`) restano leggibili: valgono le sole `words`.
  */
 import type { Difficulty } from './difficulty.js';
 import { letterDisplay } from './grid.js';
 import type { Grid, GridSize, Tile } from './types.js';
 
 /** Versione del formato degli elementi di `Scheda`: da alzare su cambi incompatibili. */
-export const SCHEDA_FORMAT_VERSION = 1;
+export const SCHEDA_FORMAT_VERSION = 2;
+
+/**
+ * Parole accettate sulla griglia: `allWords` dal formato 2, altrimenti le sole
+ * parole della fascia (schede vecchie o create a mano).
+ */
+export function acceptedWords(scheda: Pick<Scheda, 'words' | 'allWords'>): string[] {
+  return Array.isArray(scheda.allWords) && scheda.allWords.length > 0 ? scheda.allWords : scheda.words;
+}
 
 export interface Scheda {
   /** Identificatore stabile e leggibile, es. `4-normale-017`. */
@@ -30,12 +42,20 @@ export interface Scheda {
    */
   grid: string;
   /**
-   * TUTTE le parole trovabili, ordinate per lunghezza decrescente.
-   * Pre-calcolate: a runtime non si risolve più nulla. I punti si derivano
-   * (`lunghezza − 2`), quindi non vengono salvati.
+   * Parole della FASCIA della difficoltà trovabili sulla griglia, ordinate per
+   * lunghezza decrescente. Pre-calcolate: a runtime non si risolve più nulla.
+   * I punti si derivano (`lunghezza − 2`), quindi non vengono salvati.
    */
   words: string[];
-  /** Lunghezza della parola più lunga. */
+  /**
+   * Tutte le parole componibili sulla griglia secondo il dizionario intero,
+   * ordinate per lunghezza decrescente. È l'insieme ACCETTATO in partita:
+   * `words` ne è un sottoinsieme.
+   *
+   * Assente nelle schede di formato 1 (allora valgono le sole `words`).
+   */
+  allWords?: string[];
+  /** Lunghezza della parola più lunga DELLA FASCIA. */
   longest: number;
 }
 

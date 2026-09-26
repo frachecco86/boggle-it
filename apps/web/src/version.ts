@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.26.0';
+export const APP_VERSION = '0.27.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,43 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.27.0',
+    date: '2026-09-26',
+    title: 'Le schede si generano per fasce di frequenza (e le parole rare ora valgono)',
+    promo: {
+      emoji: '🎚️',
+      headline: 'Difficoltà più chiara, parole rare accettate',
+      text: 'Le schede si generano partendo dalle parole più usate dell\u2019italiano, divise in tre fasce: le griglie facili sono piene di vocali e lettere comuni, quelle difficili di consonanti rare. E se trovi una parola rara che non era prevista, ora vale lo stesso: prima veniva rifiutata.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Tre fasce di frequenza**: le schede si generano con tre dizionari costruiti sulle 5.000 / 20.000 / 60.000 parole italiane più frequenti (fonte FrequencyWords, OpenSubtitles 2018). Da lì vengono le parole "attese" di ogni difficoltà, quelle del riepilogo "parole che esistevano".',
+          '**Le parole rare ora valgono**: ogni scheda porta l\u2019elenco COMPLETO delle parole componibili sulla griglia secondo il dizionario intero. Se trovi una parola fuori fascia viene accettata e vale come le altre (prima il gioco rispondeva "non una parola di questa scheda").',
+          '**Filtro di qualità a due condizioni**: numero di parole trovabili nella banda della difficoltà e almeno una parola lunga. Via le soglie di punteggio e la scala di lunghezze multiple: erano tre criteri in più da tarare.',
+          '**Nuovi strumenti**: `measure:schede` misura le griglie per tarare le bande, `build:frequency` ritaglia le fasce dalla lista di frequenza, `verify:schede` controlla il catalogo (densità, parola lunga, coerenza fra parole attese e accettate).',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**La difficoltà era solo apparente** (la prima versione dell\u2019algoritmo, misurata): campionando le lettere dalla fascia di frequenza, le tre difficoltà producevano la STESSA griglia — le statistiche di lettera dell\u2019italiano non cambiano con la frequenza (vocali 45,6% nel top 5k, 45,0% nel 20k–60k). La composizione della griglia (vocali e rare) resta quindi controllata e misurata: facile 44% vocali e 0% rare, normale 32% e 6%, difficile 22% e 12%.',
+          '**Il conteggio delle parole si invertiva**: un dizionario da 60k parole trova più parole di uno da 5k, quindi "facile" risultava più povero di "difficile". La densità si misura ora sulle parole che il giocatore può davvero trovare: misurate 85 / 49 / 26 su 4×4, 187 / 156 / 71 su 5×5, 336 / 226 / 156 su 6×6 (facile / normale / difficile).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '`Scheda` è al formato 2: `words` (parole attese della fascia) + `allWords` (insieme accettato). Le schede di formato 1 restano leggibili e ripiegano sulle sole `words` (vedi `acceptedWords()`).',
+          'Nuova fonte `packages/dictionary/data/frequency-it.txt` (60k parole giocabili ordinate per frequenza, 568 KB): è versionata, così la generazione delle schede non dipende dalla rete. La lista grezza (9,7 MB) si scarica con `pnpm --filter @boggle/dictionary fetch`.',
+          'Il catalogo è di **90 schede** (10 per combinazione): 328 KB con l\u2019insieme accettato incluso. Rigenerabile con `pnpm gen:schede`.',
+          'Le statistiche del server (`/schede`, `/schede/:id/stats`, catalogo Parole) e il conteggio inviato a fine partita usano le parole accettate: è il numero che descrive la scheda.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.26.0',
     date: '2026-09-26',

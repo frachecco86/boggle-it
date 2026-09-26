@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { acceptedWords } from '@boggle/shared';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { GameStats } from '../components/GameStats.js';
@@ -84,7 +85,7 @@ export function SoloGameScreen() {
         totalScore={game.totalScore}
         words={state.found.map((f) => f.word)}
         missedWords={state.missedWords}
-        allWords={state.scheda?.words}
+        allWords={state.scheda ? acceptedWords(state.scheda) : undefined}
         isGameOver={state.phase === 'gameEnd'}
         saveStatus={state.saveStatus}
         onNext={game.nextRound}

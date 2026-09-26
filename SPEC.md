@@ -52,16 +52,30 @@ schede pre-calcolate** (`packages/shared/schede/`). Ogni scheda contiene la grig
 le parole trovabili. Vantaggi: partite riproducibili, soluzioni verificate, nessun solver a
 runtime, e la possibilità di **filtrare la qualità** delle schede (parole lunghe, parole comuni).
 
+**Algoritmo di generazione** (`packages/shared/src/schedaGen.ts`): tre trie per fascia di
+**frequenza d'uso** (5.000 / 20.000 / 60.000 parole più frequenti, da `frequency-it.txt`) e
+griglia con la **composizione controllata** della difficoltà (vocali e lettere rare, misurate).
+Perché entrambe le cose: le statistiche di lettera dell'italiano NON cambiano con la frequenza
+(vocali 45,6% nel top 5k e 45,0% nel 20k–60k), quindi campionare le lettere dalla fascia
+produrrebbe la stessa griglia per tutti i livelli; la composizione è invece la leva che si sente.
+
+Ogni scheda porta **due elenchi di parole**:
+- `words` — le parole della fascia (le più frequenti componibili): sono le "attese", mostrate
+  nel riepilogo ("parole che esistevano");
+- `allWords` — TUTTE le parole del dizionario componibili sulla griglia: è l'insieme **accettato**
+  in partita (una parola rara fuori fascia vale lo stesso, stessi punti).
+
 Requisiti di qualità (imposti in generazione, con rigenerazione finché non è soddisfatto):
-- **densità di parole**: il numero di parole trovabili deve stare nella banda della difficoltà
-  (su 4×4 circa 130 / 60 / 30 per Facile / Normale / Difficile); è il criterio che DEFINISCE
-  la difficoltà, sostituendo la vecchia composizione vocali/rare;
-- **punteggio massimo** nella banda corrispondente (evita schede di sole parole cortissime);
-- parole di **varia lunghezza**, con almeno una parola lunga (≥ 7; su 6×6 tipicamente 9-12);
+- **densità di parole accettate** nella banda della difficoltà: su 4×4 circa 85 / 49 / 26,
+  su 5×5 187 / 156 / 71, su 6×6 336 / 226 / 156 (Facile / Normale / Difficile);
+- almeno **una parola lunga** (≥ 6 su 4×4, ≥ 7 su 5×5, ≥ 8 su 6×6);
 - tutte le griglie risolvono contro il **dizionario completo**: ogni voce del dizionario è
   giocabile e viceversa (una sola lista di parole valide).
 
-Catalogo di base: **180 schede** (20 per ognuna delle 9 combinazioni dimensione × difficoltà),
+I numeri si rimisurano con `pnpm --filter @boggle/server measure:schede`; le schede si
+verificano con `verify:schede`.
+
+Catalogo di base: **90 schede** (10 per ognuna delle 9 combinazioni dimensione × difficoltà),
 rigenerabili con `pnpm gen:schede` e ampliabili dal pannello admin.
 
 ### 3.2 Selezione parola (swipe)

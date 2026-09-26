@@ -1,15 +1,20 @@
 /**
  * Genera le schede pre-calcolate e le scrive in `packages/shared/schede/`.
  *
+ * L'algoritmo è quello descritto in `packages/shared/src/schedaGen.ts`: tre trie
+ * per fascia di FREQUENZA (5k / 20k / 60k parole più usate), griglia campionata
+ * con la frequenza reale delle lettere della fascia, filtro a due condizioni
+ * (densità + una parola lunga) e insieme accettato = dizionario intero.
+ *
  * Uso:
- *   pnpm gen:schede                      # tutte le combinazioni, 24 schede ciascuna (360 totali: 5 livelli x 3 dimensioni)
+ *   pnpm gen:schede                      # tutte le combinazioni, 10 schede ciascuna
  *   pnpm gen:schede -- --size 4 --difficolta normale --n 60
  *   pnpm gen:schede -- --size 4 --difficolta facile --n 40 --append
  *
  * Opzioni:
  *   --size 4|5|6          dimensione della griglia (default: tutte)
  *   --difficolta <nome>   facile|normale|difficile (default: tutte)
- *   --n <numero>          schede da generare per combinazione (default 100)
+ *   --n <numero>          schede da generare per combinazione (default 10)
  *   --append              aggiunge alle schede esistenti invece di sovrascrivere
  *   --seed <numero>       seme del generatore (per risultati riproducibili)
  */
@@ -17,6 +22,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  acceptedWords,
   createSchedaPool,
   DIFFICULTY_ORDER,
   normalizeWord,
@@ -87,7 +93,7 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 function main(): void {
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : ALL_DIFFICULTIES;
-  const count = Number(arg('n', '20'));
+  const count = Number(arg('n', '10'));
   const append = hasFlag('append');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
@@ -101,25 +107,31 @@ function main(): void {
 
   console.log('Carico il dizionario…');
   const fullWords = readWords('words.txt');
-  const commonWords = readWords('60000_parole_italiane.txt');
+  // Lista ORDINATA per frequenza: da qui si ritagliano le fasce 5k / 20k / 60k.
+  const frequencyWords = readWords('frequency-it.txt');
   // Liste canoniche di giocabilità: le STESSE usate dal build del dizionario
   // (`build-words.mjs`), così dizionario e schede non possono divergere.
   const allowedConsonantEndings = readCuratedList('consonant-endings.txt');
   const abbreviations = readCuratedList('abbreviations.txt');
   console.log(`  dizionario completo: ${fullWords.length.toLocaleString('it-IT')} parole`);
-  console.log(`  lessico comune:      ${commonWords.length.toLocaleString('it-IT')} parole`);
+  console.log(`  lista di frequenza:  ${frequencyWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  finali in consonante ammessi: ${allowedConsonantEndings.length}`);
   console.log(`  abbreviazioni ammesse: ${abbreviations.length}`);
 
   // Parole funzionali (articoli, preposizioni, possessivi come `tua`) NON sono più
-  // escluse: la lista delle parole giocabili coincide con il dizionario. Vedi
-  // `schedaPool.ts`. Restano fuori solo i troncamenti e le voci bloccate.
+  // escluse: la lista delle parole giocabili coincide con il dizionario. Restano
+  // fuori solo i troncamenti e le voci bloccate.
   const pool = createSchedaPool({
     fullWords,
-    commonWords,
+    frequencyWords,
     allowedConsonantEndings,
     abbreviations,
   });
+  console.log(
+    `  fasce: facile ${pool.bandCounts.facile.toLocaleString('it-IT')} · ` +
+      `normale ${pool.bandCounts.normale.toLocaleString('it-IT')} · ` +
+      `difficile ${pool.bandCounts.difficile.toLocaleString('it-IT')}`,
+  );
   mkdirSync(OUT_DIR, { recursive: true });
 
   for (const size of sizes) {
@@ -138,7 +150,11 @@ function main(): void {
       };
       const outPath = path.join(OUT_DIR, schedaFileName(size, difficulty));
       writeFileSync(outPath, JSON.stringify(file, null, 2) + '\n');
-      const avgWords = schede.length ? Math.round(schede.reduce((s, x) => s + x.words.length, 0) / schede.length) : 0;
+      // Parole ACCETTATE (quelle che il giocatore può trovare): è il numero che
+      // descrive la ricchezza di una scheda. `x.words` è solo la fascia attesa.
+      const avgWords = schede.length
+        ? Math.round(schede.reduce((s, x) => s + acceptedWords(x).length, 0) / schede.length)
+        : 0;
       const avgLongest = schede.length ? (schede.reduce((s, x) => s + x.longest, 0) / schede.length).toFixed(1) : '0';
       console.log(
         `✓ ${size}×${size} ${difficulty}: ${schede.length} schede  (medie: ${avgWords} parole, più lunga ${avgLongest})  in ${Date.now() - startedAt}ms`,

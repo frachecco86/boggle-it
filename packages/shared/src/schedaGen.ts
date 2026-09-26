@@ -1,19 +1,61 @@
 /**
- * Generazione di schede: griglia + soluzione completa, verificata e filtrata.
+ * Generazione di schede: griglia + soluzione verificata e filtrata.
  *
  * Perché offline (o da admin) e non a runtime per ogni partita:
- * Perché offline (o da admin) e non a runtime per ogni partita:
- *  - le schede si possono filtrare per qualità (numero di parole, parole lunghe),
+ *  - le schede si possono filtrare per qualità (numero di parole, parola lunga),
  *    cosa impossibile senza risolvere la griglia;
  *  - risolvere la griglia durante una partita multiplayer è spreco (e la soluzione
  *    non sarebbe uguale per tutti);
  *  - la stessa scheda può essere rigiocata e confrontata.
  *
- * Il filtro chiave è la DENSITÀ DI PAROLE. Tutti i livelli risolvono contro il
- * dizionario completo; la difficoltà è il numero di parole trovabili (e il
- * punteggio massimo che ne deriva), imposto con una banda per dimensione.
- * La composizione della griglia (vocali/rare) è solo un mezzo per generare
- * candidate plausibili: da sola separa poco i livelli (mediane 59/55/50 su 4×4).
+ * ============================================================================
+ * COME FUNZIONA
+ * ============================================================================
+ *
+ *   1. TRE TRIE PER FASCIA DI FREQUENZA (non tre liste curate a mano):
+ *      facile = prime  5.000 parole italiane più frequenti
+ *      normale = prime 20.000
+ *      difficile = prime 60.000
+ *      Da qui vengono le parole ATTESE (`words`): su queste si misura la densità
+ *      della scheda e sono quelle mostrate nel riepilogo. Niente rank per parola
+ *      e niente "% di parole comuni" da calcolare dopo.
+ *
+ *   2. COMPOSIZIONE CONTROLLATA PER DIFFICOLTÀ (vedi `grid.ts`): quota di vocali
+ *      e tetto alle lettere rare. Le griglie facili hanno vocali e consonanti
+ *      comuni, quelle difficili più consonanti rare.
+ *
+ *      PERCHÉ NON SI CAMPIONANO LE LETTERE DALLA FASCIA (come nella prima
+ *      versione dell'algoritmo): misurato, le statistiche di lettera
+ *      dell'italiano NON cambiano con la frequenza — vocali 45,6% nel top 5k e
+ *      45,0% nel 20k–60k, lettere rare 1,14% contro 1,24%. Campionando dalla
+ *      fascia, le tre difficoltà producevano la STESSA griglia. La composizione
+ *      resta quindi controllata (ed è la leva che si sente giocando).
+ *
+ *   3. SOLVE sul DIZIONARIO INTERO → `allWords`: sono le parole che il giocatore
+ *      può trovare, e su queste si misura la densità della scheda (vedi il punto
+ *      della misura più sotto). Un secondo solve sul trie della fascia → `words`:
+ *      le parole ATTESE (le più frequenti componibili), quelle mostrate nel
+ *      riepilogo "parole che esistevano". `words` è un sottoinsieme di `allWords`.
+ *
+ *   4. FILTRO DI QUALITÀ, due sole condizioni, entrambe su `allWords`:
+ *      - densità: numero di parole dentro la banda `[min, max]` della coppia
+ *        dimensione × difficoltà;
+ *      - almeno UNA parola lunga (vicina al massimo della griglia): evita griglie
+ *        fatte solo di parole corte.
+ *
+ *      PERCHÉ LA DENSITÀ SI MISURA SUL DIZIONARIO INTERO e non sul trie della
+ *      fascia (come nella prima versione): misurato, contando le parole della
+ *      fascia il numero si INVERTE fra i livelli — un trie da 60k parole trova
+ *      più parole di uno da 5k, quindi "facile" risultava più povero di
+ *      "difficile" (mediane su 4×4: 17 / 20 / 16). Contando le parole che il
+ *      giocatore può davvero trovare la scala è quella giusta: 79 / 45 / 24 su
+ *      4×4, 175 / 125 / 67 su 5×5, 314 / 207 / 131 su 6×6.
+ *
+ *   5. RETRY: fino a `maxAttempts` griglie; se nessuna passa si tiene quella più
+ *      vicina al centro della banda (ripiego, segnalato da `verify:schede`).
+ *
+ * I numeri delle bande (`DENSITY`, `MIN_LONGEST`) sono MISURATI: vedi
+ * `pnpm --filter @boggle/server measure:schede`.
  */
 import type { Difficulty } from './difficulty.js';
 import { generateGrid } from './grid.js';
@@ -21,10 +63,12 @@ import { gridToRows, type Scheda } from './scheda.js';
 import { solveGrid, type TrieNode } from './solver.js';
 import type { GridSize } from './types.js';
 
-/** Trie del dizionario usato per risolvere le griglie. */
+/** Trie per fascia di difficoltà. */
 export interface SchedaTries {
-  /** Dizionario completo (tutte le parole giocabili). */
+  /** Dizionario intero (tutte le parole giocabili): serve per `allWords`. */
   full: TrieNode;
+  /** Un trie per difficoltà, costruito sulle parole più frequenti della fascia. */
+  bands: Record<Difficulty, TrieNode>;
 }
 
 export interface GenerateSchedaOptions {
@@ -38,310 +82,190 @@ export interface GenerateSchedaOptions {
   id?: string;
 }
 
-/*
- * ============================================================================
- * CRITERI DI QUALITÀ DI UNA SCHEDA
- * ============================================================================
- *
- * Obiettivo di prodotto: entro la STESSA difficoltà il punteggio massimo di una
- * scheda deve stare in un intervallo prevedibile. Prima variava anche di 7 volte
- * (4×4 facile: 117–870) perché si controllavano solo i minimi, mai il tetto.
- *
- * I criteri sono 5, indipendenti e tutti verificati a ogni tentativo:
- *
- *  1. LESSICO — da quale dizionario si risolve la griglia (comune o intero).
- *     È il criterio che rende un livello "facile": parole che si conoscono.
- *  2. QUANTITÀ — numero minimo di parole trovabili: una scheda con 3 parole
- *     è tecnicamente valida ma noiosa.
- *  3. LUNGHEZZA — scala di lunghezze che DEVONO esistere (almeno una per taglia)
- *     e numero minimo di parole lunghe. Garantisce che premi le parole lunghe.
- *  4. RARITÀ — quota massima di parole fuori dal lessico comune. Nei livelli
- *     facili e normale non deve uscire `contumace` in mezzo a `casa`.
- *  5. BANDA DI PUNTEGGIO — il punteggio massimo (somma dei punti di TUTTE le
- *     parole, cioè il massimo teorico) deve stare in `[target×(1−tol), target×(1+tol)]`.
- *     È il criterio che rende il massimo prevedibile.
- *
- * Le bande sono tarate sulle misure reali (400 griglie per configurazione, vedi
- * i commenti di `BANDS`): sono centrate sul 50° percentile di ciò che la griglia
- * produce davvero con quel lessico, quindi la generazione le soddisfa in fretta.
- *
- * NOTA sulla dimensione: su 4×4 le parole da 9+ sono di fatto impossibili (servono
- * 9 celle adiacenti in sequenza su 16). Su 5×5 si arriva a 9, su 6×6 a 10 e oltre.
- */
-
 /**
- * Criteri di LUNGHEZZA per dimensione, indipendenti dalla difficoltà.
+ * Quante parole (le più frequenti) entrano nel trie di ogni fascia.
  *
- * La densità (numero di parole) è invece per difficoltà: vedi `DENSITY`.
+ * Sono la MANOPOLA della difficoltà: fasce più strette = meno parole comuni in
+ * griglia. I valori sono quelli dell'algoritmo (5k / 20k / 60k).
  */
-const SHAPE: Record<GridSize, {
-  /** Lunghezze che DEVONO esistere almeno una volta ciascuna. */
-  oneEachOf: number[];
-  /** Soglie "almeno N parole di almeno L lettere". */
-  minByLength: { length: number; count: number }[];
-}> = {
-  4: {
-    minByLength: [
-      { length: 5, count: 5 },
-      { length: 6, count: 2 },
-    ],
-    // 7+ raggiungibile solo di rado su 16 celle: non lo impongo come scala.
-    oneEachOf: [4, 5],
-  },
-  5: {
-    minByLength: [
-      { length: 6, count: 12 },
-      { length: 7, count: 3 },
-    ],
-    oneEachOf: [5, 6, 7],
-  },
-  6: {
-    minByLength: [
-      { length: 6, count: 25 },
-      { length: 7, count: 7 },
-      { length: 8, count: 2 },
-    ],
-    oneEachOf: [5, 6, 7],
-  },
+export const BAND_SIZES: Record<Difficulty, number> = {
+  facile: 5_000,
+  normale: 20_000,
+  difficile: 60_000,
 };
 
-/**
- * Obiettivo di DENSITÀ per dimensione × difficoltà.
- *
- * `min` / `max` sono i confini del numero di parole trovabili ammesso. Sono
- * MISURATI (200-500 griglie per configurazione sul dizionario della Fase 1):
- * centrati in modo che il generatore li soddisfi in fretta senza scartare troppo.
- *
- * Perché questi valori: la composizione delle lettere da sola produce su 4×4
- * mediane 59/55/50 parole — indistinguibili. Imporre la densità è ciò che rende
- * "facile" davvero ricco (≥ ~80 parole) e "difficile" davvero selettivo (≤ ~35).
- *
- * `scoreMin` / `scoreMax` accompagnano la densità: senza di essi una griglia con
- * moltissime parole brevissime passerebbe come "facile" pur valendo poco. Il
- * punteggio massimo è la somma dei punti di tutte le parole (massimo teorico).
- */
-const DENSITY: Record<GridSize, Record<Difficulty, {
-  /** Parole minime trovabili. */
-  min: number;
-  /** Parole massime trovabili. */
-  max: number;
-  /** Punteggio massimo minimo. */
-  scoreMin: number;
-  /** Punteggio massimo massimo. */
-  scoreMax: number;
-}>> = {
-  4: {
-    facile: { min: 85, max: 190, scoreMin: 230, scoreMax: 700 },
-    normale: { min: 38, max: 75, scoreMin: 90, scoreMax: 220 },
-    difficile: { min: 14, max: 34, scoreMin: 28, scoreMax: 95 },
-  },
-  5: {
-    facile: { min: 185, max: 360, scoreMin: 520, scoreMax: 1500 },
-    normale: { min: 85, max: 165, scoreMin: 200, scoreMax: 520 },
-    difficile: { min: 32, max: 80, scoreMin: 75, scoreMax: 230 },
-  },
-  6: {
-    facile: { min: 360, max: 750, scoreMin: 1150, scoreMax: 3200 },
-    normale: { min: 165, max: 320, scoreMin: 420, scoreMax: 1000 },
-    difficile: { min: 65, max: 155, scoreMin: 150, scoreMax: 420 },
-  },
-};
-
-/*
- * Tolleranza sul numero di parole quando si verifica una scheda già generata:
- * il generatore usa `[min, max]` tassativi, il verificatore un margine più largo
- * per non segnalare differenze introdotte da un dizionario leggermente diverso.
- */
-const DENSITY_TOLERANCE = 0.1;
-
-/**
- * Tetto sulle parole enumerate per griglia: non serve elencarle tutte per
- * verificare i criteri, e su 6×6 una griglia ricca può superarne 2000. Il taglio
- * è per lunghezza decrescente, quindi se scatta perdiamo le parole PIÙ CORTE (le
- * meno interessanti) e i criteri restano validi. Con 3000 non è mai scattato
- * nelle misure: è una rete di sicurezza.
- */
-const SOLVE_LIMIT = 3000;
-
-/**
- * Dizionario usato per risolvere la griglia.
- *
- * TUTTI i livelli usano il dizionario COMPLETO: la decisione di prodotto è che
- * ogni parola di >=3 lettere è giocabile, e la difficoltà la dà la DENSITÀ di
- * parole, non il lessico. (Prima i livelli facili usavano i soli ~60k comuni,
- * ma il loro tetto realistico su 4×4 è ~29 parole: troppo basso per un livello
- * "ricco", e non separava i livelli.)
- */
-export function solvingTrieFor(_difficulty: Difficulty): 'common' | 'full' {
-  return 'full';
+/** Nome della fascia usata da ogni difficoltà (per test e diagnostica). */
+export function bandNameFor(difficulty: Difficulty): keyof SchedaTries['bands'] {
+  return difficulty;
 }
 
 /**
- * Criteri di qualità, esposti per gli strumenti di verifica.
+ * Banda di DENSITÀ per dimensione × difficoltà: quante parole (del dizionario
+ * intero) devono essere trovabili sulla griglia.
  *
- * `pnpm --filter @boggle/server verify:schede` li usa per CONTROLLARE le schede
- * già generate: se qui cambia una soglia, lo script segnala le schede fuori norma
- * senza bisogno di rigenerarle. Tenere i criteri in un solo posto evita che lo
- * script di verifica e il generatore si disallineino (è già successo in passato
- * con i valori di difficoltà).
+ * `min` / `max` sono MISURATI (`measure-schede.ts`, 300 griglie per
+ * configurazione) e vanno in ordine: più parole sui livelli facili, meno su
+ * quelli difficili.
  */
+const DENSITY: Record<GridSize, Record<Difficulty, { min: number; max: number }>> = {
+  4: {
+    facile: { min: 46, max: 200 },
+    normale: { min: 25, max: 120 },
+    difficile: { min: 10, max: 60 },
+  },
+  5: {
+    facile: { min: 95, max: 450 },
+    normale: { min: 60, max: 250 },
+    difficile: { min: 25, max: 140 },
+  },
+  6: {
+    facile: { min: 200, max: 900 },
+    normale: { min: 110, max: 480 },
+    difficile: { min: 50, max: 300 },
+  },
+};
+
+/**
+ * Lunghezza minima della parola più lunga della scheda: "una parola vicina al
+ * massimo della griglia". Su una 4×4 il massimo realistico è ~7, quindi si chiede
+ * almeno una parola da 6; su 5×5 da 7; su 6×6 da 8.
+ */
+const MIN_LONGEST: Record<GridSize, number> = { 4: 6, 5: 7, 6: 8 };
+
+/*
+ * Tolleranza sul numero di parole quando si verifica una scheda già generata: il
+ * generatore usa `[min, max]` tassativi, il verificatore un margine più largo per
+ * non segnalare differenze introdotte da un dizionario leggermente diverso.
+ */
+const DENSITY_TOLERANCE = 0.15;
+
+/**
+ * Tetto sulle parole enumerate per griglia.
+ *
+ * Per la FASCIA è una rete di sicurezza (le fasce arrivano a poche centinaia di
+ * parole); per il dizionario INTERO deve essere alto, altrimenti l'elenco
+ * accettato verrebbe troncato e qualche parola valida verrebbe rifiutata in
+ * partita. `verify:schede` controlla che il tetto non sia mai stato raggiunto.
+ */
+const BAND_SOLVE_LIMIT = 3_000;
+const FULL_SOLVE_LIMIT = 50_000;
+
+/** Criteri esposti agli strumenti di verifica (una sola fonte di verità). */
 export const SCHEDA_CRITERIA = {
-  /** Requisiti di lunghezza per dimensione. */
-  shape: SHAPE,
-  /** Banda di densità (parole + punteggio) per dimensione × difficoltà. */
   density: DENSITY,
-  /** Tolleranza usata dal verificatore sui confini di densità. */
+  minLongest: MIN_LONGEST,
+  bandSizes: BAND_SIZES,
   densityTolerance: DENSITY_TOLERANCE,
-  /** Limite di sicurezza sul numero di parole enumerate per griglia. */
-  solveLimit: SOLVE_LIMIT,
-  /** Punteggio massimo di una scheda: somma dei punti di tutte le parole. */
-  maxScore: (words: readonly string[]): number =>
-    words.reduce((total, w) => total + (w.length - 2), 0),
+  bandSolveLimit: BAND_SOLVE_LIMIT,
+  fullSolveLimit: FULL_SOLVE_LIMIT,
 } as const;
 
-/** Banda di densità (parole e punteggio) per dimensione e difficoltà. */
+/** Banda di densità (numero di parole) per dimensione e difficoltà. */
 export function densityBandFor(size: GridSize, difficulty: Difficulty) {
   return DENSITY[size][difficulty];
 }
 
-/**
- * Scala di lunghezze che DEVONO esistere in una scheda, per dimensione.
- * Indipendente dalla difficoltà: garantisce che ci sia sempre una parola lunga
- * trovabile, anche nei livelli con poche parole.
- */
-export function requiredLengthsFor(size: GridSize, _difficulty: Difficulty): number[] {
-  return [...SHAPE[size].oneEachOf];
+/** Lunghezza minima della parola più lunga, per dimensione. */
+export function minLongestFor(size: GridSize): number {
+  return MIN_LONGEST[size];
 }
 
-/**
- * Soglie di lunghezza effettive ("almeno N parole di almeno L lettere").
- * Indipendenti dalla difficoltà: sono un presidio sulla presenza di parole
- * lunghe, non un criterio di difficoltà.
- */
-export function minByLengthFor(
-  size: GridSize,
-  _difficulty: Difficulty,
-): Array<{ length: number; count: number }> {
-  return SHAPE[size].minByLength.map((rule) => ({ ...rule }));
-}
+/* ------------------------------------------------------------------ */
+/* Generazione                                                         */
+/* ------------------------------------------------------------------ */
 
 /**
  * Genera una scheda di qualità, o `null` se nessun tentativo la soddisfa.
  *
- * Criteri (tutti verificati a ogni tentativo):
- *  1. DENSITÀ — numero di parole trovabili dentro `[min, max]` della difficoltà.
- *     È il criterio che DEFINISCE la difficoltà (più parole = più facile).
- *  2. PUNTEGGIO — punteggio massimo dentro `[scoreMin, scoreMax]`. Evita che una
- *     griglia di sole parole cortissime passi come "facile".
- *  3. LUNGHEZZA — ogni lunghezza della scala deve esistere, più un minimo di
- *     parole lunghe: garantisce che ci sia sempre qualcosa di soddisfacente
- *     anche nei livelli con poche parole.
+ * Criteri (entrambi verificati a ogni tentativo):
+ *  1. DENSITÀ — numero di parole della fascia dentro `[min, max]`.
+ *  2. PAROLA LUNGA — la più lunga trovata raggiunge `MIN_LONGEST[size]`.
  *
- * Il risultato contiene TUTTE le parole trovabili, ordinate per lunghezza
- * decrescente.
+ * Il risultato porta `words` (fascia) e `allWords` (dizionario intero), entrambi
+ * ordinati per lunghezza decrescente.
  */
 export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
   const { size, difficulty, tries } = options;
   const rng = options.rng ?? Math.random;
   const maxAttempts = options.maxAttempts ?? 400;
-  // Tutti i livelli risolvono sul dizionario completo (vedi `solvingTrieFor`).
-  const trimmed = tries.full;
+  const bandTrie = tries.bands[difficulty];
 
   const band = DENSITY[size][difficulty];
-  const requiredLengths = requiredLengthsFor(size, difficulty);
-  const minByLength = minByLengthFor(size, difficulty);
+  const minLongest = MIN_LONGEST[size];
 
   /*
    * Candidato di ripiego: la griglia più vicina alla banda vista finora.
    *
-   * Perché serve: se dopo `maxAttempts` nessuna griglia soddisfa TUTTI i criteri,
+   * Perché serve: se dopo `maxAttempts` nessuna griglia soddisfa i criteri,
    * `null` farebbe riprovare il pool all'infinito senza produrre schede. Il
    * ripiego è comunque una griglia valida e risolta, solo fuori banda.
    *
-   * ATTENZIONE: il ripiego va EVITATO per quanto possibile — se scatta spesso,
-   * il catalogo contiene schede che non rispettano la difficoltà dichiarata. Lo
+   * ATTENZIONE: il ripiego va EVITATO per quanto possibile — se scatta spesso, il
+   * catalogo contiene schede che non rispettano la difficoltà dichiarata. Lo
    * script `verify:schede` le segnala. Se succede, allargare la banda in `DENSITY`.
    */
-  let best: { grid: ReturnType<typeof generateGrid>; words: string[]; distance: number } | null = null;
+  let best: { grid: ReturnType<typeof generateGrid>; allWords: string[]; distance: number } | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Griglia con la composizione della difficoltà (vocali e rare controllate).
     const grid = generateGrid(size, rng, difficulty);
-    const words = solveGrid(grid, trimmed, { limit: SOLVE_LIMIT, minLength: 3 });
+    /*
+     * Le parole che il giocatore PUÒ trovare: si risolve sul dizionario intero.
+     * È anche l'insieme che il gioco accetta in partita (`allWords`), quindi
+     * questo solve serve sia al filtro sia al risultato: nessuno spreco.
+     */
+    const allWords = solveGrid(grid, tries.full, { limit: FULL_SOLVE_LIMIT, minLength: 3 });
 
-    // Una sola passata per lunghezze e punteggio.
-    const byLength = new Map<number, number>();
     let longest = 0;
-    let score = 0;
-    for (const w of words) {
-      byLength.set(w.length, (byLength.get(w.length) ?? 0) + 1);
-      if (w.length > longest) longest = w.length;
-      score += w.length - 2;
-    }
+    for (const w of allWords) if (w.length > longest) longest = w.length;
 
     /*
      * Distanza dal centro della banda, normalizzata: usata solo per scegliere il
-     * ripiego. Sommare gli scostamenti di parole e punteggio evita di preferire
-     * una griglia con tantissime parole ma punteggio bassissimo (o viceversa).
+     * ripiego. Il termine sulla lunghezza evita di preferire una griglia dentro
+     * banda ma senza nessuna parola lunga.
      */
-    const wordsMid = (band.min + band.max) / 2;
-    const scoreMid = (band.scoreMin + band.scoreMax) / 2;
+    const mid = (band.min + band.max) / 2;
     const distance =
-      Math.abs(words.length - wordsMid) / Math.max(1, wordsMid) +
-      Math.abs(score - scoreMid) / Math.max(1, scoreMid);
-    if (!best || distance < best.distance) best = { grid, words, distance };
+      Math.abs(allWords.length - mid) / Math.max(1, mid) +
+      Math.max(0, minLongest - longest) / minLongest;
+    if (!best || distance < best.distance) best = { grid, allWords, distance };
 
-    // 1. Densità: numero di parole nella banda della difficoltà.
-    if (words.length < band.min || words.length > band.max) continue;
-    // 2. Punteggio massimo nella banda.
-    if (score < band.scoreMin || score > band.scoreMax) continue;
+    // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
+    if (allWords.length < band.min || allWords.length > band.max) continue;
+    // 2. Almeno una parola "vicina al massimo" della griglia.
+    if (longest < minLongest) continue;
 
-    // 3. Scala completa: ogni lunghezza richiesta deve esistere.
-    let ok = true;
-    for (const len of requiredLengths) {
-      if (!byLength.has(len)) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) continue;
-
-    // 3b. Soglie per fascia: "almeno N parole di almeno L lettere".
-    // Uso "almeno L" e non "esattamente L": una parola da 10 conta anche per la
-    // soglia delle 9, che è ciò che il giocatore percepisce ("ho trovato parole lunghe").
-    for (const rule of minByLength) {
-      let count = 0;
-      for (const [len, n] of byLength) {
-        if (len >= rule.length) count += n;
-      }
-      if (count < rule.count) {
-        ok = false;
-        break;
-      }
-    }
-    if (!ok) continue;
-
-    return toScheda(options, size, difficulty, grid, words);
+    return toScheda(options, size, difficulty, grid, allWords, bandTrie);
   }
 
-  if (best) return toScheda(options, size, difficulty, best.grid, best.words);
+  if (best) return toScheda(options, size, difficulty, best.grid, best.allWords, bandTrie);
   return null;
 }
 
-/** Compone la `Scheda` finale ordinando le parole per lunghezza decrescente. */
+/**
+ * Compone la `Scheda` finale.
+ *
+ * `allWords` (dizionario intero) è già calcolato: è l'insieme accettato in
+ * partita. Qui si aggiungono le parole ATTESE della fascia, cioè le più
+ * frequenti componibili sulla griglia: si risolvono una volta sola, sulla
+ * griglia accettata, perché servono solo al riepilogo.
+ */
 function toScheda(
   options: GenerateSchedaOptions,
   size: GridSize,
   difficulty: Difficulty,
   grid: ReturnType<typeof generateGrid>,
-  words: string[],
+  allWords: string[],
+  bandTrie: TrieNode,
 ): Scheda {
-  const entries = [...words].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  const words = solveGrid(grid, bandTrie, { limit: BAND_SOLVE_LIMIT, minLength: 3 });
   return {
     id: options.id ?? '',
     size,
     difficulty,
     grid: gridToRows(grid),
-    words: entries,
-    longest: entries[0]?.length ?? 0,
+    words,
+    allWords,
+    longest: allWords[0]?.length ?? 0,
   };
 }

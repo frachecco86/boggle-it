@@ -22,6 +22,7 @@ import {
   type WordCatalogQuery,
   type SchedaStats,
   type SfxSlot,
+  acceptedWords,
   schedaWordPoints,
   WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
@@ -177,13 +178,14 @@ app.get('/preview', (req, res) => {
     });
   }
 
-  const sampleWords = [...scheda.words].sort((a, b) => b.length - a.length).slice(0, 8);
+  // Parole che il giocatore PUO' trovare (insieme accettato), non le sole attese.
+  const sampleWords = [...acceptedWords(scheda)].sort((a, b) => b.length - a.length).slice(0, 8);
   res.json({
     gridSize,
     difficulty,
     schedaId: scheda.id,
     grid: scheda.grid.split('\n').map((row) => row.toUpperCase()),
-    wordCount: scheda.words.length,
+    wordCount: acceptedWords(scheda).length,
     sampleWords,
     truncated: false,
   });
@@ -225,8 +227,8 @@ app.get('/schede', (_req, res) => {
       id: scheda.id,
       size: scheda.size,
       difficulty: scheda.difficulty,
-      words: scheda.words.length,
-      maxScore: scheda.words.reduce((total, w) => total + schedaWordPoints(w.length), 0),
+      words: acceptedWords(scheda).length,
+      maxScore: acceptedWords(scheda).reduce((total, w) => total + schedaWordPoints(w.length), 0),
       longest: scheda.longest,
     });
   }
@@ -305,7 +307,7 @@ app.get('/schede/:id/stats', (req, res) => {
   // Distribuzione per lunghezza + punteggio massimo.
   const counts = new Map<number, number>();
   let maxScore = 0;
-  for (const word of scheda.words) {
+  for (const word of acceptedWords(scheda)) {
     const len = word.length;
     counts.set(len, (counts.get(len) ?? 0) + 1);
     maxScore += schedaWordPoints(len);
@@ -325,7 +327,7 @@ app.get('/schede/:id/stats', (req, res) => {
     size: scheda.size,
     difficulty: scheda.difficulty,
     grid: scheda.grid,
-    wordCount: scheda.words.length,
+    wordCount: acceptedWords(scheda).length,
     maxScore,
     /*
      * SOLO la lunghezza della parola piu' lunga, NON la parola.
@@ -333,7 +335,7 @@ app.get('/schede/:id/stats', (req, res) => {
      * puo' leggere la risposta dell'API dalla console del browser, anche se la
      * UI non la mostra.
      */
-    longestLength: scheda.words.reduce((m, w) => Math.max(m, w.length), 0),
+    longestLength: acceptedWords(scheda).reduce((m, w) => Math.max(m, w.length), 0),
     byLength,
     record,
     gamesPlayed,
@@ -1537,12 +1539,18 @@ function scheduleRoundEnd(room: Room): void {
 }
 
 /**
- * Parole valide presenti nella scheda che nessuno ha trovato.
+ * Parole ATTESE presenti nella scheda che nessuno ha trovato.
  * Nessun solver: le parole arrivano pre-calcolate con la scheda.
  * Si mostrano le più lunghe (>= 5 lettere, max 20).
+ *
+ * Si usa l'insieme delle parole attese (fascia di difficoltà), non quello
+ * accettato: l'accettato contiene tutte le parole del dizionario componibili
+ * sulla griglia (centinaia, con le più rare), e il riepilogo diventerebbe un
+ * elenco di parole introvabili invece di "queste le conoscevi e ti sono sfuggite".
  */
 function computeMissedWords(room: Room): string[] {
-  return [...room.roundValidWords]
+  const expected = room.roundExpectedWords.size > 0 ? room.roundExpectedWords : room.roundValidWords;
+  return [...expected]
     .filter((w) => w.length >= 5 && !room.roundFoundWords.has(w))
     .sort((a, b) => b.length - a.length || a.localeCompare(b))
     .slice(0, 20);

@@ -1,18 +1,19 @@
 /**
  * Verifica le schede generate rispetto ai CRITERI dichiarati.
  *
- * A cosa serve: i criteri di qualità (densità di parole, punteggio, lunghezze)
- * vivono in `packages/shared/src/schedaGen.ts`. Questo script legge
- * le schede su disco e controlla che OGNI scheda li rispetti, segnalando le
- * violazioni. Serve dopo una rigenerazione, dopo aver cambiato una soglia, o per
- * capire perché una categoria si comporta diversamente dalle altre.
+ * A cosa serve: i criteri di qualità (densità di parole accettate, parola lunga,
+ * coerenza fra parole attese e accettate) vivono in
+ * `packages/shared/src/schedaGen.ts`. Questo script legge le schede su disco e
+ * controlla che OGNI scheda li rispetti, segnalando le violazioni. Serve dopo una
+ * rigenerazione, dopo aver cambiato una soglia, o per capire perché una categoria
+ * si comporta diversamente dalle altre.
  *
  * Uso:
  *   pnpm --filter @boggle/server verify:schede              # tutte le categorie
  *   pnpm --filter @boggle/server verify:schede -- --size 5  # solo una dimensione
  *   … -- --difficolta facile                                # solo una difficoltà
  *   … -- --verbose                                          # elenca ogni scheda
- *   … -- --measure 200                                      # misura N griglie fresche
+ *   … -- --measure 200                                      # genera N schede fresche
  *                                                           # (invece di leggere il disco)
  *
  * Esce con codice 1 se trova violazioni: utilizzabile in CI.
@@ -24,9 +25,8 @@ import {
   createSchedaPool,
   DIFFICULTY_ORDER,
   densityBandFor,
-  minByLengthFor,
+  minLongestFor,
   normalizeWord,
-  requiredLengthsFor,
   SCHEDA_CRITERIA,
   schedaFileName,
   type Difficulty,
@@ -77,11 +77,23 @@ interface Violation {
   detail: string;
 }
 
+interface SchedaSummary {
+  id: string;
+  words: number;
+  score: number;
+  longest: number;
+}
+
 /**
  * Controlla una scheda contro i criteri. Ritorna l'elenco delle violazioni.
  *
  * I criteri sono gli stessi usati dal generatore: qui li rileggiamo da
  * `SCHEDA_CRITERIA`, così non possono disallinearsi.
+ *
+ * La densità si misura sull'insieme ACCETTATO (`allWords`, dizionario intero):
+ * è il numero di parole che il giocatore può trovare, ed è l'unica misura che
+ * separa davvero i livelli (contando le parole della fascia il numero si
+ * invertiva fra facile e difficile).
  *
  * Il verificatore usa una TOLLERANZA sui confini di densità (`densityTolerance`):
  * le schede sono state generate con un dizionario preciso, e una ricostruzione
@@ -97,88 +109,89 @@ function checkScheda(
   const tol = SCHEDA_CRITERIA.densityTolerance;
   const minWords = Math.floor(band.min * (1 - tol));
   const maxWords = Math.ceil(band.max * (1 + tol));
-  const minScore = Math.floor(band.scoreMin * (1 - tol));
-  const maxScore = Math.ceil(band.scoreMax * (1 + tol));
+  const minLongest = minLongestFor(scheda.size);
 
-  const byLength = new Map<number, number>();
-  let score = 0;
-  // Parole della scheda che NON esistono nel dizionario: sintomo di schede stale
-  // generate con un dizionario diverso. Il gioco le accetterebbe (valida contro
-  // la scheda) ma non sono più nel lessico: incoerenza da segnalare.
+  /*
+   * L'insieme accettato in partita. Le schede di formato 1 non hanno `allWords`:
+   * allora valgono le sole `words`, e la scheda va segnalata perché con
+   * l'algoritmo nuovo la densità si misura sull'insieme accettato.
+   */
+  const accepted = Array.isArray(scheda.allWords) ? scheda.allWords : [];
+  if (accepted.length === 0) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'formato',
+      detail: 'manca allWords (scheda di formato 1?): rigenera con pnpm gen:schede',
+    });
+  }
+
+  // Statistiche e coerenza: le parole accettate devono esistere nel dizionario,
+  // altrimenti la scheda è stata generata con un lessico diverso (stale).
+  const acceptedSet = new Set(accepted);
   let notInDictionary = 0;
-  for (const w of scheda.words) {
-    byLength.set(w.length, (byLength.get(w.length) ?? 0) + 1);
+  let score = 0;
+  let longest = 0;
+  for (const w of accepted) {
     score += w.length - 2;
+    if (w.length > longest) longest = w.length;
     if (dictionary.size > 0 && !dictionary.has(w)) notInDictionary++;
   }
 
-  // 1. Densità: numero di parole nella banda della difficoltà.
-  if (scheda.words.length < minWords || scheda.words.length > maxWords) {
+  // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
+  if (accepted.length < minWords || accepted.length > maxWords) {
     violations.push({
       schedaId: scheda.id,
       criterion: 'densità',
-      detail: `${scheda.words.length} parole fuori banda [${band.min}, ${band.max}]`,
+      detail: `${accepted.length} parole accettate fuori banda [${band.min}, ${band.max}]`,
     });
   }
 
-  // 2. Punteggio massimo nella banda.
-  if (score < minScore || score > maxScore) {
+  // 2. Almeno una parola lunga (vicina al massimo della griglia).
+  if (longest < minLongest) {
     violations.push({
       schedaId: scheda.id,
-      criterion: 'punteggio',
-      detail: `${score} fuori banda [${band.scoreMin}, ${band.scoreMax}]`,
+      criterion: 'parola lunga',
+      detail: `la più lunga è di ${longest} lettere, minimo ${minLongest}`,
     });
   }
 
-  // 2b. Coerenza con il dizionario.
+  // 3. Il campo `longest` deve descrivere la scheda.
+  if (scheda.longest !== longest) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'metadati',
+      detail: `longest=${scheda.longest} ma la più lunga accettata è di ${longest} lettere`,
+    });
+  }
+
+  // 4. Le parole ATTESE (fascia) devono essere un sottoinsieme delle accettate.
+  const notAccepted = scheda.words.filter((w) => !acceptedSet.has(w));
+  if (notAccepted.length > 0) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'coerenza',
+      detail: `${notAccepted.length} parole attese non sono nell'insieme accettato (es. ${notAccepted[0]})`,
+    });
+  }
+
+  // 5. Coerenza con il dizionario.
   if (notInDictionary > 0) {
     violations.push({
       schedaId: scheda.id,
       criterion: 'dizionario',
-      detail: `${notInDictionary} parole della scheda non sono nel dizionario (schede stale?)`,
+      detail: `${notInDictionary} parole accettate non sono nel dizionario (schede stale?)`,
     });
-  }
-
-  // 3. Scala di lunghezze.
-  for (const len of requiredLengthsFor(scheda.size, scheda.difficulty)) {
-    if (!byLength.has(len)) {
-      violations.push({
-        schedaId: scheda.id,
-        criterion: 'lunghezza',
-        detail: `nessuna parola di ${len} lettere (richiesta dalla scala)`,
-      });
-    }
-  }
-
-  // 4. Soglie per fascia ("almeno N parole di almeno L lettere").
-  for (const rule of minByLengthFor(scheda.size, scheda.difficulty)) {
-    let count = 0;
-    for (const [len, n] of byLength) if (len >= rule.length) count += n;
-    if (count < rule.count) {
-      violations.push({
-        schedaId: scheda.id,
-        criterion: 'lunghezza',
-        detail: `${count} parole da ${rule.length}+ lettere < minimo ${rule.count}`,
-      });
-    }
   }
 
   return {
     violations,
     stats: {
       id: scheda.id,
-      words: scheda.words.length,
+      words: accepted.length,
       score,
-      longest: scheda.longest,
+      longest,
     },
   };
-}
-
-interface SchedaSummary {
-  id: string;
-  words: number;
-  score: number;
-  longest: number;
 }
 
 function summarize(label: string, summaries: SchedaSummary[], violations: Violation[], ms: number): void {
@@ -193,8 +206,8 @@ function summarize(label: string, summaries: SchedaSummary[], violations: Violat
   const flag = violations.length === 0 ? '✓' : '✗';
   console.log(
     `${flag} ${label.padEnd(20)} n=${String(summaries.length).padStart(3)}  ` +
-      `score ${Math.min(...scores)}–${Math.max(...scores)} (μ${mean.toFixed(0)} σ${sd.toFixed(0)} CV${((sd / mean) * 100).toFixed(0)}%)  ` +
-      `parole~${words.toFixed(0)}  ${ms}ms`,
+      `punteggio max ${Math.min(...scores)}–${Math.max(...scores)} (μ${mean.toFixed(0)} σ${sd.toFixed(0)} CV${((sd / mean) * 100).toFixed(0)}%)  ` +
+      `parole accettate~${words.toFixed(0)}  ${ms}ms`,
   );
 }
 
@@ -211,16 +224,21 @@ function main(): void {
 
   /*
    * Due modalità:
-   *  - `--measure N`: genera N griglie FRESCHE con il pool e le controlla. Serve
-   *    a valutare l'effetto di una modifica ai criteri senza toccare le schede.
+   *  - `--measure N`: genera N schede FRESCHE con il pool e le controlla. Serve
+   *    a valutare l'effetto di una modifica ai criteri senza toccare il catalogo.
    *  - default: legge le schede su disco e le controlla. È la verifica del
    *    catalogo che verrà effettivamente giocato.
    */
   let pool: ReturnType<typeof createSchedaPool> | null = null;
   if (measureCount !== undefined) {
-    console.log(`Modalità misura: ${measureCount} griglie fresche per categoria`);
-    console.log('  (leggo il dizionario completo, serve per risolvere)\n');
-    pool = createSchedaPool({ fullWords: readWords('words.txt') });
+    console.log(`Modalità misura: ${measureCount} schede fresche per categoria`);
+    console.log('  (leggo dizionario e fasce di frequenza, servono per risolvere)\n');
+    pool = createSchedaPool({
+      fullWords: readWords('words.txt'),
+      frequencyWords: readWords('frequency-it.txt'),
+      allowedConsonantEndings: readCuratedList('consonant-endings.txt'),
+      abbreviations: readCuratedList('abbreviations.txt'),
+    });
   }
 
   // Dizionario: serve al controllo di coerenza (schede stale).
@@ -261,7 +279,9 @@ function main(): void {
 
   console.log('');
   if (allViolations.length === 0) {
-    console.log(`✓ Nessuna violazione: ${measureCount === undefined ? 'le schede su disco' : 'le griglie misurate'} rispettano i criteri.`);
+    console.log(
+      `✓ Nessuna violazione: ${measureCount === undefined ? 'le schede su disco' : 'le schede misurate'} rispettano i criteri.`,
+    );
     process.exit(0);
   }
 
@@ -274,7 +294,7 @@ function main(): void {
   }
   console.log('\n  Usa --verbose per l\'elenco dettagliato (scheda per scheda).');
   console.log('  Se una soglia è troppo stretta, regolala in packages/shared/src/schedaGen.ts');
-  console.log('  e rigenera con: pnpm gen:schede -- --n 50');
+  console.log('  e rigenera con: pnpm gen:schede');
   process.exit(1);
 }
 
