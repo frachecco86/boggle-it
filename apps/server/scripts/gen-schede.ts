@@ -17,6 +17,8 @@
  *   --n <numero>          schede da generare per combinazione (default 10)
  *   --variant <nome>      standard|full: insieme di criteri (default standard)
  *   --append              aggiunge alle schede esistenti invece di sovrascrivere
+ *   --replace             rigenera SOLO le schede della variante scelta e tiene
+ *                         le altre (gli id ripartono dopo quelle conservate)
  *   --seed <numero>       seme del generatore (per risultati riproducibili)
  */
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -27,6 +29,7 @@ import {
   createSchedaPool,
   resolveSchedaVariant,
   SCHEDA_VARIANT_LABELS,
+  schedaVariantOf,
   DIFFICULTY_ORDER,
   normalizeWord,
   schedaFileName,
@@ -98,6 +101,7 @@ function main(): void {
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : ALL_DIFFICULTIES;
   const count = Number(arg('n', '10'));
   const append = hasFlag('append');
+  const replace = hasFlag('replace');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
   // Insieme di criteri: `standard` (storico) o `full` ("full criteria").
@@ -141,11 +145,19 @@ function main(): void {
 
   for (const size of sizes) {
     for (const difficulty of difficulties) {
-      const existing = append ? loadExisting(size, difficulty) : [];
-      const startIndex = existing.length + 1;
+      const existing = append || replace ? loadExisting(size, difficulty) : [];
+      /*
+       * `--replace`: si RIGENERANO le schede della variante richiesta e si
+       * tengono quelle delle altre. Serve quando cambiano i criteri di una sola
+       * variante (es. le regole di struttura dei "full criteria"): gli id delle
+       * schede sostituite ripartono subito dopo le conservate, quindi restano
+       * gli stessi di prima.
+       */
+      const kept = replace ? existing.filter((s) => schedaVariantOf(s) !== variant) : existing;
+      const startIndex = kept.length + 1;
       const startedAt = Date.now();
       const fresh = pool.generate(size, difficulty, count, { startIndex, rng, variant });
-      const schede = append ? [...existing, ...fresh] : fresh;
+      const schede = append || replace ? [...kept, ...fresh] : fresh;
       const file: SchedaFile = {
         version: SCHEDA_FORMAT_VERSION,
         generatedAt: new Date().toISOString(),
@@ -157,13 +169,16 @@ function main(): void {
       writeFileSync(outPath, JSON.stringify(file, null, 2) + '\n');
       // Parole ACCETTATE (quelle che il giocatore può trovare): è il numero che
       // descrive la ricchezza di una scheda. `x.words` è solo la fascia attesa.
-      const avgWords = schede.length
-        ? Math.round(schede.reduce((s, x) => s + acceptedWords(x).length, 0) / schede.length)
+      // Le medie si calcolano sulla variante appena generata, non su tutto il file.
+      const avgWords = fresh.length
+        ? Math.round(fresh.reduce((s, x) => s + acceptedWords(x).length, 0) / fresh.length)
         : 0;
-      const avgLongest = schede.length ? (schede.reduce((s, x) => s + x.longest, 0) / schede.length).toFixed(1) : '0';
+      const avgLongest = fresh.length
+        ? (fresh.reduce((s, x) => s + x.longest, 0) / fresh.length).toFixed(1)
+        : '0';
       console.log(
-        `✓ ${size}×${size} ${difficulty} [${SCHEDA_VARIANT_LABELS[variant]}]: ${schede.length} schede  ` +
-          `(medie: ${avgWords} parole, più lunga ${avgLongest})  in ${Date.now() - startedAt}ms`,
+        `✓ ${size}×${size} ${difficulty} [${SCHEDA_VARIANT_LABELS[variant]}]: ${fresh.length} schede nuove  ` +
+          `(medie: ${avgWords} parole, più lunga ${avgLongest}) · totale nel file ${schede.length}  in ${Date.now() - startedAt}ms`,
       );
     }
   }

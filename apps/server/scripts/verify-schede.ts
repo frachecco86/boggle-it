@@ -32,6 +32,8 @@ import {
   schedaVariantOf,
   SCHEDA_VARIANT_LABELS,
   SPECS,
+  gridStructureIssues,
+  rowsToGrid,
   type Difficulty,
   type GridSize,
   type Scheda,
@@ -177,6 +179,18 @@ function checkScheda(
       criterion: 'lunghezza media',
       detail: `${meanLength.toFixed(2)} fuori banda [${meanBand.min}, ${meanBand.max}]`,
     });
+  }
+
+  // 3b. Struttura giocabile (solo "full criteria"): niente zone morte.
+  if (spec.requirePlayableStructure) {
+    const issues = gridStructureIssues(rowsToGrid(scheda.grid));
+    if (issues.length > 0) {
+      violations.push({
+        schedaId: scheda.id,
+        criterion: 'struttura',
+        detail: issues.join(', '),
+      });
+    }
   }
 
   // 4. Il campo `longest` deve descrivere la scheda.

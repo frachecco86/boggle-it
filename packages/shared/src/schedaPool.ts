@@ -163,7 +163,7 @@ export class SchedaPool {
     const prefix = schedaKey(size, difficulty);
     let index = options.startIndex ?? 1;
     let failed = 0;
-    const maxFailures = Math.max(200, count * 40);
+    const maxFailures = Math.max(200, count * 250);
 
     while (out.length < count && failed < maxFailures) {
       const id = `${prefix}-${String(index).padStart(3, '0')}`;

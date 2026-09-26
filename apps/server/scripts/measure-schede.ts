@@ -24,6 +24,7 @@ import {
   DIFFICULTY_ORDER,
   densityBandFor,
   generateGrid,
+  gridStructureIssues,
   normalizeWord,
   resolveSchedaVariant,
   SCHEDA_VARIANT_LABELS,
@@ -131,12 +132,14 @@ function main(): void {
       const meanBand = spec.meanLength?.[size]?.[difficulty];
 
       const accepted: number[] = [];
+      const acceptedScores: number[] = [];
       const means: number[] = [];
       const bandCounts: number[] = [];
       const longs: number[] = [];
       let longEnough = 0;
       let inBand = 0;
       let meanOk = 0;
+      let structureOkCount = 0;
       let both = 0;
       const started = Date.now();
 
@@ -149,22 +152,29 @@ function main(): void {
         let longest = 0;
         let anchors = 0;
         let total = 0;
+        let score = 0;
         for (const w of all) {
           if (w.length > longest) longest = w.length;
           if (w.length >= anchor.length) anchors++;
           total += w.length;
+          score += Math.max(0, w.length - 2);
         }
         const mean = all.length > 0 ? total / all.length : 0;
         accepted.push(all.length);
+        acceptedScores.push(score);
         means.push(mean);
         longs.push(longest);
         const okLong = anchors >= anchor.count;
         const okBand = all.length >= band.min && all.length <= band.max;
         const okMean = !meanBand || (mean >= meanBand.min && mean <= meanBand.max);
+        // Struttura giocabile: nessuna zona morta (vedi `gridStructureIssues`).
+        const structure = spec.requirePlayableStructure ? gridStructureIssues(grid) : [];
+        const okStructure = structure.length === 0;
         if (okLong) longEnough++;
         if (okBand) inBand++;
         if (okMean) meanOk++;
-        if (okLong && okBand && okMean) {
+        if (okStructure) structureOkCount++;
+        if (okLong && okBand && okMean && okStructure) {
           both++;
           // Parole ATTESE (fascia) sulle griglie che passano: dice quante parole
           // mostrerà il riepilogo "parole che esistevano".
@@ -173,11 +183,41 @@ function main(): void {
       }
 
       const sortedAccepted = [...accepted].sort((a, b) => a - b);
+      const sortedScores = [...acceptedScores].sort((a, b) => a - b);
       const sortedMeans = [...means].sort((a, b) => a - b);
       const pct = (p: number) => percentile(sortedAccepted, p);
+      const scorePct = (p: number) => percentile(sortedScores, p);
       const meanPct = (p: number) => percentile(sortedMeans, p);
       const vowels = compositionOf(size, difficulty, spec.composition[difficulty]);
       const sortedBand = [...bandCounts].sort((a, b) => a - b);
+      // Quante griglie cadrebbero in una banda di PUNTEGGIO p25–p75 (la misura
+      // che manca oggi: la densità non limita il mix di lunghezze, quindi due
+      // griglie con lo stesso numero di parole possono valere il doppio).
+      const scoreLow = scorePct(25);
+      const scoreHigh = scorePct(75);
+      const inScoreBand = acceptedScores.filter((s) => s >= scoreLow && s <= scoreHigh).length;
+      /*
+       * Quanto la banda sul NUMERO di parole spiega i punti?
+       * punti ≈ parole × (lunghezza media − 2): se la lunghezza media fosse
+       * costante, la correlazione sarebbe 1 e la banda sulla densità basterebbe.
+       * Qui si misura la correlazione reale e la dispersione dei punti per parola
+       * (cioè quanto pesa il mix di lunghezze).
+       */
+      const meanCount = accepted.reduce((a, b) => a + b, 0) / count;
+      const meanScore = acceptedScores.reduce((a, b) => a + b, 0) / count;
+      let cov = 0;
+      let varCount = 0;
+      let varScore = 0;
+      for (let i = 0; i < count; i++) {
+        const dc = accepted[i]! - meanCount;
+        const ds = acceptedScores[i]! - meanScore;
+        cov += dc * ds;
+        varCount += dc * dc;
+        varScore += ds * ds;
+      }
+      const correlation = cov / Math.sqrt(Math.max(1e-9, varCount * varScore));
+      const perWord = accepted.map((w, i) => acceptedScores[i]! / Math.max(1, w)).sort((a, b) => a - b);
+      const perWordPct = (p: number) => percentile(perWord, p);
 
       console.log(
         `${size}×${size} ${difficulty.padEnd(9)} ` +
@@ -190,11 +230,24 @@ function main(): void {
           (meanBand
             ? `media [${meanBand.min},${meanBand.max}]: ${((meanOk / count) * 100).toFixed(0)}%  |  `
             : '') +
+          (spec.requirePlayableStructure
+            ? `struttura: ${((structureOkCount / count) * 100).toFixed(0)}%  |  `
+            : '') +
           `TUTTI: ${((both / count) * 100).toFixed(0)}%  (${Date.now() - started}ms)`,
       );
       console.log(
         `            lunghezza media p25=${meanPct(25).toFixed(2)} p50=${meanPct(50).toFixed(2)} p75=${meanPct(75).toFixed(2)}  |  ` +
           `lunghezza max p50=${percentile([...longs].sort((a, b) => a - b), 50)}`,
+      );
+      console.log(
+        `            punteggio max p25=${scoreLow} p50=${scorePct(50)} p75=${scoreHigh}  ` +
+          `(spread p75/p25 = ${(scoreHigh / Math.max(1, scoreLow)).toFixed(1)}x)  |  ` +
+          `in banda punteggio p25-p75: ${((inScoreBand / count) * 100).toFixed(0)}%`,
+      );
+      console.log(
+        `            correlazione parole↔punti r=${correlation.toFixed(3)}  |  ` +
+          `punti per parola p25=${perWordPct(25).toFixed(2)} p50=${perWordPct(50).toFixed(2)} p75=${perWordPct(75).toFixed(2)} ` +
+          `(spread ${(perWordPct(75) / Math.max(0.01, perWordPct(25))).toFixed(2)}x)`,
       );
       console.log(
         `            composizione: ${vowels}  |  parole attese (fascia) sulle accettate: ` +

@@ -78,13 +78,20 @@ Requisiti di qualità (imposti in generazione, con rigenerazione finché non è 
 |---|---|---|
 | Composizione | modello storico: vocali 40–52% / 27–38% / 16–27%, rare ≤3% / ≤12% / ≤22% | rapporto vocali/consonanti per livello: **40–45% / 30–35% / <30%**, lettere rare solo nel difficile (almeno una obbligatoria) |
 | Frequenza delle lettere | consonanti comuni | pool di consonanti per livello (alta frequenza → consonanti medie → lettere rare) |
-| Numero di parole | bande misurate (46–200 / 25–120 / 10–60 su 4×4) | dai criteri: **>120 / 60–100 / <45** su 4×4, **>200 / 100–160 / <80** su 5×5, **>350 / 180–280 / <130** su 6×6 |
+| Numero di parole | bande misurate (46–200 / 25–120 / 10–60 su 4×4) | dai criteri **+ il lato mancante misurato**: >120 e tetto 170 (4×4 facile), <45 e minimo 25 (4×4 difficile), ecc. |
 | Parole ancora | almeno 1 parola lunga | più parole lunghe: 2–4 da 6+ (4×4 facile), multiple da 7+ (5×5 facile), 8+ (6×6 facile) |
 | Lunghezza media | — | bande misurate (4,4 / 4,1 / 3,8 su 4×4) |
+| Struttura | — | nessuna consonante a più di 2 celle da una vocale, al massimo una riga/colonna senza vocali, nessuna `h` senza `c`/`g` |
 
 La scelta si fa in home (foglio impostazioni) e vale sia per il single player sia per la stanza
 creata; in lobby l'host può cambiarla. Le schede `full` portano l'etichetta **FULL** nella pagina
 "Sfoglia le schede", dove si possono anche filtrare.
+
+**La banda sul numero di parole è la leva della disparità.** Misurato: `r(parole, punti) = 0,99`
+(il 98% della varianza dei punti è spiegata dal numero di parole; i punti per parola variano solo
+±10-15%). Per questo NON c'è una banda sul punteggio: stringere le parole stringe i punti. Con le
+bande chiuse su entrambi i lati, la disparità del catalogo `full` scende da 1,7–2,8× a **1,1–1,6×**
+su parole e punti.
 
 Non implementati dei criteri "full" (non misurabili nel generatore): **morfologia/desinenze**
 (servirebbe un'analisi morfologica delle parole: in parte la fa la fascia di frequenza) e

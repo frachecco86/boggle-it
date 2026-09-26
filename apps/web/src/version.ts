@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.28.0';
+export const APP_VERSION = '0.28.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,35 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.28.1',
+    date: '2026-09-26',
+    title: 'Schede "full criteria" più uniformi, e senza angoli morti',
+    promo: {
+      emoji: '📐',
+      headline: 'Stessa categoria, stessa difficoltà',
+      text: 'Nelle schede con i criteri completi la stessa categoria aveva troppa disparità: 15–42 parole e 27–76 punti su 4×4 difficile\u2014cioè partite molto diverse fra loro. Ora ogni categoria ha un intervallo chiuso e stretto, e le griglie difficili non hanno più colonne di consonanti inutilizzabili.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Bande chiuse su entrambi i lati**: i criteri danno un solo limite ("numero minimo di parole" per il facile, "< N parole" per il difficile), e con un limite solo la banda è larga quanto la distribuzione naturale. Il lato mancante è ora **misurato**: 4×4 difficile 25–44 parole, 4×4 facile 121–170, 5×5 difficile 38–79, 6×6 difficile 75–129. La disparità del catalogo `full` scende da 1,7–2,8× a **1,1–1,6×** (parole e punti).',
+          '**Niente più zone morte**: ogni consonante deve avere una vocale entro 2 celle, al massimo una riga o colonna senza vocali, nessuna `h` senza `c`/`g` accanto (un `h` isolato non forma nessuna parola di 3+ lettere). Prima 13 schede difficili su 15 avevano almeno una riga o colonna senza vocali e 5 avevano una `h` inutile: le griglie con più zone morte trovabili avevano 15–28 parole contro le 42–46 di quelle ben distribuite, nella stessa categoria.',
+          '**Lettere rare ridotte**: il tetto per il difficile scende dal 22% al **12%** (prima uscivano griglie con 8 lettere rare su 36, un quinto della griglia bloccato).',
+          '**Nessuna banda sul punteggio**, ed è una scelta misurata: `r(parole, punti) = 0,99`, cioè il 98% della varianza dei punti è spiegata dal numero di parole (i punti per parola variano solo ±10-15%). Stringere le parole stringe i punti; un criterio in più sarebbe stato quasi ridondante.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '`gridStructureIssues()` misura le zone morte di una griglia ed è usata sia dal generatore (scarta le griglie prima del solve, costa quasi nulla) sia da `verify:schede`, che ora controlla anche la struttura.',
+          '`measure:schede` riporta punteggio, correlazione parole↔punti, punti per parola e la quota di griglie che passa ciascuna regola: le tre regole di struttura sono tarate su quelle misure (la versione "vocale entro 1 cella" avrebbe scartato il 98% delle griglie difficili).',
+          '`gen:schede --replace` rigenera solo le schede di una variante e tiene le altre, ripartendo dagli stessi id: è così che le 45 schede `full` sono state rifatte senza toccare le 90 standard.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.28.0',
     date: '2026-09-26',

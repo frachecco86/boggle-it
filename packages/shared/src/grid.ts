@@ -105,7 +105,11 @@ export const FULL_COMPOSITION: Record<Difficulty, DifficultyComposition> = {
     // "< 30% o > 55% (sbilanciato)": si usa il caso consonantico, che è quello
     // che rende la griglia difficile.
     vowels: { min: 0.16, max: 0.29 },
-    rareMax: 0.22,
+    //
+    // Tetto alle rare RIDOTTO (era 0.22): al 22% uscivano griglie con 8 lettere
+    // rare su 36 (z w x j y ...), cioè un quinto della griglia bloccato — il
+    // criterio chiede "presenza di lettere rare", non una griglia di sole rare.
+    rareMax: 0.12,
     // Almeno una lettera rara: senza, una griglia "difficile" può uscire con
     // lettere tutte comuni e risultare facile.
     rareMin: 1,
@@ -174,6 +178,99 @@ export function generateGrid(
 
   shuffleWith(faces, rng);
   return buildGrid(size, faces);
+}
+
+/**
+ * Difetti di STRUTTURA di una griglia: le zone che il giocatore percepisce come
+ * "consonanti inutili".
+ *
+ * Misurato sulle schede "full criteria" difficili (15 schede): 13 avevano almeno
+ * una riga o una colonna SENZA vocali, 5 un tassello `h` senza `c`/`g` accanto
+ * (un `h` isolato non forma nessuna parola di 3+ lettere: cella morta garantita),
+ * e fino a 8 lettere rare su 36. Le schede con più zone morte avevano 15–28 parole
+ * contro le 42–46 di quelle ben distribuite, nella stessa categoria.
+ *
+ * Le tre regole sono TARATE sulle misure (`measure:schede`):
+ *  1. nessuna consonante con la vocale più vicina OLTRE 2 celle (Chebyshev):
+ *     passano il 69–100% delle griglie. La versione "entro 1 cella" scartava
+ *     il 98% delle griglie difficili (con 4 vocali su 16 è quasi impossibile);
+ *  2. al massimo UNA riga o colonna senza vocali (passa il 4–69%): con meno del
+ *     30% di vocali non si possono coprire tutte le righe E tutte le colonne;
+ *  3. nessuna `h` senza `c`/`g` vicini (passa l'83–90%).
+ *
+ * Ritorna l'elenco dei problemi (vuoto = griglia giocabile).
+ */
+export function gridStructureIssues(grid: Grid): string[] {
+  const size = grid.size;
+  const letters = grid.tiles.map((t) => t.letter);
+  const at = (r: number, c: number): string | null =>
+    r < 0 || c < 0 || r >= size || c >= size ? null : (letters[r * size + c] ?? null);
+  const isVowel = (ch: string | null): boolean => !!ch && VOWELS.includes(ch as (typeof VOWELS)[number]);
+  /** Lontananza massima ammessa fra una consonante e la vocale più vicina. */
+  const MAX_DISTANCE = 2;
+  /** Righe/colonne senza vocali ammesse (oltretutto non si può chiedere zero). */
+  const MAX_DEAD_LINES = 1;
+  const issues: string[] = [];
+
+  let farFromVowel = 0;
+  let deadRows = 0;
+  for (let r = 0; r < size; r++) {
+    let rowVowels = 0;
+    for (let c = 0; c < size; c++) {
+      const ch = at(r, c);
+      if (!ch) continue;
+      if (isVowel(ch)) {
+        rowVowels++;
+        continue;
+      }
+      let near = false;
+      for (let dr = -MAX_DISTANCE; dr <= MAX_DISTANCE && !near; dr++) {
+        for (let dc = -MAX_DISTANCE; dc <= MAX_DISTANCE; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          if (isVowel(at(r + dr, c + dc))) {
+            near = true;
+            break;
+          }
+        }
+      }
+      if (!near) farFromVowel++;
+    }
+    if (rowVowels === 0) deadRows++;
+  }
+  let deadCols = 0;
+  for (let c = 0; c < size; c++) {
+    let colVowels = 0;
+    for (let r = 0; r < size; r++) if (isVowel(at(r, c))) colVowels++;
+    if (colVowels === 0) deadCols++;
+  }
+  if (farFromVowel > 0) issues.push(`${farFromVowel} consonanti lontane da ogni vocale`);
+  if (deadRows + deadCols > MAX_DEAD_LINES) {
+    issues.push(`${deadRows} righe e ${deadCols} colonne senza vocali`);
+  }
+
+  // Un `h` serve solo dentro i digrammi ch/gh: senza un c o una g accanto è un
+  // tassello inutile (in italiano non esistono parole di 3+ lettere con la sola h).
+  let deadH = 0;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (at(r, c) !== 'h') continue;
+      let ok = false;
+      for (let dr = -1; dr <= 1 && !ok; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const near = at(r + dr, c + dc);
+          if (near === 'c' || near === 'g') {
+            ok = true;
+            break;
+          }
+        }
+      }
+      if (!ok) deadH++;
+    }
+  }
+  if (deadH > 0) issues.push(`${deadH} h senza c/g vicini`);
+
+  return issues;
 }
 
 function shuffleWith<T>(arr: T[], rng: () => number): T[] {

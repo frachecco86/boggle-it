@@ -58,7 +58,7 @@
  * `pnpm --filter @boggle/server measure:schede`.
  */
 import type { Difficulty } from './difficulty.js';
-import { COMPOSITION, FULL_COMPOSITION, generateGrid, type DifficultyComposition } from './grid.js';
+import { COMPOSITION, FULL_COMPOSITION, generateGrid, gridStructureIssues, type DifficultyComposition } from './grid.js';
 import { gridToRows, type Scheda, type SchedaVariant } from './scheda.js';
 import { solveGrid, type TrieNode } from './solver.js';
 import type { GridSize } from './types.js';
@@ -120,6 +120,12 @@ export interface SchedaSpec {
   density: Record<GridSize, Record<Difficulty, { min: number; max: number }>>;
   /** Parole "ancora": almeno `count` parole di almeno `length` lettere. */
   anchors: Record<GridSize, Record<Difficulty, { length: number; count: number }>>;
+  /**
+   * Richiede che la griglia non abbia zone morte (vedi `gridStructureIssues`):
+   * nessuna consonante senza vocale vicina, nessuna riga/colonna senza vocali,
+   * nessun `h` senza `c`/`g`. Attivo nei "full criteria".
+   */
+  requirePlayableStructure?: boolean;
   /**
    * Lunghezza MEDIA delle parole accettate (misurata). È la trasposizione
    * realizzabile del criterio "lunghezza media parole" della pagina: su una 4×4
@@ -200,21 +206,35 @@ const STANDARD_SPEC: SchedaSpec = {
  */
 const FULL_SPEC: SchedaSpec = {
   composition: FULL_COMPOSITION,
+  /*
+   * Bande CHIUSE su entrambi i lati.
+   *
+   * I criteri della pagina danno un solo limite: "numero minimo di parole" per
+   * il facile, "< N parole" per il difficile. Con un limite solo la banda è
+   * larga quanto la distribuzione naturale (2-3×), e la disparità si vede nel
+   * catalogo (4×4 difficile: 15–42 parole, 27–76 punti). Il lato mancante è
+   * MISURATO (`measure:schede --variant full`): tetto ≈ p75 per il facile,
+   * minimo ≈ mediana per il difficile.
+   *
+   * La banda sul PUNTEGGIO non serve: misurato, r(parole, punti) = 0,99 (98%
+   * della varianza dei punti è spiegata dal numero di parole) e i punti per
+   * parola variano solo ±10-15%. Stringere il numero di parole stringe i punti.
+   */
   density: {
     4: {
-      facile: { min: 121, max: 400 }, // "numero minimo di parole: > 120"
+      facile: { min: 121, max: 170 }, // "> 120" + tetto misurato
       normale: { min: 60, max: 100 },
-      difficile: { min: 8, max: 44 }, // "< 45 parole"
+      difficile: { min: 25, max: 44 }, // "< 45" + minimo misurato
     },
     5: {
-      facile: { min: 201, max: 700 }, // "> 200 parole"
+      facile: { min: 201, max: 300 },
       normale: { min: 100, max: 160 },
-      difficile: { min: 8, max: 79 }, // "< 80 parole"
+      difficile: { min: 38, max: 79 },
     },
     6: {
-      facile: { min: 351, max: 1400 }, // "> 350 parole"
+      facile: { min: 351, max: 560 },
       normale: { min: 180, max: 280 },
-      difficile: { min: 8, max: 129 }, // "< 130 parole"
+      difficile: { min: 75, max: 129 },
     },
   },
   anchors: {
@@ -234,6 +254,7 @@ const FULL_SPEC: SchedaSpec = {
       difficile: { length: 8, count: 1 },
     },
   },
+  requirePlayableStructure: true,
   /*
    * Lunghezza MEDIA delle parole accettate: bande MISURATE, con l'ordine reale.
    *
@@ -364,6 +385,13 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
     // Griglia con la composizione della difficoltà (vocali, rare, consonanti).
     const grid = generateGrid(size, rng, difficulty, spec.composition[difficulty]);
     /*
+     * Struttura giocabile PRIMA del solve: costa pochissimo e scarta subito le
+     * griglie con zone morte (consonanti isolate, righe/colonne senza vocali,
+     * `h` inutili). Vedi `gridStructureIssues` per le misure che l'hanno motivata.
+     */
+    const structureIssues = spec.requirePlayableStructure ? gridStructureIssues(grid) : [];
+
+    /*
      * Le parole che il giocatore PUÒ trovare: si risolve sul dizionario intero.
      * È anche l'insieme che il gioco accetta in partita (`allWords`), quindi
      * questo solve serve sia al filtro sia al risultato: nessuno spreco.
@@ -382,16 +410,20 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
 
     /*
      * Distanza dal centro della banda, normalizzata: usata solo per scegliere il
-     * ripiego. Somma tre scostamenti (parole, parole ancora, lunghezza media)
-     * così il ripiego resta il più vicino possibile ai criteri.
+     * ripiego. Somma gli scostamenti (parole, parole ancora, lunghezza media) e i
+     * difetti di struttura, così il ripiego resta il più vicino possibile ai
+     * criteri anche quando nessuna griglia li soddisfa tutti.
      */
     const mid = (band.min + band.max) / 2;
     const distance =
       Math.abs(allWords.length - mid) / Math.max(1, mid) +
       Math.max(0, anchor.count - anchorCount) / Math.max(1, anchor.count) +
-      (meanBand ? Math.max(0, meanBand.min - meanLength) / meanBand.min : 0);
+      (meanBand ? Math.max(0, meanBand.min - meanLength) / meanBand.min : 0) +
+      structureIssues.length * 0.5;
     if (!best || distance < best.distance) best = { grid, allWords, distance };
 
+    // 0. Struttura: niente zone morte (se richiesto dai criteri).
+    if (structureIssues.length > 0) continue;
     // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
     if (allWords.length < band.min || allWords.length > band.max) continue;
     // 2. Parole ancora lunghe a sufficienza.
