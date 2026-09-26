@@ -6,8 +6,13 @@
 //  - Morph-it! 0.48 (UniBO)   — forme flesse incl. coniugazioni verbali — CC BY-SA 2.0 / LGPL
 //  - paroleitaliane (napolux) — lessico comune per colmare lacune di Morph-it
 //  - 280k parole italiane     — sostantivi e aggettivi che Morph-it NON copre
-//  - abbreviazioni.txt        — abbreviazioni da dizionario (Wikizionario, CC BY-SA 3.0)
 //  - Wikizionario (kaikki.org) — HEADWORD + categoria grammaticale (CC BY-SA 4.0)
+//
+// NOTA: le abbreviazioni NON sono più una fonte. `abbreviations.txt` conteneva
+// abbreviazioni vere (`dott`) ma anche ~100 ETICHETTE di materia/grammatica
+// (`idr`, `geogr`, `fis`, `sost`, `avv`): troncamenti di classificazione, non
+// parole italiane. Erano la fonte di voci come `idr`, che comparivano nelle
+// parole trovabili senza che il giocatore potesse riconoscerle come parole.
 //
 // PERCHÉ SERVONO PIÙ LISTE DI PAROLE (e non due)
 // Morph-it è un ANALIZZATORE MORFOLOGICO: delle sue 505k righe, 391k sono forme
@@ -118,8 +123,8 @@ export function normalizeWord(raw) {
  *   1. lunghezza 3..16, solo [a-z] dopo la normalizzazione;
  *   2. non bloccata (`blocked-words.txt`);
  *   3. se termina in consonante, deve essere una parola autonoma attestata
- *      (`consonant-endings.txt`, derivata dal lemma di Morph-it) oppure
- *      un'abbreviazione curata (`abbreviations.txt`).
+ *      (`consonant-endings.txt`, derivata dal lemma di Morph-it).
+ *      NON è più ammessa alcuna abbreviazione: vedi la nota in testa al file.
  *
  * PERCHÉ SERVIVA: le fonti contengono migliaia di TRONCAMENTI (`andar`, `alzar`,
  * `maggior`, `normalit`, `abbacchiaron`) che non sono parole italiane. Prima
@@ -167,11 +172,11 @@ const isUsable = (w) => w.length >= MIN_LEN && w.length <= MAX_LEN;
  * Filtro di giocabilità: identico alla regola di `schedaPool.ts`.
  * Ritorna una funzione costruita sulle liste curate già caricate.
  */
-function makePlayableFilter({ allowedEndings, abbreviations, blocked }) {
+function makePlayableFilter({ allowedEndings, blocked }) {
   return (w) => {
     if (!isUsable(w) || blocked.has(w)) return false;
     if (!endsInConsonant(w)) return true;
-    return allowedEndings.has(w) || abbreviations.has(w);
+    return allowedEndings.has(w);
   };
 }
 
@@ -442,8 +447,7 @@ async function buildFromExistingWords() {
   const existing = path.join(DATA, 'words.txt');
   const blocked = await loadBlocked();
   const allowedEndings = await loadCuratedList('consonant-endings.txt');
-  const abbreviations = await loadCuratedList('abbreviations.txt');
-  const accepted = makePlayableFilter({ allowedEndings, abbreviations, blocked });
+  const accepted = makePlayableFilter({ allowedEndings, blocked });
 
   let dropped = 0;
   const words = new Set();
@@ -530,13 +534,12 @@ async function main() {
   const blocked = await loadBlocked();
   // Liste canoniche: definiscono cosa è una parola giocabile (vedi sopra).
   const allowedEndings = await loadCuratedList('consonant-endings.txt');
-  const abbreviations = await loadCuratedList('abbreviations.txt');
   console.log(
-    `  filtro giocabilità: ${allowedEndings.size} finali in consonante ammesse, ${abbreviations.size} abbreviazioni`,
+    `  filtro giocabilità: ${allowedEndings.size} finali in consonante ammesse (nessuna abbreviazione)`,
   );
 
   /** true se la parola entra nel dizionario (e quindi è giocabile). */
-  const accepted = makePlayableFilter({ allowedEndings, abbreviations, blocked });
+  const accepted = makePlayableFilter({ allowedEndings, blocked });
 
   /*
    * 1. Morph-it: la prima colonna e' la forma flessa.
@@ -673,21 +676,8 @@ async function main() {
     }
   }
 
-  // 4. Abbreviazioni curate.
-  const abbrPath = path.join(DATA, 'abbreviations.txt');
-  let abbrCount = 0;
-  if (existsSync(abbrPath)) {
-    const abbrRaw = await readFile(abbrPath, 'utf8');
-    for (const line of abbrRaw.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const w = normalizeWord(trimmed);
-      if (accepted(w)) {
-        if (!words.has(w)) abbrCount++;
-        words.add(w);
-      }
-    }
-  }
+  // 4. Composti e neologismi curati restano (step 3 sopra).
+  //    Le abbreviazioni NON sono più aggiunte: rimossa la sezione.
 
   /*
    * 5. Parole in consonante ammesse dalla whitelist (`consonant-endings.txt`).
@@ -714,9 +704,8 @@ async function main() {
   console.log(`  da Morph-it: ${morphCount.toLocaleString('it-IT')}`);
   console.log(`  da comuni:   +${commonCount.toLocaleString('it-IT')}`);
   console.log(`  lista estesa: +${extendedCount.toLocaleString('it-IT')}`);
-  console.log(`  abbreviazioni: +${abbrCount}`);
-  console.log(`  finali in consonante: +${endingCount}`);
   console.log(`  composti e neologismi: +${modernCount}`);
+  console.log(`  finali in consonante: +${endingCount}`);
 }
 
 // Eseguito direttamente?

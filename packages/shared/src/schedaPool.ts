@@ -43,13 +43,8 @@ export interface SchedaPoolOptions {
    */
   allowedConsonantEndings?: Iterable<string>;
   /**
-   * Abbreviazioni curate ammesse come parole (`dott`, `avv`). Vedi
-   * `packages/dictionary/data/abbreviations.txt`.
-   */
-  abbreviations?: Iterable<string>;
-  /**
-   * Parole da NON rimuovere col filtro (es. abbreviazioni curate come `dott`).
-   * Non entrano nel lessico comune dei livelli facili.
+   * Parole da NON rimuovere col filtro. Utile per whitelist curate: le
+   * abbreviazioni NON sono più ammesse (vedi `build-words.mjs`).
    */
   protectedWords?: Iterable<string>;
 }
@@ -71,9 +66,6 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
     [...(options.allowedConsonantEndings ?? [])].map(normalizeWord).filter(Boolean),
   );
   const protectedSet = new Set([...options.protectedWords ?? []].map(normalizeWord).filter(Boolean));
-  const abbreviationSet = new Set(
-    [...(options.abbreviations ?? [])].map(normalizeWord).filter(Boolean),
-  );
   /**
    * Filtro: tiene solo le parole che terminano in vocale o sono esplicitamente ammesse.
    *
@@ -84,7 +76,7 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
   const keep = (w: string): boolean => {
     if (!dropTruncated) return true;
     if (!endsInConsonant(w)) return true;
-    return allowedEndings.has(w) || abbreviationSet.has(w) || protectedSet.has(w);
+    return allowedEndings.has(w) || protectedSet.has(w);
   };
   /*
    * `allowedEndings` va filtrato con `keep()` come tutto il resto: un tempo veniva
@@ -123,7 +115,9 @@ export function createSchedaPool(options: SchedaPoolOptions): SchedaPool {
     if (selected.length < target) {
       console.warn(
         `⚠ Fascia "${difficulty}": ${selected.length} parole invece di ${target}. ` +
-          'Rigenera frequency-it.txt con `pnpm --filter @boggle/dictionary build:frequency` per il dizionario completo.',
+          'Normale se il dizionario è appena stato ripulito (es. abbreviazioni rimosse): ' +
+          'la fascia usa tutte le parole giocabili disponibili. Per riportarla a target ' +
+          'rigenera frequency-it.txt con `pnpm --filter @boggle/dictionary build:frequency`.',
       );
     }
     if (selected.length === 0) {

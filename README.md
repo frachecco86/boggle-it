@@ -15,8 +15,9 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare **italiane**: `z`). Le lettere non italiane (`k w x y j`, quasi solo prestiti) non entrano mai in griglia.
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
-- **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**
-  e le abbreviazioni da dizionario. **Ogni voce è giocabile**: è la stessa lista usata dalle schede.
+- **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**.
+  **Ogni voce è giocabile**: è la stessa lista usata dalle schede. Le abbreviazioni e le
+  etichette di materia (`idr`, `geogr`, `avv`…) **non** sono nel lessico.
 - **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (135 schede di base:
   10 `standard` + 5 `full criteria` per ognuna delle 9 combinazioni dimensione × difficoltà).
   Ogni scheda contiene la griglia e **tutte** le parole trovabili (accettate in partita), con
@@ -247,7 +248,7 @@ sempre: un client manomesso non può inventare parole o percorsi.
 | [FrequencyWords](https://github.com/hermitdave/FrequencyWords) (hermitdave) | fasce di frequenza d'uso (5k/20k/60k) per la difficoltà | CC BY-SA 4.0 |
 | [OpenGameArt](https://opengameart.org) (MintoDog, HydroGene, Bobjt, Wolfgang_, TinyWorlds) | 6 tracce musicali | CC0 1.0 |
 | [Google Fonts](https://fonts.google.com) (Baloo 2, Fredoka) | font dell'interfaccia | OFL 1.1 |
-| [Wikizionario](https://it.wiktionary.org/wiki/Appendice:Abbreviazioni) | abbreviazioni | CC BY-SA 3.0 |
+| [Wikizionario](https://it.wiktionary.org/wiki/Appendice:Abbreviazioni) | headword e categorie grammaticali | CC BY-SA 4.0 |
 
 Pipeline di build (`packages/dictionary/scripts/`):
 

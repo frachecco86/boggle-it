@@ -29,7 +29,7 @@ nessuna persistenza su database, nessuna PWA.
 | Multiplayer | **Node + Socket.IO**, stanza con codice 6 caratteri |
 | Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer; ~368k forme, tutte giocabili |
 | Struttura | **Monorepo pnpm workspaces** |
-| Sorgente dizionario | **Morph-it! (UniBO) + abbreviazioni Wikizionario** |
+| Sorgente dizionario | **Morph-it! (UniBO) + Wikizionario** (headword e categorie; nessuna abbreviazione) |
 | Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 180 schede** |
 | Punteggio | **lunghezza − 2**; in multiplayer **raddoppio** se trovata da un solo giocatore |
 
@@ -392,5 +392,5 @@ locale compensando la latenza. Il server chiude il round a prescindere dal clien
   Attribuzione obbligatoria nell'app (pagina credits + README). La lista derivata
   resta distribuita sotto CC BY-SA 2.0.
 - **paroleitaliane** (napolux) — vedi licenza del repo.
-- **Wikizionario** — CC BY-SA 3.0 per le voci sulle abbreviazioni.
+- **Wikizionario** — CC BY-SA 4.0 per headword e categorie grammaticali.
 - Codice del gioco: da definire (proposta MIT).

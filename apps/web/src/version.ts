@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.28.1';
+export const APP_VERSION = '0.29.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,41 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.29.0',
+    date: '2026-09-26',
+    title: 'Via le abbreviazioni dalle parole valide, e solo lettere italiane in griglia',
+    promo: {
+      emoji: '🧹',
+      headline: 'Solo parole che riconosci',
+      text: 'Tra le parole trovabili compariva `idr`: era un\'etichetta da dizionario, non una parola. Abbiamo tolto tutte le abbreviazioni e le sigle di classificazione, e le lettere straniere (`k` `w` `x` `y` `j`) non entrano più nelle griglie.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Rimosse 113 voci che non sono parole italiane**: abbreviazioni e sigle da dizionario (`dott`, `avv`) ed etichette di materia o grammatica usate per classificare i lemmi (`idr` = idraulica, `geogr`, `chim`, `fis`, `sost`, `prep`). Con l\'etichetta "abbreviazione" sfuggivano al filtro dei troncamenti: `idr` compariva tra le parole trovabili pur non essendo una parola. Il lessico passa da 368.213 a **368.100** voci.',
+          '**Le lettere non italiane non entrano più nelle griglie**: `k`, `w`, `x`, `y`, `j` restano nel dizionario (le parole straniere già formate restano valide) ma non vengono più pescate come celle. Erano quasi solo prestiti (`wagon`, `yacht`, `jackpot`) e nella pratica erano **celle morte**: non formano parole di 3+ lettere. Le griglie contengono ora solo lettere italiane, con la `z` come unica lettera rara.',
+          '**La lettera rara obbligatoria nelle griglie difficili è una `z`**, non una lettera qualunque: prima il criterio poteva forzare una `j`, che non serve a comporre nulla.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Tetto alle lettere rare abbassato dal 22% al 12%** anche nel catalogo standard (era già 12% nei criteri completi): prima uscivano griglie con 8 lettere rare su 36, un quinto della griglia bloccato.',
+          '**Catalogo rigenerato**: 135 schede (10 standard + 5 full per ognuna delle 9 combinazioni), verificate senza violazioni. Nessuna delle voci rimosse compare più tra le parole trovabili.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '`RARE_LETTERS` è separato in `RARE_ITALIAN = ["z"]` e `FOREIGN_LETTERS = ["k","w","x","y","j"]`: la composizione della griglia ha un tetto per ciascuno (`rareMax`, `foreignMax`) e `rareMin` si applica solo alle rare italiane.',
+          '`gridStructureIssues()` segnala come difetto ogni lettera non italiana in griglia: se in futuro `foreignMax` tornasse maggiore di zero, la verifica delle schede se ne accorgerebbe.',
+          '`abbreviations.txt` è stato eliminato e l\'opzione `abbreviations` rimossa da `createSchedaPool`, dagli script di generazione e da `build-words.mjs`. La regola di giocabilità ora è una sola: lunghezza 3–16, non bloccata, e se termina in consonante deve essere una parola autonoma attestata (`consonant-endings.txt`).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.28.1',
     date: '2026-09-26',

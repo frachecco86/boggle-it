@@ -129,7 +129,6 @@ function main(): void {
     fullWords: readWords('words.txt'),
     frequencyWords: readWords('frequency-it.txt'),
     allowedConsonantEndings: readCuratedList('consonant-endings.txt'),
-    abbreviations: readCuratedList('abbreviations.txt'),
   });
   console.log(`  ${count} griglie per categoria\n`);
 

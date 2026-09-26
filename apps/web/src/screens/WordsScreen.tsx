@@ -33,7 +33,7 @@ const PAGE_SIZE = 100;
  *
  *  1. **Nelle schede** — le parole componibili nelle griglie, con quante volte
  *     compaiono. Serve a capire quanto è "comune" una parola nel gioco.
- *  2. **Dizionario** — l'intero lessico (403k parole), ognuna con la categoria
+ *  2. **Dizionario** — l'intero lessico (~368k parole), ognuna con la categoria
  *     grammaticale e il link alla voce di Wikizionario.
  *
  * Perché due viste e non due pagine: sono lo stesso elenco con filtri diversi.

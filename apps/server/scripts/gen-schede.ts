@@ -121,20 +121,17 @@ function main(): void {
   // Liste canoniche di giocabilità: le STESSE usate dal build del dizionario
   // (`build-words.mjs`), così dizionario e schede non possono divergere.
   const allowedConsonantEndings = readCuratedList('consonant-endings.txt');
-  const abbreviations = readCuratedList('abbreviations.txt');
   console.log(`  dizionario completo: ${fullWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  lista di frequenza:  ${frequencyWords.length.toLocaleString('it-IT')} parole`);
   console.log(`  finali in consonante ammessi: ${allowedConsonantEndings.length}`);
-  console.log(`  abbreviazioni ammesse: ${abbreviations.length}`);
 
   // Parole funzionali (articoli, preposizioni, possessivi come `tua`) NON sono più
   // escluse: la lista delle parole giocabili coincide con il dizionario. Restano
-  // fuori solo i troncamenti e le voci bloccate.
+  // fuori solo i troncamenti e le voci bloccate. Nessuna abbreviazione.
   const pool = createSchedaPool({
     fullWords,
     frequencyWords,
     allowedConsonantEndings,
-    abbreviations,
   });
   console.log(
     `  fasce: facile ${pool.bandCounts.facile.toLocaleString('it-IT')} · ` +

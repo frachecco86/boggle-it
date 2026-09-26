@@ -76,7 +76,11 @@ Valida per **entrambi** i criteri. Ripetuta anche in B e C.
   (`andar`, `abbacchier`, `nauseer`). Una parola si tiene solo se:
   - termina in **vocale**, oppure
   - compare in `consonant-endings.txt` (prestiti/apocopi legittime), oppure
-  - compare in `abbreviations.txt` (`dott`, `avv`) o in `protectedWords`.
+  - compare in `protectedWords` (whitelist curate).
+- Le **abbreviazioni non sono ammesse** (vedi l'Appendice): `abbreviations.txt` è
+  stato rimosso. Conteneva abbreviazioni vere (`dott`) ma anche ~100 etichette di
+  materia/grammatica (`idr`, `geogr`, `fis`, `sost`, `avv`), cioè troncamenti di
+  classificazione che non sono parole italiane.
 - La lista delle parole giocabili **coincide** con il dizionario: non esistono
   esclusioni extra di "parole funzionali".
 
@@ -860,6 +864,33 @@ function gridToRows(grid: Grid): string {
   - presenza nel dizionario (schede stale).
 - Con le bande chiuse su entrambi i lati la disparità del catalogo `full` scende
   da 1,7–2,8× a **1,1–1,6×** su parole e punti.
+
+---
+
+## Appendice — Abbreviazioni ed etichette di materia (RIMOSSE)
+
+`packages/dictionary/data/abbreviations.txt` è stato **eliminato** e non è più una
+fonte del dizionario.
+
+- Conteneva due categorie diverse:
+  - **abbreviazioni vere** (`dott`, `prof`, `sig`, `ing`, `rag`, `egr`…), ~35;
+  - **etichette di materia/grammatica** (`idr` = idraulica, `geogr`, `chim`,
+    `fis`, `mat`, `sost`, `avv`, `verb`, `prep`…), ~97: troncamenti usati per
+    classificare gli altri lemmi, **non parole italiane**.
+- **Effetto osservato**: `idr` compariva tra le parole trovabili delle schede pur
+  non essendo nel dizionario generato da Morph-it. Con l'etichetta "abbreviazione"
+  sfuggiva al filtro dei troncamenti (che scarta le parole che finiscono in
+  consonante) ed entrava nel lessico giocabile.
+- **Rimozione**: eliminate tutte le voci del file. Dal dizionario sono sparite
+  **113 voci** (368.213 → 368.100); 6 restano perché sono già parole piene o in
+  `consonant-endings.txt` (`prof`, `societa`, `ecc`, `bot`, `con`, `dir`, `fin`,
+  `sport`, `tip`).
+- **Codice**: rimosso `abbreviations` da `createSchedaPool` e dagli script
+  (`gen-schede`, `measure-schede`, `verify-schede`); `build-words.mjs` non la
+  applica più. `frequency-it.txt` è stato filtrato sulle sole parole giocabili
+  (la fascia difficile è 59.959 invece di 60.000: è tutte le parole disponibili).
+- **Catalogo**: rigenerato. `verify:schede` non trova violazioni e **nessuna**
+  delle 113 voci rimosse compare più in `allWords`/`words` (verificato: 0).
 
 ---
 

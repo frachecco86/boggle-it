@@ -251,7 +251,8 @@ export function SchedaScreen() {
               componibili sulla griglia. La difficoltà distingue poi le parole{' '}
               <strong>attese</strong> (le più frequenti, mostrate nel riepilogo) da quelle
               <strong> accettate</strong> (l'intero dizionario): una parola rara fuori fascia
-              vale lo stesso.
+              vale lo stesso. Le abbreviazioni e le etichette di materia non sono parole
+              valide.
             </p>
             <p>
               <strong>Rarità</strong> — in griglia entra solo la <code>z</code>, l'unica lettera
