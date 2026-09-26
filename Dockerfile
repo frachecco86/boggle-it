@@ -59,13 +59,13 @@ COPY --from=builder /app/packages/shared/schede ./packages/shared/schede
 
 # Dizionario (serve ancora al server per validare in multiplayer e per generare
 # schede dall'admin). Il client non lo scarica più.
-# Dizionario (serve ancora al server per validare in multiplayer e per generare
-# schede dall'admin). Il client non lo scarica più.
 COPY --from=builder /app/packages/dictionary/data/words.txt ./packages/dictionary/data/words.txt
 COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary/data/words.br
-COPY --from=builder /app/packages/dictionary/data/60000_parole_italiane.txt ./packages/dictionary/data/60000_parole_italiane.txt
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
 COPY --from=builder /app/packages/dictionary/data/abbreviations.txt ./packages/dictionary/data/abbreviations.txt
+# Fasce di frequenza (5k/20k/60k): servono all'admin per generare nuove schede.
+# Senza questo file la generazione dell'admin fallisce ("fascia vuota").
+COPY --from=builder /app/packages/dictionary/data/frequency-it.txt ./packages/dictionary/data/frequency-it.txt
 # Indice lessicale (tag grammaticali + link Wikizionario). SENZA questo file la
 # tab Dizionario del server resta VUOTA e i tag spariscono: era il bug per cui in
 # produzione l'elenco del lessico non si vedeva. Il build di deploy lo genera ora

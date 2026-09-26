@@ -17,8 +17,9 @@ const REQUIRED = [
   // words.txt è generato, words.br è la fonte versionata: ne basta una.
   { name: 'words.txt o words.br', anyOf: ['words.txt', 'words.br'] },
   { name: 'abbreviations.txt', anyOf: ['abbreviations.txt'] },
-  // Lessico comune: usato dal generatore schede per i livelli facili.
-  { name: '60000_parole_italiane.txt', anyOf: ['60000_parole_italiane.txt'] },
+  // Fasce di frequenza: servono alla generazione delle schede (build e admin).
+  // Sono ritagliate dalla lista di frequenza grezza, che NON e' versionata.
+  { name: 'frequency-it.txt', anyOf: ['frequency-it.txt'] },
   // Indice lessicale: DEVE essere versionato. Contiene i tag grammaticali che
   // Morph-it (gitignored) non può fornire nei build di deploy: senza, la pagina
   // Parole mostra tutte le voci come `n.c.`.
@@ -29,6 +30,7 @@ const REQUIRED = [
 ];
 
 const MIN_WORDS_BR_BYTES = 100 * 1024; // il file reale è ~616 KB
+const MIN_FREQUENCY_BYTES = 200 * 1024; // 60k parole: ~560 KB
 
 const problems = [];
 
@@ -42,6 +44,11 @@ for (const entry of REQUIRED) {
   console.log(`✓ ${found} (${(size / 1024).toFixed(0)} KB)`);
   if (found === 'words.br' && size < MIN_WORDS_BR_BYTES) {
     problems.push(`words.br sembra troncato (${size} byte): atteso > ${MIN_WORDS_BR_BYTES}`);
+  }
+  if (found === 'frequency-it.txt' && size < MIN_FREQUENCY_BYTES) {
+    problems.push(
+      `frequency-it.txt sembra troncato (${size} byte): le fasce 5k/20k/60k non entrerebbero`,
+    );
   }
 }
 
