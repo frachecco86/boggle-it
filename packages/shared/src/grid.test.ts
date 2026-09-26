@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COMPOSITION, FULL_COMPOSITION, FOREIGN_LETTERS, RARE_ITALIAN, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
+import { COMPOSITION, FULL_COMPOSITION, FOREIGN_LETTERS, RARE_ITALIAN, areAdjacent, findWordPath, generateGrid, isValidPath, wordFromPath } from './grid.js';
 import { DIFFICULTY_ORDER, isDifficulty } from './difficulty.js';
 import { normalizeWord, scoreForWord, scoreForRound, generateRoomCode } from './scoring.js';
 import type { Tile } from './types.js';
@@ -186,5 +186,48 @@ describe('Difficoltà: validazione condivisa', () => {
       expect(comp, `manca COMPOSITION per ${d}`).toBeDefined();
       expect(comp!.vowels.min).toBeLessThan(comp!.vowels.max);
     }
+  });
+});
+
+describe('findWordPath: percorso di una parola (suggerimento)', () => {
+  const mk = (faces: string, size: 4 = 4) => {
+    const lines = faces.split('/');
+    const tiles = lines.flatMap((row, r) =>
+      [...row].map((letter, c) => tile(r * size + c, r, c, letter)),
+    );
+    return { size, tiles } as const;
+  };
+
+  it('trova un percorso legale per una parola presente', () => {
+    // riga 1: c a s a → "casa" si legge da sinistra a destra
+    const g = mk('casa/xxxx/xxxx/xxxx');
+    const path = findWordPath(g, 'casa');
+    expect(path).not.toBeNull();
+    expect(path).toHaveLength(4);
+    expect(path!.map((i) => g.tiles[i]!.letter).join('')).toBe('casa');
+  });
+
+  it('gestisce qu come una sola cella', () => {
+    // La faccia `q` vale "qu": servono 5 celle (q, a, n, d, o) per "quando".
+    const g = mk('qand/xxxo/xxxx/xxxx');
+    const path = findWordPath(g, 'quando');
+    expect(path).not.toBeNull();
+    expect(path).toHaveLength(5); // q(qu),a,n,d,o
+  });
+
+  it('ritorna null se la parola non è componibile', () => {
+    const g = mk('abcd/efgh/ijkl/mnop');
+    expect(findWordPath(g, 'zzzz')).toBeNull();
+  });
+
+  it('non riusa la stessa cella due volte', () => {
+    // "caca" servirebbe due volte la stessa 'c': non c'è percorso.
+    const g = mk('caaa/aaaa/aaaa/aaaa');
+    const path = findWordPath(g, 'caca');
+    if (path) {
+      expect(new Set(path).size).toBe(path.length);
+    }
+    // "caca" esiste solo se c'è una seconda 'c' raggiungibile: qui non c'è.
+    expect(path).toBeNull();
   });
 });

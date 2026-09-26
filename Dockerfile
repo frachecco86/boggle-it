@@ -70,6 +70,9 @@ COPY --from=builder /app/packages/dictionary/data/frequency-it.txt ./packages/di
 # produzione l'elenco del lessico non si vedeva. Il build di deploy lo genera ora
 # anche nel percorso offline (`build-words.mjs`).
 COPY --from=builder /app/packages/dictionary/data/word-index.br ./packages/dictionary/data/word-index.br
+# Definizioni (modalità apprendimento): pannello "?" della parola trovata.
+# Senza, il pannello ripiega sul link a Wikizionario (funziona comunque).
+COPY --from=builder /app/packages/dictionary/data/definitions.br ./packages/dictionary/data/definitions.br
 # Vocabolario comune NVdB e calibrazione "ale".
 #
 # NOTA: la calibrazione (`calibration.json`) è già pronta perché il catalogo

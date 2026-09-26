@@ -896,6 +896,34 @@ dimensione: aggiungere altre dimensioni richiede una nuova calibrazione.
 
 ---
 
+## Appendice — Modalità apprendimento (IMPLEMENTATA)
+
+Modalità del single player per **imparare le parole** invece di gareggiare.
+Si attiva dalle impostazioni partita (Sì/No) e cambia tre cose:
+
+- **Tempo infinito**: il round non scade, si esce solo a mano. L'effect del conto
+  alla rovescia non parte quando la modalità è attiva.
+- **Tasto suggerimento (💡)**: scegle una parola **non ancora trovata** e ne
+  **anima il percorso** sulla griglia, accendendo le celle in sequenza. Preferisce
+  le parole più lunghe (più difficili da vedere). Il percorso lo calcola
+  `findWordPath` in `grid.ts` (DFS, 8 direzioni, `q` = "qu"): la stessa parola si
+  può comporre in più modi, quindi serve il tracciato, non solo il testo.
+- **Definizione**: il pulsante "?" accanto alla parola appena trovata (o
+  suggerita) apre le definizioni. Fonte: dump di Wikizionario (kaikki.org /
+  wiktextract), estratto in `definitions.br` da
+  `pnpm --filter @boggle/dictionary build:definitions`.
+
+**Perché le definizioni sono "filtrate"**: le voci `form-of` (es. `amo` →
+"prima persona di amare") sono **escluse**. Non spiegano il significato, dicono
+solo da quale lemma deriva; il significato sta nel lemma. Per una forma flessa
+il pannello mostra quindi il link alla voce online, non un testo vuoto.
+
+**Dove**: `useSoloGame.ts` (suggerimento, tempo infinito), `GridBoard`
+(`hintPath` → celle `.tile--hint` animate), `CurrentWord` + `WordDefinition`
+(pannello), rotta `GET /words/:word/definition`.
+
+---
+
 ## PARTE D — Taratura e verifica
 
 - `measure:schede [--variant standard|full] [--n N] [--size S]` misura, per ogni

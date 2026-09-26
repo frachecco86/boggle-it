@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.30.0';
+export const APP_VERSION = '0.31.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,40 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    "version": "0.31.0",
+    "date": "2026-09-26",
+    "title": "Modalità apprendimento: suggerimento animato e definizioni",
+    "promo": {
+      "emoji": "💡",
+      "headline": "Impara le parole, non solo trovarle",
+      "text": "Una nuova modalità senza tempo: un tasto mostra una parola possibile animandola sulla griglia, e il \"?\" accanto alla parola appena trovata apre la sua definizione dal dizionario italiano."
+    },
+    "changes": [
+      {
+        "kind": "feature",
+        "items": [
+          "**Modalità apprendimento** (nelle impostazioni partita, solo single player): **tempo infinito** — nessun conto alla rovescia, si esce dal round solo quando si vuole — più due aiuti.",
+          "**Tasto suggerimento 💡**: anima una parola possibile sulla griglia, accendendo le celle in sequenza. Preferisce le parole più lunghe, che sono le più difficili da vedere. Non ripropone parole già trovate.",
+          "**Definizione della parola**: il pulsante \"?\" accanto alla parola appena trovata (o suggerita) apre la definizione, estratta dal dizionario italiano di Wikizionario. Se una parola non ha una definizione, il pannello offre il link alla voce online."
+        ]
+      },
+      {
+        "kind": "fix",
+        "items": [
+          "**Le schede \"Ale\" ora si possono scegliere** dalle impostazioni partita. Prima il pulsante era disabilitato fuori dalla griglia 5×5 (dove le Ale esistono) senza spiegare come arrivarci. Ora sceglierle imposta automaticamente la griglia a 5×5, con una nota che lo spiega; e scegliere un'altra griglia mentre Ale è attivo riporta a Standard (evita una configurazione senza schede). Vale anche in lobby: il server rifiuta comunque l'incoerenza."
+        ]
+      },
+      {
+        "kind": "tech",
+        "items": [
+          "`definitions.br` (1,6 MB, ~67.000 parole): definizioni estratte dal dump di Wikizionario con `pnpm --filter @boggle/dictionary build:definitions`. Le flessioni (`form-of`, es. \"prima persona di amare\") sono escluse: il significato sta nel lemma. Licenza CC BY-SA 4.0.",
+          "Rotta `GET /words/:word/definition`, con normalizzazione degli accenti (`città` → `citta`) e cache di un giorno.",
+          "`findWordPath(grid, word)` in `@boggle/shared`: trova il tracciato di una parola sulla griglia (DFS, 8 direzioni, `q` = \"qu\"). Serve ad animare il suggerimento: la stessa parola si può comporre in più modi."
+        ]
+      }
+    ]
+  },
   {
     "version": "0.30.0",
     "date": "2026-09-26",

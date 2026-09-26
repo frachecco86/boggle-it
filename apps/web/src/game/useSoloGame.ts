@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   acceptedWords,
+  findWordPath,
   isValidPath,
   pathMatchesWord,
   rowsToGrid,
@@ -38,6 +39,8 @@ interface UseSoloGameOptions {
   difficulty: Difficulty;
   rounds: number;
   roundDurationMs: number;
+  /** Modalità apprendimento: tempo infinito + suggerimento + definizioni. */
+  learningMode?: boolean;
 }
 
 export interface SoloGameState {
@@ -65,6 +68,13 @@ export interface SoloGameState {
   saveStatus: 'idle' | 'anonymous' | 'saving' | 'saved' | 'failed';
   /** true mentre si carica la scheda dal server. */
   loading: boolean;
+  /**
+   * Percorso della parola suggerita, da animare sulla griglia.
+   * Presente solo mentre il suggerimento è in corso (modalità apprendimento).
+   */
+  hintPath: number[] | null;
+  /** La parola suggerita (testo), mostrata nel riquadro di composizione. */
+  hintWord: string | null;
 }
 
 /**
@@ -78,7 +88,7 @@ export interface SoloGameState {
  * avversari con cui essere "unici").
  */
 export function useSoloGame(options: UseSoloGameOptions) {
-  const { gridSize, difficulty, rounds, roundDurationMs } = options;
+  const { gridSize, difficulty, rounds, roundDurationMs, learningMode = false } = options;
 
   const [phase, setPhase] = useState<SoloGameState['phase']>('countdown');
   /**
@@ -99,6 +109,11 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const [missedWords, setMissedWords] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** Suggerimento in corso: percorso da animare e parola (solo apprendimento). */
+  const [hintPath, setHintPath] = useState<number[] | null>(null);
+  const [hintWord, setHintWord] = useState<string | null>(null);
+  /** Timer che spegne il suggerimento dopo l'animazione. */
+  const hintTimerRef = useRef<number | null>(null);
 
   const grid = useMemo(() => (scheda ? rowsToGrid(scheda.grid) : null), [scheda]);
   const gridRef = useRef<Grid | null>(null);
@@ -132,6 +147,54 @@ export function useSoloGame(options: UseSoloGameOptions) {
     [grid, selectedPath],
   );
 
+  /** Spegne il suggerimento e ferma il timer. */
+  const clearHint = useCallback(() => {
+    if (hintTimerRef.current !== null) {
+      window.clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = null;
+    }
+    setHintPath(null);
+    setHintWord(null);
+  }, []);
+
+  /**
+   * Mostra un suggerimento: pesca una parola NON ancora trovata, ne calcola il
+   * percorso e lo anima sulla griglia. Disponibile solo in modalità apprendimento.
+   *
+   * Preferisce le parole più lunghe: sono quelle che danno più punti e quelle che
+   * un principiante fa più fatica a vedere. Se nessuna parola è componibile in
+   * un percorso legale, non fa nulla (non deve sembrare un tasto rotto).
+   */
+  const requestHint = useCallback((): boolean => {
+    if (!learningMode) return false;
+    const g = gridRef.current;
+    const s = schedaRef.current;
+    if (!g || !s) return false;
+    const trovate = new Set(foundRef.current.map((f) => f.word));
+    const candidate = [...acceptedWords(s)]
+      .filter((w) => !trovate.has(w) && w.length >= 3)
+      .sort((a, b) => b.length - a.length || a.localeCompare(b, 'it'));
+    for (const word of candidate) {
+      const path = findWordPath(g, word);
+      if (!path) continue;
+      setHintPath(path);
+      setHintWord(word);
+      if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
+      /*
+       * Durata dell'animazione: si accende una cella ogni 260 ms, poi resta
+       * visibile un secondo perché la parola si possa leggere (e se ne possa
+       * aprire la definizione col pulsante "?") prima che sparisca.
+       */
+      hintTimerRef.current = window.setTimeout(() => {
+        hintTimerRef.current = null;
+        setHintPath(null);
+        setHintWord(null);
+      }, 1600 + path.length * 260);
+      return true;
+    }
+    return false;
+  }, [learningMode]);
+
   const startRound = useCallback(
     async (roundNumber: number) => {
       setLoading(true);
@@ -140,6 +203,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setSelectedPath([]);
       setFeedback(null);
       setMissedWords([]);
+      clearHint();
       try {
         /*
          * La scheda si pesca a caso: nessun giocatore la conosce in anticipo.
@@ -187,9 +251,11 @@ export function useSoloGame(options: UseSoloGameOptions) {
     void startRound(pendingRoundRef.current);
   }, [startRound]);
 
-  // Timer
+  // Timer. In modalità apprendimento il tempo è INFINITO: si esce dal round
+  // solo a mano, così si può cercare con calma e usare i suggerimenti senza
+  // pressione (è una modalità per imparare, non per gareggiare).
   useEffect(() => {
-    if (phase !== 'playing' || loading) return;
+    if (phase !== 'playing' || loading || learningMode) return;
     let raf = 0;
     const tick = () => {
       const left = Math.max(0, deadline - Date.now());
@@ -203,7 +269,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [phase, deadline, score, loading]);
+  }, [phase, deadline, score, loading, learningMode]);
 
   const commitPath = useCallback((path: number[]) => {
     const g = gridRef.current;
@@ -349,6 +415,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
       missedWords,
       saveStatus,
       loading,
+      hintPath,
+      hintWord,
     } satisfies SoloGameState,
     loadError,
     totalScore,
@@ -367,6 +435,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
     },
     nextRound,
     clearFeedback: () => setFeedback(null),
+    requestHint,
+    clearHint,
   };
 }
 

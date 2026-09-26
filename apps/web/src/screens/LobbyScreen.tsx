@@ -260,7 +260,9 @@ export function LobbyScreen() {
               ))}
             </div>
 
-            {/* Criteri delle schede: cambia l'insieme da cui si pesca la scheda. */}
+            {/* Criteri delle schede: cambia l'insieme da cui si pesca la scheda.
+                Le "Ale" esistono solo su 5×5, quindi sceglierle imposta anche la
+                griglia (altrimenti non troverebbero schede). */}
             <span className="field__label">Schede</span>
             <div className="rounds-options">
               {SCHEDA_VARIANTS.map((v) => (
@@ -270,7 +272,7 @@ export function LobbyScreen() {
                   title={SCHEDA_VARIANT_HINTS[v]}
                   onClick={() =>
                     configureRoom(
-                      room.gridSize,
+                      v === 'ale' ? 5 : room.gridSize,
                       room.difficulty,
                       room.rounds,
                       room.roundDurationMs,
@@ -284,7 +286,11 @@ export function LobbyScreen() {
                 </button>
               ))}
             </div>
-            <p className="settings-host__hint">{SCHEDA_VARIANT_HINTS[variant]}</p>
+            <p className="settings-host__hint">
+              {variant === 'ale'
+                ? 'Le schede Ale richiedono la griglia 5×5: sceglierle la imposta automaticamente.'
+                : SCHEDA_VARIANT_HINTS[variant]}
+            </p>
 
             <MusicPicker
               value={room.musicId ?? 'none'}

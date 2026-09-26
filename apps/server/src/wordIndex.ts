@@ -28,6 +28,11 @@ export interface WordIndex {
   hasEntry: Set<string>;
   /** parola → forma accentata da usare nel link (`citta` → `città`). */
   display: Map<string, string>;
+  /**
+   * parola → definizioni (una per senso), per la modalità apprendimento.
+   * Vuoto se `definitions.br` non è presente (build offline).
+   */
+  definitions: Map<string, string[]>;
 }
 
 /**
@@ -38,7 +43,12 @@ export interface WordIndex {
  * senza tag né link. La ricerca e i filtri sulle schede non dipendono da qui.
  */
 export function loadWordIndex(file: string): WordIndex {
-  const empty: WordIndex = { pos: new Map(), hasEntry: new Set(), display: new Map() };
+  const empty: WordIndex = {
+    pos: new Map(),
+    hasEntry: new Set(),
+    display: new Map(),
+    definitions: new Map(),
+  };
   if (!existsSync(file)) return empty;
 
   const lines = brotliDecompressSync(readFileSync(file)).toString('utf8').split('\n');
@@ -69,5 +79,38 @@ export function loadWordIndex(file: string): WordIndex {
     for (const w of words.split(' ')) if (w) pos.set(w, section);
   }
 
-  return { pos, hasEntry, display };
+  // Le definizioni vivono in un file separato (`definitions.br`) e vengono
+  // unite dal chiamante (`schede.ts`), così i due file si rigenerano in modo
+  // indipendente. Qui si parte da una mappa vuota.
+  return { pos, hasEntry, display, definitions: new Map() };
+}
+
+/**
+ * Carica `definitions.br` (definizioni di Wikizionario, per l'apprendimento).
+ *
+ * Formato a bucket come `word-index.br`: `~<tag>` seguito da righe
+ * `parola<TAB>senso; senso; …`. Tenerlo separato dall'indice dei tag permette di
+ * aggiornare le definizioni senza rigenerare i tag (e viceversa).
+ *
+ * Assente nel build offline: ritorna una mappa vuota e la modalità apprendimento
+ * ripiega sul link a Wikizionario.
+ */
+export function loadDefinitions(file: string): Map<string, string[]> {
+  const definitions = new Map<string, string[]>();
+  if (!existsSync(file)) {
+    console.warn(`⚠ Definizioni non trovate in ${file}: il pannello "?" userà il link a Wikizionario.`);
+    return definitions;
+  }
+  const lines = brotliDecompressSync(readFileSync(file)).toString('utf8').split('\n');
+  for (const line of lines) {
+    // Le righe `~tag` marcano l'inizio di un bucket: qui non servono (il tag lo
+    // dà già l'indice), quindi si saltano.
+    if (!line || line.startsWith('~')) continue;
+    const tab = line.indexOf('\t');
+    if (tab < 0) continue;
+    const word = line.slice(0, tab);
+    const senses = line.slice(tab + 1).split('; ').filter(Boolean);
+    if (word && senses.length > 0) definitions.set(word, senses);
+  }
+  return definitions;
 }

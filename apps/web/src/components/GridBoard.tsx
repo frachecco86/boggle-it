@@ -10,6 +10,13 @@ interface GridBoardProps {
   onCommit: (path: number[]) => void;
   /** Flash rosso discreto su parola non valida (niente scuotimento). */
   flashError?: boolean;
+  /**
+   * Percorso da ANIMARE come suggerimento (modalità apprendimento): le celle si
+   * accendono in sequenza, dalla prima all'ultima. `null` quando non c'è nulla
+   * da suggerire. È separato da `selectedPath` perché non è un percorso del
+   * giocatore: non invia nulla e non entra nel punteggio.
+   */
+  hintPath?: readonly number[] | null;
 }
 
 /** Segmento con freccia: linea + punta, in coordinate locali all'SVG del trail. */
@@ -69,7 +76,7 @@ function buildArrows(points: { x: number; y: number }[]): TrailArrow[] {
  * Il riconoscimento delle celle è delegato a `SwipeController`
  * (settori angolari + deadzone + isteresi): vedi `game/cellTracker.ts`.
  */
-export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError }: GridBoardProps) {
+export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError, hintPath }: GridBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
   /** SVG del trail: serve per convertire le coordinate al momento del disegno. */
@@ -217,16 +224,22 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
         {grid.tiles.map((tile) => {
           const pathIndex = selectedPath.indexOf(tile.index);
           const selected = pathIndex >= 0;
+          // Posizione della cella nel suggerimento: -1 se non fa parte del percorso.
+          const hintIndex = hintPath ? hintPath.indexOf(tile.index) : -1;
+          const hinted = hintIndex >= 0;
           return (
             <div
               key={tile.index}
               ref={(el) => {
                 cellRefs.current[tile.index] = el;
               }}
-              className={`tile${selected ? ' tile--selected' : ''}`}
+              className={`tile${selected ? ' tile--selected' : ''}${hinted ? ' tile--hint' : ''}`}
               style={{
                 animationDelay: `${(tile.row + tile.col) * 40}ms`,
                 ['--order' as string]: pathIndex,
+                // Ritardo dell'animazione del suggerimento: la cella N si accende
+                // dopo N passi (vedi `--hint-delay` nel CSS).
+                ...(hinted ? { ['--hint-delay' as string]: `${hintIndex * 260}ms` } : {}),
               }}
             >
               <span className="tile__letter">{tile.display}</span>

@@ -228,6 +228,11 @@ interface AppState {
    * `RoomState.schedaVariant` perché tutti giochino le stesse schede.
    */
   schedaVariant: SchedaVariant;
+  /**
+   * Modalità apprendimento (single player): suggerimento animato sulla board e
+   * definizione della parola appena trovata. Attiva il tempo infinito.
+   */
+  learningMode: boolean;
   // audio
   audioSettings: AudioSettings;
   // multiplayer
@@ -312,6 +317,7 @@ interface AppState {
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
   /** Cambia l'insieme di criteri delle schede (standard / full criteria). */
   setSchedaVariant: (variant: SchedaVariant) => void;
+  setLearningMode: (on: boolean) => void;
   setAudioSettings: (next: Partial<AudioSettings>) => void;
   createRoom: (
     gridSize: GridSize,
@@ -349,6 +355,7 @@ export const useAppStore = create<AppState>()(
       soloRoundDurationMs: 180_000,
       soloRounds: 3,
       schedaVariant: 'standard',
+      learningMode: false,
       audioSettings: audio.getSettings(),
       roomCode: null,
       playerId: null,
@@ -773,6 +780,7 @@ export const useAppStore = create<AppState>()(
       },
 
       setSchedaVariant: (variant) => set({ schedaVariant: resolveSchedaVariant(variant) }),
+      setLearningMode: (on) => set({ learningMode: on }),
 
       createRoom: async (gridSize, difficulty, rounds, roundDurationMs, maxPlayers) => {
         const socket = getSocket();

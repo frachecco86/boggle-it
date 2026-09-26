@@ -31,6 +31,8 @@ export function HomeScreen() {
     soloRounds,
     schedaVariant,
     setSchedaVariant,
+    learningMode,
+    setLearningMode,
   } = useAppStore();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -306,11 +308,13 @@ export function HomeScreen() {
           rounds={hostRounds}
           durationMs={hostDurationMs}
           variant={schedaVariant}
+          learningMode={learningMode}
           onSize={setHostGridSize}
           onDifficulty={setHostDifficulty}
           onRounds={setHostRounds}
           onDuration={setHostDurationMs}
           onVariant={setSchedaVariant}
+          onLearningMode={setLearningMode}
           onClose={() => setShowSettings(false)}
         />
       )}

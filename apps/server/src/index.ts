@@ -299,6 +299,22 @@ app.get('/words', (req, res) => {
   res.json(result);
 });
 
+/**
+ * Definizione di una parola (modalità apprendimento).
+ *
+ * GET /words/:word/definition -> { word, pos, senses }
+ *
+ * `senses: []` quando la parola non ha una definizione: il client in quel caso
+ * mostra il link a Wikizionario. Le definizioni vengono dal dump di Wikizionario
+ * (`definitions.br`, CC BY-SA 4.0).
+ */
+app.get('/words/:word/definition', (req, res) => {
+  const word = String(req.params.word ?? '').trim();
+  if (!word) return res.status(400).json({ error: 'Parola mancante' });
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.json(schede.definition(word));
+});
+
 
 /**
  * Statistiche di una scheda: quante parole, per ogni lunghezza, punteggio massimo
@@ -1517,6 +1533,16 @@ io.on('connection', (socket) => {
     // la scheda già scelta non appartiene più alla selezione.
     if (schedaVariant !== undefined && resolveSchedaVariant(schedaVariant) !== room.schedaVariant) {
       room.schedaVariant = resolveSchedaVariant(schedaVariant);
+      room.pendingSchedaId = null;
+    }
+    /*
+     * Coerenza variante × dimensione: le schede "Ale" esistono solo su 5×5 (la
+     * calibrazione è per dimensione). Se l'host sceglie una griglia diversa mentre
+     * "Ale" è attivo, si torna a `standard`: senza questo la stanza resterebbe
+     * configurata su una variante senza schede e l'avvio round la troverebbe vuota.
+     */
+    if (room.schedaVariant === 'ale' && room.gridSize !== 5) {
+      room.schedaVariant = 'standard';
       room.pendingSchedaId = null;
     }
     room.rounds = clampRounds(rounds);

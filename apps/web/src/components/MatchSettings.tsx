@@ -18,11 +18,14 @@ interface MatchSettingsProps {
   durationMs: number;
   /** Insieme di criteri delle schede da giocare. */
   variant: SchedaVariant;
+  /** Modalità apprendimento (solo single player): suggerimento, definizioni, tempo infinito. */
+  learningMode: boolean;
   onSize: (s: GridSize) => void;
   onDifficulty: (d: Difficulty) => void;
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
   onVariant: (v: SchedaVariant) => void;
+  onLearningMode: (on: boolean) => void;
   onClose: () => void;
 }
 
@@ -46,11 +49,13 @@ export function MatchSettings({
   rounds,
   durationMs,
   variant,
+  learningMode,
   onSize,
   onDifficulty,
   onRounds,
   onDuration,
   onVariant,
+  onLearningMode,
   onClose,
 }: MatchSettingsProps) {
   return (
@@ -137,44 +142,69 @@ export function MatchSettings({
         </div>
 
         {/*
-         * Criteri delle schede: due cataloghi diversi, non due difficoltà. Le
-         * schede "full criteria" seguono i criteri completi (rapporto
-         * vocali/consonanti per livello, frequenza delle lettere, numero di
-         * parole e parole ancora); le standard sono il catalogo storico.
+         * Criteri delle schede: tre cataloghi diversi, non tre difficoltà.
+         *
+         * Le schede "Ale" esistono SOLO sulla griglia 5×5 (la calibrazione è per
+         * dimensione e il catalogo è concentrato lì). Invece di disabilitare il
+         * tasto — che lasciava l'utente senza spiegazione e senza modo di
+         * arrivarci — scegleire "Ale" PORTA la griglia a 5×5. Simmetricamente,
+         * scegleire un'altra griglia mentre "Ale" è attivo riporta a Standard:
+         * altrimenti resterebbe una variante senza schede per quella dimensione.
          */}
         <div className="sheet__row">
           <span className="sheet__label">Schede</span>
           <div className="rounds-options">
-            {SCHEDA_VARIANTS.map((v) => {
-              /*
-               * Le schede "ale" esistono solo sulla griglia 5×5 (la calibrazione è
-               * per dimensione e il catalogo è concentrato lì). Altrove il tasto è
-               * disabilitato: sceglierlo darebbe "nessuna scheda disponibile".
-               */
-              const disabled = v === 'ale' && size !== 5;
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  disabled={disabled}
-                  className={`pill${variant === v ? ' pill--active' : ''}`}
-                  title={
-                    disabled
-                      ? 'Disponibili solo sulla griglia 5×5'
-                      : SCHEDA_VARIANT_HINTS[v]
-                  }
-                  onClick={() => onVariant(v)}
-                >
-                  {SCHEDA_VARIANT_LABELS[v]}
-                </button>
-              );
-            })}
+            {SCHEDA_VARIANTS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`pill${variant === v ? ' pill--active' : ''}`}
+                title={SCHEDA_VARIANT_HINTS[v]}
+                onClick={() => {
+                  onVariant(v);
+                  if (v === 'ale' && size !== 5) onSize(5);
+                }}
+              >
+                {SCHEDA_VARIANT_LABELS[v]}
+              </button>
+            ))}
           </div>
         </div>
         <p className="sheet__note">
-          {variant === 'ale' && size !== 5
-            ? 'Le schede Ale sono disponibili solo sulla griglia 5×5.'
+          {variant === 'ale'
+            ? 'Le schede Ale sono disponibili solo sulla griglia 5×5: sceglierle imposta la griglia a 5×5.'
             : SCHEDA_VARIANT_HINTS[variant]}
+        </p>
+
+        {/*
+         * Modalità apprendimento: un interruttore perché è una modalità, non una
+         * difficoltà. Attiva suggerimento, definizioni e tempo INFINITO: è pensata
+         * per imparare le parole, non per gareggiare.
+         */}
+        <div className="sheet__row">
+          <span className="sheet__label">Apprendimento</span>
+          <div className="rounds-options">
+            <button
+              type="button"
+              className={`pill${learningMode ? ' pill--active' : ''}`}
+              onClick={() => onLearningMode(true)}
+              disabled={false}
+            >
+              Sì
+            </button>
+            <button
+              type="button"
+              className={`pill${!learningMode ? ' pill--active' : ''}`}
+              onClick={() => onLearningMode(false)}
+            >
+              No
+            </button>
+          </div>
+        </div>
+        <p className="sheet__note">
+          {learningMode
+            ? 'Tempo infinito, tasto 💡 per un suggerimento animato e definizione della parola trovata.'
+            : 'Partita a tempo, come sempre. Attiva Apprendimento per suggerimenti e definizioni.'}
         </p>
 
         {/* Le regole stanno qui perché prima erano nell'anteprima della scheda,

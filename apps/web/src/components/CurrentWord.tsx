@@ -1,4 +1,5 @@
 import { lengthBucket } from '../game/lengthBucket.js';
+import { WordDefinition } from './WordDefinition.js';
 
 export interface CurrentWordFeedback {
   kind: 'valid' | 'invalid' | 'duplicate';
@@ -18,6 +19,11 @@ interface CurrentWordProps {
    * componendo: appena il dito riparte, il rettangolo torna alle lettere.
    */
   feedback?: CurrentWordFeedback | null;
+  /**
+   * Parola SUGGERITA dalla modalità apprendimento: appare nel riquadro quando
+   * non si sta componendo né c'è un esito, con il pulsante "?" per la definizione.
+   */
+  hintWord?: string | null;
 }
 
 /**
@@ -38,7 +44,7 @@ interface CurrentWordProps {
  * a capo (`white-space: nowrap`). Il carattere si riduce al crescere della
  * parola, così la griglia sotto non si sposta di un pixel durante il gioco.
  */
-export function CurrentWord({ word, feedback }: CurrentWordProps) {
+export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
   // Soglie progressive: oltre le 8 lettere il testo si rimpicciolisce, oltre le
   // 12 ancora. Servono perché con l'altezza fissa una parola lunga uscirebbe.
   const sizeClass = word.length > 12 ? ' current-word-banner--xlong' : word.length >= 8 ? ' current-word-banner--long' : '';
@@ -78,6 +84,29 @@ export function CurrentWord({ word, feedback }: CurrentWordProps) {
         ) : (
           <span className="current-word-banner__reason">{feedback.reason}</span>
         )}
+        {/*
+         * Pulsante "?": apre la DEFINIZIONE della parola appena trovata.
+         * Solo per le parole valide (per una parola errata non c'è niente da
+         * spiegare) e solo se la parola ha una voce nel dizionario interno.
+         */}
+        {feedback.kind === 'valid' && <WordDefinition word={feedback.word} />}
+      </div>
+    );
+  }
+
+  /*
+   * Parola SUGGERITA (modalità apprendimento): sta nel riquadro finché non si
+   * tocca la griglia. La definizione si può aprire: è lì che si impara il
+   * significato della parola appena rivelata.
+   */
+  if (hintWord) {
+    return (
+      <div className="current-word-banner current-word-banner--hint" aria-live="polite" aria-atomic="true">
+        <span className="current-word-banner__hint-icon" aria-hidden>
+          💡
+        </span>
+        <span className="current-word-banner__word">{hintWord.toUpperCase()}</span>
+        <WordDefinition word={hintWord} />
       </div>
     );
   }

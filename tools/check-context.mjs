@@ -23,6 +23,9 @@ const REQUIRED = [
   // Morph-it (gitignored) non può fornire nei build di deploy: senza, la pagina
   // Parole mostra tutte le voci come `n.c.`.
   { name: 'word-index.br', anyOf: ['word-index.br'] },
+  // Definizioni per la modalità apprendimento (pannello "?"): estratte dal dump
+  // di Wikizionario. Se manca, il pannello ripiega sul link a Wikizionario.
+  { name: 'definitions.br', anyOf: ['definitions.br'] },
   // Whitelist in consonante: regola di giocabilità, condivisa tra build del
   // dizionario e generazione delle schede. (Le abbreviazioni non sono più una
   // fonte: `abbreviations.txt` è stato rimosso.)

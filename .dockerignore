@@ -14,6 +14,10 @@ packages/dictionary/data/morph-it_048.txt
 packages/dictionary/data/current_version
 packages/dictionary/data/words.txt
 packages/dictionary/data/.sources.json
+# Dump grezzo di Wikizionario (43 MB): dal quale si generano `word-index.br` e
+# `definitions.br`, entrambi VERSIONATI. Il dump serve solo a rigenerarli in
+# locale, non nel container.
+packages/dictionary/data/itwiktionary.jsonl.gz
 
 # Documentazione e test (non servono a runtime)
 docs

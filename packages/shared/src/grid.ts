@@ -390,3 +390,55 @@ export function wordFromPath(grid: Grid, path: number[]): string {
 export function pathMatchesWord(grid: Grid, path: number[], word: string): boolean {
   return wordFromPath(grid, path).toLowerCase() === word.toLowerCase();
 }
+
+/**
+ * Trova un PERCORSO legale che compone `word` sulla griglia, o `null`.
+ *
+ * Serve al suggerimento della modalità apprendimento: per animare una parola
+ * sulla board bisogna conoscerne il tracciato, non solo il testo (la stessa
+ * parola può essere composta in più modi). DFS con le stesse regole del gioco:
+ * 8 direzioni, ogni cella una volta sola. `q` vale `qu`, quindi confronta la
+ * LETTERA della parola (che in griglia è una sola faccia), non i suoi caratteri.
+ */
+export function findWordPath(grid: Grid, word: string): number[] | null {
+  const target = word.toLowerCase();
+  const size = grid.size;
+  const n = size * size;
+  const visited = new Array<boolean>(n).fill(false);
+  const path: number[] = [];
+
+  const dfs = (index: number, at: number): boolean => {
+    const tile = grid.tiles[index]!;
+    const value = letterValue(tile.letter);
+    // `value` può essere più lungo di 1 (`qu`): si consuma in blocco.
+    if (target.slice(at, at + value.length) !== value) return false;
+    const next = at + value.length;
+    path.push(index);
+    if (next === target.length) return true;
+
+    visited[index] = true;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const r = tile.row + dr;
+        const c = tile.col + dc;
+        if (r < 0 || r >= size || c < 0 || c >= size) continue;
+        const ni = r * size + c;
+        if (visited[ni]) continue;
+        if (dfs(ni, next)) {
+          visited[index] = false;
+          return true;
+        }
+      }
+    }
+    visited[index] = false;
+    path.pop();
+    return false;
+  };
+
+  for (let i = 0; i < n; i++) {
+    path.length = 0;
+    if (dfs(i, 0)) return [...path];
+  }
+  return null;
+}

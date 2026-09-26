@@ -29,6 +29,7 @@ export function SoloGameScreen() {
     soloDifficulty,
     soloRounds,
     soloRoundDurationMs,
+    learningMode,
     setScreen,
   } = useAppStore();
   const game = useSoloGame({
@@ -36,6 +37,7 @@ export function SoloGameScreen() {
     difficulty: soloDifficulty,
     rounds: soloRounds,
     roundDurationMs: soloRoundDurationMs,
+    learningMode,
   });
   const { state } = game;
 
@@ -126,15 +128,36 @@ export function SoloGameScreen() {
        * lo spazio che avanza.
        */}
       <div className="game__main">
-        <CurrentWord word={state.currentWord} feedback={feedback} />
+        <CurrentWord word={state.currentWord} feedback={feedback} hintWord={state.hintWord} />
         <GridBoard
           grid={state.grid!}
           selectedPath={state.selectedPath}
           onPathChange={handlePathChange}
           onCommit={game.commitPath}
           flashError={feedback?.kind === 'invalid'}
+          hintPath={state.hintPath}
         />
       </div>
+
+      {/*
+       * Modalità apprendimento: tasto suggerimento + tempo infinito. Il tasto è
+       * un cerchio flottante in basso a destra, così non compete con la griglia
+       * e resta raggiungibile col pollice.
+       */}
+      {learningMode && (
+        <div className="game__learning">
+          <span className="game__learning-badge">Apprendimento · tempo infinito</span>
+          <button
+            type="button"
+            className="game__hint-btn"
+            onClick={() => game.requestHint()}
+            title="Mostra una parola possibile"
+            aria-label="Suggerisci una parola"
+          >
+            💡
+          </button>
+        </div>
+      )}
     </div>
   );
 }

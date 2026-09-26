@@ -1170,6 +1170,43 @@ body::before {
   }
 }
 
+/*
+ * Cella del SUGGERIMENTO (modalità apprendimento): si accende in sequenza, una
+ * dopo l'altra, per mostrare il percorso di una parola possibile.
+ *
+ * Il ritardo arriva da `--hint-delay` (impostato inline in base alla posizione
+ * nel percorso), quindi il CSS resta una sola regola per tutte le celle. Colore
+ * distinto dalla selezione (verde "suggerimento", non viola "sto giocando") per
+ * non confondere il percorso animato con quello che si sta tracciando col dito.
+ * `animation-fill-mode: forwards` lascia accese le celle fino alla fine.
+ */
+.tile--hint {
+  animation: tile-hint 0.45s ease-out var(--hint-delay, 0ms) both;
+  z-index: 1;
+}
+
+@keyframes tile-hint {
+  from {
+    background: var(--surface);
+    box-shadow: none;
+    transform: scale(1);
+  }
+  40% {
+    background: #16a34a;
+    color: #fff;
+    box-shadow:
+      0 0 0 3px rgba(22, 163, 74, 0.45),
+      0 6px 20px rgba(22, 163, 74, 0.5);
+    transform: scale(1.06);
+  }
+  to {
+    background: color-mix(in srgb, #16a34a 78%, var(--surface));
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.4);
+    transform: scale(1);
+  }
+}
+
 /* L'alone parte largo e luminoso e si assesta sullo stato selezionato. */
 @keyframes tile-light-up {
   0% {
@@ -6305,4 +6342,174 @@ body::before {
   font-family: var(--font-display);
   font-weight: 800;
   color: var(--warning);
+}
+
+/* ================================================================== */
+/* Modalità apprendimento: suggerimento + definizioni                  */
+/* ================================================================== */
+
+/*
+ * Il tasto suggerimento (💡) e il badge "tempo infinito". Stanno in basso a
+ * destra, sopra i controlli flottanti: con il pollice ci si arriva senza
+ * lasciare la griglia, e non coprono le celle.
+ */
+.game__learning {
+  position: fixed;
+  right: 16px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.game__learning-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.game__hint-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, #e0a800 55%, var(--border));
+  background: color-mix(in srgb, #ffd54a 22%, var(--surface));
+  font-size: 1.5rem;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.game__hint-btn:hover,
+.game__hint-btn:active {
+  transform: scale(1.08);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.3);
+}
+
+/* Riquadro della parola suggerita. */
+.current-word-banner--hint {
+  background: color-mix(in srgb, #16a34a 16%, var(--surface));
+  border-color: color-mix(in srgb, #16a34a 45%, var(--border));
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.current-word-banner__hint-icon {
+  font-size: 1.1rem;
+}
+
+/*
+ * Pulsante "?" e pannello della definizione.
+ *
+ * Il pannello è `absolute` rispetto al pulsante: compare sopra il riquadro di
+ * composizione, verso l'alto, perché sotto c'è la griglia. Su schermo stretto si
+ * àncora alla viewport (come l'InfoBox) per non sbordare.
+ */
+.word-def {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.word-def__btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  color: var(--text-dim);
+  font-weight: 800;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.word-def__btn:hover,
+.word-def__btn--open {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.word-def__panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 45;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(55vh, 420px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+  text-align: left;
+}
+
+.word-def__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.word-def__title {
+  font-size: 1rem;
+}
+
+.word-def__pos {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.word-def__senses {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.word-def__senses li {
+  margin-bottom: 5px;
+}
+
+.word-def__loading,
+.word-def__none {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.word-def__link {
+  display: block;
+  margin-top: 6px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .word-def__panel {
+    position: fixed;
+    top: auto;
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
 }

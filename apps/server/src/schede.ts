@@ -16,9 +16,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadWordIndex, type WordIndex } from './wordIndex.js';
+import { loadDefinitions, loadWordIndex, type WordIndex } from './wordIndex.js';
 import {
   acceptedWords,
+  normalizeWord,
   schedaFileName,
   schedaKey,
   schedaVariantOf,
@@ -95,7 +96,13 @@ export class SchedaCatalog {
    * Categoria grammaticale e voce Wikizionario per le parole del dizionario.
    * Arriva da `word-index.br`; se assente la pagina Parole resta senza tag.
    */
-  private lexical: WordIndex = loadWordIndex(path.join(DICTIONARY_DATA_DIR, 'word-index.br'));
+  private lexical: WordIndex = (() => {
+    const index = loadWordIndex(path.join(DICTIONARY_DATA_DIR, 'word-index.br'));
+    // Le definizioni stanno in un file a parte: si uniscono qui, così il resto
+    // del codice le trova nello stesso oggetto (`lexical.definitions`).
+    index.definitions = loadDefinitions(path.join(DICTIONARY_DATA_DIR, 'definitions.br'));
+    return index;
+  })();
 
   /**
    * Sostituisce l'indice lessicale (usato dai test e dopo una rigenerazione).
@@ -218,6 +225,22 @@ export class SchedaCatalog {
    * l'admin ne aggiunge, quindi rifarlo a ogni richiesta sarebbe spreco.
    * `invalidate()` lo azzera quando il catalogo cambia.
    */
+  /**
+   * Definizione di una parola (modalità apprendimento).
+   *
+   * Normalizza l'input come il resto del gioco (`città` → `citta`) e ritorna
+   * `senses: []` quando non c'è: il client in quel caso mostra il link a
+   * Wikizionario, quindi `null` non serve.
+   */
+  definition(word: string): { word: string; pos: string; senses: string[] } {
+    const w = normalizeWord(word);
+    return {
+      word: w,
+      pos: this.lexical.pos.get(w) ?? 'n.c.',
+      senses: this.lexical.definitions.get(w) ?? [],
+    };
+  }
+
   wordCatalog(query: WordCatalogQuery): WordCatalogResponse {
     const index = this.getWordIndex();
 
