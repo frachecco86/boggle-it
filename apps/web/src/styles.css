@@ -1082,13 +1082,72 @@ body {
   background: linear-gradient(160deg, var(--primary), var(--primary-soft));
   border-color: var(--primary-soft);
   color: #fff;
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--primary) 40%, transparent);
   /*
-   * Niente animazione "pop": la selezione era uno scatto (scala 0.86 -> 1 ->
-   * 0.94). Ora è solo uno stato più piccolo di poco, raggiunto dalla transizione
-   * morbida dichiarata su `.tile`.
+   * ACCENSIONE della cella attivata: bordo luminoso + alone attorno + luce
+   * interna in alto. È il segnale che il dito è passato di qui: senza, la cella
+   * cambiava solo colore e si perdeva il segno del percorso.
+   */
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--primary) 42%, transparent),
+    0 6px 22px color-mix(in srgb, var(--primary) 55%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  /*
+   * Niente animazione "pop" (scala 0.86 -> 1 -> 0.94, era uno scatto): la
+   * selezione è uno stato più piccolo di poco, raggiunto dalla transizione
+   * morbida dichiarata su `.tile`. L'unica animazione è il lampo di accensione.
    */
   transform: scale(0.96);
+  animation: tile-light-up 0.3s ease-out;
+  /* L'alone non deve finire sotto la cella vicina. */
+  z-index: 1;
+}
+
+/*
+ * Lampo di accensione: un velo bianco che sfuma, sopra la cella.
+ *
+ * Perché un velo e non `filter: brightness()`: un filtro sull'elemento ritaglia
+ * anche i suoi `box-shadow` alla propria area (+10%), quindi l'alone luminoso
+ * sparirebbe per tutta la durata dell'animazione. Il velo è un figlio, non tocca
+ * l'ombra, e dà lo stesso effetto di "si accende".
+ */
+.tile--selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  animation: tile-flash 0.3s ease-out forwards;
+}
+
+@keyframes tile-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* L'alone parte largo e luminoso e si assesta sullo stato selezionato. */
+@keyframes tile-light-up {
+  0% {
+    box-shadow:
+      0 0 0 9px color-mix(in srgb, var(--primary) 18%, transparent),
+      0 10px 30px color-mix(in srgb, var(--primary) 75%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile--selected {
+    animation: none;
+  }
+
+  .tile--selected::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 /* Parola non valida: flash morbido, NIENTE scuotimento (era fastidioso). */
@@ -4845,8 +4904,12 @@ body {
  * Le celle della griglia: in scuro serve un bordo piu' marcato per staccarle e
  * una punta del colore della difficoltà nella superficie, così la griglia non è
  * un grigio neutro uguale per tutti i livelli.
+ *
+ * ATTENZIONE a `:not(.tile--selected)`: senza, questa regola (attributo + classe)
+ * è PIÙ specifica di `.tile--selected` e cancella l'accensione della cella
+ * attivata — sfondo, bordo e alone tornavano a quelli di una cella a riposo.
  */
-[data-theme='dark'] .tile {
+[data-theme='dark'] .tile:not(.tile--selected) {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
   background: color-mix(in srgb, var(--primary) 8%, var(--surface));
   border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
