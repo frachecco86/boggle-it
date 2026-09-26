@@ -159,7 +159,12 @@ export function WordsScreen() {
     <div className="screen words">
       <div className="words__topbar">
         <BackHome />
-        <InfoBox title="Come leggere questo elenco" label="Come leggere questo elenco">
+      </div>
+
+      <header className="words__head">
+        <div className="words__title-row">
+          <h2 className="screen__title">Parole</h2>
+          <InfoBox title="Come leggere questo elenco" label="Come leggere questo elenco">
           <p>
             <strong>Nelle schede</strong> mostra le parole che si possono davvero comporre
             nelle griglie del gioco, con <em>in quante schede</em> compaiono: una parola
@@ -186,11 +191,8 @@ export function WordsScreen() {
             Le definizioni testuali non sono incluse: sono disponibili seguendo il link alla
             voce di Wikizionario (licenza CC BY-SA).
           </p>
-        </InfoBox>
-      </div>
-
-      <header className="words__head">
-        <h2 className="screen__title">Parole</h2>
+          </InfoBox>
+        </div>
         {/* Due tab: stesso elenco, universo diverso (schede del gioco / lessico). */}
         <div className="words__tabs" role="tablist" aria-label="Vista delle parole">
           <button

@@ -4202,6 +4202,14 @@ body {
   margin-top: 6px;
 }
 
+/* Titolo + pulsante "?": il pulsante sta ACCANTO al titolo, non sulla topbar
+   (che è space-between e lo spingeva a destra, lontano dal titolo centrato). */
+.words__title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .words__dist {
   display: flex;
   flex-direction: column;

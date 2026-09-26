@@ -157,45 +157,6 @@ export function SchedaScreen() {
     <div className="screen scheda">
       <div className="scheda__topbar">
         <BackHome />
-        <InfoBox title="Come nascono le schede" label="Come nascono le schede">
-          <p>
-            Ogni scheda è una griglia <strong>pre-generata e pre-risolta</strong>: l'elenco
-            delle parole è calcolato in anticipo, così tutti i giocatori trovano le stesse
-            soluzioni e la partita è riproducibile.
-          </p>
-          <p>
-            La <strong>difficoltà</strong> decide quante vocali e consonanti rare entrano
-            nella griglia, e per i livelli facili anche <strong>quali parole valgono</strong>:
-            <em> molto facile</em> e <em>facile</em> accettano solo parole di uso comune.
-          </p>
-          <p>
-            Ogni scheda rispetta cinque criteri, scelti per rendere il{' '}
-            <strong>punteggio massimo prevedibile</strong> entro la stessa difficoltà:
-          </p>
-          <ul>
-            <li>
-              <strong>Lessico</strong> — le parole valide (comune o completo)
-            </li>
-            <li>
-              <strong>Quantità</strong> — un minimo di parole, per non annoiare
-            </li>
-            <li>
-              <strong>Lunghezza</strong> — una scala di taglie e un minimo di parole lunghe
-            </li>
-            <li>
-              <strong>Rarità</strong> — quante parole astruse sono ammesse
-            </li>
-            <li>
-              <strong>Punteggio</strong> — il massimo teorico deve stare in una banda
-              attorno al valore atteso
-            </li>
-          </ul>
-          <p>
-            Il <strong>punteggio massimo</strong> mostrato è il totale di TUTTE le parole
-            trovabili: è il tetto teorico, non quello che si fa in una partita. Si calcola
-            come <code>lunghezza − 2</code> per parola.
-          </p>
-        </InfoBox>
       </div>
 
       {/* Filtri: con 750 schede servono a trovare una fascia di punteggio o un gruppo. */}
@@ -266,6 +227,7 @@ export function SchedaScreen() {
          * "full criteria" (quelle con l'etichetta FULL nell'elenco) o solo quelle
          * del catalogo standard.
          */}
+        {/* Criteri di generazione: il pulsante "?" spiega i due insiemi, standard e full. */}
         <div className="scheda__score-pills">
           <span className="field__label">Criteri</span>
           {(['all', ...SCHEDA_VARIANTS] as const).map((v) => (
@@ -277,6 +239,72 @@ export function SchedaScreen() {
               {v === 'all' ? 'Tutti' : SCHEDA_VARIANT_LABELS[v as SchedaVariant]}
             </button>
           ))}
+          <InfoBox title="Come nascono le schede" label="Come nascono le schede">
+            <p>
+              Ogni scheda è una griglia <strong>pre-generata e pre-risolta</strong>: le parole
+              trovabili sono calcolate in anticipo, così tutti i giocatori hanno le stesse
+              soluzioni. Il catalogo ha <strong>10 schede standard + 5 full</strong> per ognuna
+              delle 9 combinazioni dimensione × difficoltà.
+            </p>
+            <p>
+              <strong>Lessico</strong> — valgono <em>tutte</em> le parole del dizionario
+              componibili sulla griglia. La difficoltà distingue poi le parole{' '}
+              <strong>attese</strong> (le più frequenti, mostrate nel riepilogo) da quelle
+              <strong> accettate</strong> (l'intero dizionario): una parola rara fuori fascia
+              vale lo stesso.
+            </p>
+            <p>
+              <strong>Rarità</strong> — in griglia entra solo la <code>z</code>, l'unica lettera
+              rara italiana. Le lettere non italiane (<code>k w x y j</code>, quasi solo
+              prestiti) non vengono mai pescate: erano quasi sempre celle morte.
+            </p>
+            <p>
+              <strong>Criteri <em>standard</em></strong> (il catalogo storico):
+            </p>
+            <ul>
+              <li>
+                <strong>Composizione</strong> — vocali 40–52% / 27–38% / 16–27% e{' '}
+                <code>z</code> fino al 3% / 12% / 12% (facile / normale / difficile)
+              </li>
+              <li>
+                <strong>Densità</strong> — parole accettate in banda: su 4×4 46–200 /
+                25–120 / 10–60
+              </li>
+              <li>
+                <strong>Una parola lunga</strong> — almeno 6 / 7 / 8 lettere (4×4 / 5×5 / 6×6)
+              </li>
+            </ul>
+            <p>
+              <strong>Criteri <em>full</em></strong> (più severi):
+            </p>
+            <ul>
+              <li>
+                <strong>Composizione</strong> — vocali 40–45% / 30–35% / 16–29%, con almeno
+                una <code>z</code> obbligatoria nel difficile
+              </li>
+              <li>
+                <strong>Densità</strong> — banda stretta: su 4×4 121–170 / 60–100 / 25–44
+              </li>
+              <li>
+                <strong>Parole ancora</strong> — più parole lunghe (es. 2 da 6+ nel 4×4
+                facile, 4 da 7+ nel 6×6 normale)
+              </li>
+              <li>
+                <strong>Lunghezza media</strong> — dentro una banda misurata (es. 4,4 nel
+                4×4 facile; 3,8 nel difficile)
+              </li>
+              <li>
+                <strong>Struttura</strong> — nessuna zona morta: niente consonanti lontane
+                da ogni vocale, al massimo una riga/colonna senza vocali, niente <code>h</code>{' '}
+                senza <code>c</code>/<code>g</code>
+              </li>
+            </ul>
+            <p>
+              Il <strong>punteggio massimo</strong> mostrato è il totale di TUTTE le parole
+              trovabili: è il tetto teorico, non quello che si fa in una partita. Si calcola
+              come <code>lunghezza − 2</code> per parola.
+            </p>
+          </InfoBox>
         </div>
       </section>
 
