@@ -18,7 +18,14 @@ export function letterValue(letter: string): string {
  * MODELLO (misurato, non a intuito):
  * La difficoltà percepita dipende da DUE fattori che vanno controllati insieme:
  *  - la quota di vocali (senza vocali non si formano sillabe)
- *  - il numero di lettere rare (z k w x y j), che è il fattore dominante
+ *  - il numero di lettere rare, che è il fattore dominante.
+ *
+ * ATTENZIONE, da non confondere (vedi DOCS/SCHEDE-ALGORITMO.md, Appendice):
+ *  - `RARE_ITALIAN` = ['z'] è una lettera ITALIANA rara, produttiva (35k voci);
+ *  - `FOREIGN_LETTERS` = ['k','w','x','y','j'] sono lettere NON italiane, quasi
+ *    solo prestiti/derivati (k 481, x 327, y 287, w 264, j 153 voci): in griglia
+ *    sono in gran parte "celle morte". Non entrano MAI nel gioco (`foreignMax`
+ *    è 0 in tutte le difficoltà) e `rareMin` si applica solo a `RARE_ITALIAN`.
  *
  * Controllare solo le vocali lasciava i primi tre livelli indistinguibili
  * (mediane 64/62/61 su 4x4). Con entrambe le leve le mediane diventano
@@ -27,12 +34,19 @@ export function letterValue(letter: string): string {
 export interface DifficultyComposition {
   /** Quota minima e massima di vocali nella griglia. */
   vowels: { min: number; max: number };
-  /** Numero massimo di lettere rare, come quota della griglia. */
+  /** Numero massimo di lettere ITALIANE rare (`RARE_ITALIAN`), quota griglia. */
   rareMax: number;
   /**
-   * Numero MINIMO di lettere rare da mettere in griglia (misura "full criteria").
-   * Serve ai livelli difficili, dove la presenza di lettere trappola (Q, Z) è
-   * parte della difficoltà e non può essere lasciata al caso.
+   * Numero massimo di lettere NON italiane (`FOREIGN_LETTERS`), quota griglia.
+   * Vale 0 in tutte le difficoltà: le parole straniere restano nel dizionario,
+   * ma le griglie non le pescano (nessuna cella morta per lettere non italiane).
+   */
+  foreignMax?: number;
+  /**
+   * Numero MINIMO di lettere ITALIANE rare da mettere in griglia (misura "full
+   * criteria"). Serve ai livelli difficili, dove la presenza di una lettera
+   * trappola italiana (Z) è parte della difficoltà e non può essere lasciata al
+   * caso. NON riguarda le straniere.
    */
   rareMin?: number;
   /**
@@ -53,11 +67,15 @@ export const COMPOSITION: Record<Difficulty, DifficultyComposition> = {
    * Misure sul dizionario (150 griglie per livello, dopo Fase 1): la sola
    * composizione produce mediane 59/55/50 parole su 4x4 — troppo vicine per
    * distinguere i livelli. È il FILTRO sulla densità di parole a separarli.
+   *
+   * `foreignMax: 0` su tutte le difficoltà: le lettere non italiane non entrano
+   * più nelle griglie (vedi `FOREIGN_LETTERS`). Il tetto storico (fino al 22%,
+   * con `k w x y j` incluse) era la causa principale delle "celle morte".
    */
-  facile: { vowels: { min: 0.40, max: 0.52 }, rareMax: 0.03 },
-  normale: { vowels: { min: 0.27, max: 0.38 }, rareMax: 0.12 },
-  // Poche vocali e molte consonanti rare: meno parole, più lunghe da comporre.
-  difficile: { vowels: { min: 0.16, max: 0.27 }, rareMax: 0.22 },
+  facile: { vowels: { min: 0.40, max: 0.52 }, rareMax: 0.03, foreignMax: 0 },
+  normale: { vowels: { min: 0.27, max: 0.38 }, rareMax: 0.12, foreignMax: 0 },
+  // Poche vocali e una quota di Z: meno parole, più lunghe da comporre.
+  difficile: { vowels: { min: 0.16, max: 0.27 }, rareMax: 0.12, foreignMax: 0 },
 };
 
 /** Consonanti italiane comuni usate per riempire la griglia. */
@@ -67,8 +85,21 @@ export const COMMON_CONSONANTS = [
 
 const VOWELS = ['a', 'e', 'i', 'o', 'u'] as const;
 
-/** Lettere rare/straniere che rendono il gioco difficile. */
-export const RARE_LETTERS = ['z', 'k', 'w', 'x', 'y', 'j'] as const;
+/** Lettere ITALIANE rare, produttive: entrano in griglia fino a `rareMax`. */
+export const RARE_ITALIAN = ['z'] as const;
+
+/**
+ * Lettere NON italiane (prestiti/derivati): non entrano in griglia, salvo
+ * esplicito `foreignMax > 0`. Restano nel dizionario, quindi le parole già
+ * formate in altro modo (o con l'eventuale straniera richiesta) restano valide.
+ */
+export const FOREIGN_LETTERS = ['k', 'w', 'x', 'y', 'j'] as const;
+
+/**
+ * Insieme storico, tenuto per compatibilità e per misurare l'insieme delle
+ * "lettere difficili". Per la GENERAZIONE usare `RARE_ITALIAN` e `FOREIGN_LETTERS`.
+ */
+export const RARE_LETTERS = [...RARE_ITALIAN, ...FOREIGN_LETTERS] as const;
 
 /**
  * Composizione per le schede "full criteria" (`Criteri generazione schede`).
@@ -89,6 +120,7 @@ export const FULL_COMPOSITION: Record<Difficulty, DifficultyComposition> = {
   facile: {
     vowels: { min: 0.4, max: 0.45 },
     rareMax: 0,
+    foreignMax: 0,
     // Consonanti ad alta frequenza (la pagina indica A E I O R S T C: oltre a
     // queste servono N, L, M, D per poter formare parole italiane).
     consonants: ['r', 's', 't', 'n', 'l', 'c', 'm', 'd'],
@@ -97,6 +129,7 @@ export const FULL_COMPOSITION: Record<Difficulty, DifficultyComposition> = {
   normale: {
     vowels: { min: 0.3, max: 0.35 },
     rareMax: 0.05,
+    foreignMax: 0,
     // Pool standard: entrano le consonanti medie (b, v, f, g, p).
     consonants: COMMON_CONSONANTS,
     hqChance: 0.17,
@@ -106,12 +139,13 @@ export const FULL_COMPOSITION: Record<Difficulty, DifficultyComposition> = {
     // che rende la griglia difficile.
     vowels: { min: 0.16, max: 0.29 },
     //
-    // Tetto alle rare RIDOTTO (era 0.22): al 22% uscivano griglie con 8 lettere
-    // rare su 36 (z w x j y ...), cioè un quinto della griglia bloccato — il
+    // Tetto alle rare italiane (Z) RIDOTTO (era 0.22): al 22% uscivano griglie
+    // con 8 lettere rare su 36, cioè un quinto della griglia bloccato — il
     // criterio chiede "presenza di lettere rare", non una griglia di sole rare.
     rareMax: 0.12,
-    // Almeno una lettera rara: senza, una griglia "difficile" può uscire con
-    // lettere tutte comuni e risultare facile.
+    foreignMax: 0,
+    // Almeno una Z: senza, una griglia "difficile" può uscire con lettere tutte
+    // comuni e risultare facile. La rara obbligatoria è ITALIANA, non `j`/`x`.
     rareMin: 1,
     consonants: COMMON_CONSONANTS,
     hqChance: 0.3,
@@ -151,7 +185,7 @@ export function generateGrid(
   const random = () => Math.min(0.999999, Math.max(0, rng()));
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(random() * arr.length)]!;
 
-  // 1. Numero di vocali e rare, scelti nella fascia della difficoltà.
+  // 1. Numero di vocali, rare italiane e straniere, nella fascia della difficoltà.
   const minV = Math.round(total * comp.vowels.min);
   const maxV = Math.round(total * comp.vowels.max);
   const vowelCount = minV + Math.floor(random() * (maxV - minV + 1));
@@ -159,17 +193,22 @@ export function generateGrid(
   const rareMin = Math.max(0, Math.min(rareMax, comp.rareMin ?? 0));
   // Il minimo può superare il massimo quando la quota è piccola (rareMax 0 con
   // rareMin 1): in quel caso vince il minimo, è una richiesta esplicita.
+  // Si applica alle sole lettere ITALIANE rare: le straniere non sono mai
+  // obbligatorie e, con `foreignMax: 0`, non entrano affatto.
   const rareCount = Math.max(
     rareMin,
     Math.floor(random() * (Math.max(rareMax, rareMin) + 1)),
   );
+  const foreignMax = Math.max(0, Math.round(total * (comp.foreignMax ?? 0)));
+  const foreignCount = foreignMax > 0 ? Math.floor(random() * (foreignMax + 1)) : 0;
 
   // 2. Composizione della griglia.
   const consonantPool = comp.consonants ?? COMMON_CONSONANTS;
   const hqChance = comp.hqChance ?? 0.17;
   const faces: string[] = [];
   for (let i = 0; i < vowelCount; i++) faces.push(pick(VOWELS));
-  for (let i = 0; i < rareCount; i++) faces.push(pick(RARE_LETTERS));
+  for (let i = 0; i < rareCount; i++) faces.push(pick(RARE_ITALIAN));
+  for (let i = 0; i < foreignCount; i++) faces.push(pick(FOREIGN_LETTERS));
   // 'H' e 'Qu' servono per parole comunissime (che/chi/qui/qua): li includiamo
   // in modo probabilistico, senza consumare il budget di lettere rare.
   if (random() < hqChance && faces.length < total) faces.push('h');
@@ -269,6 +308,18 @@ export function gridStructureIssues(grid: Grid): string[] {
     }
   }
   if (deadH > 0) issues.push(`${deadH} h senza c/g vicini`);
+
+  // Lettere NON italiane: dovrebbero essere 0 (foreignMax 0). Se una entra
+  // comunque (configurazione futura, admin, test) deve almeno stare vicino a una
+  // vocale, altrimenti è una cella morta sicura. Difesa in profondità.
+  let foreign = 0;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const ch = at(r, c);
+      if (ch && (FOREIGN_LETTERS as readonly string[]).includes(ch)) foreign++;
+    }
+  }
+  if (foreign > 0) issues.push(`${foreign} lettere non italiane in griglia`);
 
   return issues;
 }

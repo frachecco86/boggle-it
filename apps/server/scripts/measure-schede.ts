@@ -23,9 +23,11 @@ import {
   createSchedaPool,
   DIFFICULTY_ORDER,
   densityBandFor,
+  FOREIGN_LETTERS,
   generateGrid,
   gridStructureIssues,
   normalizeWord,
+  RARE_ITALIAN,
   resolveSchedaVariant,
   SCHEDA_VARIANT_LABELS,
   solveGrid,
@@ -91,9 +93,11 @@ function compositionOf(
   samples = 200,
 ): string {
   const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
-  const RARE = new Set(['z', 'k', 'w', 'x', 'y', 'j']);
+  const RARE = new Set<string>(RARE_ITALIAN);
+  const FOREIGN = new Set<string>(FOREIGN_LETTERS);
   let vowels = 0;
   let rare = 0;
+  let foreign = 0;
   let total = 0;
   for (let i = 0; i < samples; i++) {
     const grid = generateGrid(size, Math.random, difficulty, composition);
@@ -101,9 +105,14 @@ function compositionOf(
       total++;
       if (VOWELS.has(tile.letter)) vowels++;
       if (RARE.has(tile.letter)) rare++;
+      if (FOREIGN.has(tile.letter)) foreign++;
     }
   }
-  return `vocali ${((vowels / total) * 100).toFixed(1)}%, rare ${((rare / total) * 100).toFixed(1)}%`;
+  return (
+    `vocali ${((vowels / total) * 100).toFixed(1)}%, ` +
+    `rare IT ${((rare / total) * 100).toFixed(1)}%, ` +
+    `non IT ${((foreign / total) * 100).toFixed(1)}%`
+  );
 }
 
 function main(): void {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COMPOSITION, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
+import { COMPOSITION, FULL_COMPOSITION, FOREIGN_LETTERS, RARE_ITALIAN, areAdjacent, generateGrid, isValidPath, wordFromPath } from './grid.js';
 import { DIFFICULTY_ORDER, isDifficulty } from './difficulty.js';
 import { normalizeWord, scoreForWord, scoreForRound, generateRoomCode } from './scoring.js';
 import type { Tile } from './types.js';
@@ -92,7 +92,6 @@ describe('grid', () => {
 });
 
 describe('Difficoltà: composizione controllata', () => {
-  const RARE = new Set(['z', 'k', 'w', 'x', 'y', 'j']);
   const isVowel = (c: string) => 'aeiou'.includes(c);
 
   it('rispetta i limiti di vocali e lettere rare per ogni difficoltà', () => {
@@ -107,12 +106,34 @@ describe('Difficoltà: composizione controllata', () => {
         for (let i = 0; i < 25; i++) {
           const g = generateGrid(size, Math.random, diff);
           const vowels = g.tiles.filter((t) => isVowel(t.letter)).length;
-          const rare = g.tiles.filter((t) => RARE.has(t.letter)).length;
+          const rare = g.tiles.filter((t) => (RARE_ITALIAN as readonly string[]).includes(t.letter)).length;
           expect(vowels, `${diff} ${size}x${size}: vocali ${vowels} fuori [${minV},${maxV}]`).toBeGreaterThanOrEqual(minV);
           expect(vowels, `${diff} ${size}x${size}: vocali ${vowels} fuori [${minV},${maxV}]`).toBeLessThanOrEqual(maxV);
-          expect(rare, `${diff} ${size}x${size}: ${rare} rare (max ${maxRare})`).toBeLessThanOrEqual(maxRare);
+          expect(rare, `${diff} ${size}x${size}: ${rare} rare italiane (max ${maxRare})`).toBeLessThanOrEqual(maxRare);
         }
       }
+    }
+  });
+
+  it('non mette MAI lettere non italiane in griglia (foreignMax 0)', () => {
+    const foreign = new Set<string>(FOREIGN_LETTERS);
+    for (const size of [4, 5, 6] as const) {
+      for (const diff of ['facile', 'normale', 'difficile'] as const) {
+        for (let i = 0; i < 25; i++) {
+          const g = generateGrid(size, Math.random, diff);
+          for (const tile of g.tiles) {
+            expect(foreign.has(tile.letter), `${diff} ${size}x${size}: lettera non italiana "${tile.letter}"`).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it('la rara obbligatoria del difficile full è una Z (italiana)', () => {
+    for (let i = 0; i < 25; i++) {
+      const g = generateGrid(4, Math.random, 'difficile', FULL_COMPOSITION.difficile);
+      const z = g.tiles.filter((t) => t.letter === 'z').length;
+      expect(z, 'almeno una Z nel difficile full').toBeGreaterThanOrEqual(1);
     }
   });
 
