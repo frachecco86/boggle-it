@@ -511,6 +511,36 @@ body::before {
   font-size: 1rem;
 }
 
+/*
+ * Tasto "Modalità apprendimento" della home.
+ *
+ * Stile distinto dal tasto di gioco (che è il viola pieno): qui il giallo del
+ * suggerimento, così si capisce che è un'altra modalità e non un secondo "gioca".
+ * Da attivo il bordo e lo sfondo si intensificano (è un interruttore: lo stato
+ * deve leggersi a colpo d'occhio).
+ */
+.home__learn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed color-mix(in srgb, #e0a800 55%, var(--border));
+  background: color-mix(in srgb, #ffd54a 10%, var(--surface));
+  color: var(--text);
+  font-weight: 700;
+}
+
+.home__learn:hover {
+  border-color: #e0a800;
+  background: color-mix(in srgb, #ffd54a 18%, var(--surface));
+}
+
+.home__learn--active {
+  border-style: solid;
+  border-color: #e0a800;
+  background: color-mix(in srgb, #ffd54a 26%, var(--surface));
+}
+
 /* Riga audio: sempre visibile, quindi solo un filo di margine. */
 .home .audio-settings {
   margin-top: 0;
@@ -565,6 +595,16 @@ body::before {
   font-size: 0.72rem;
   line-height: 1.35;
   color: var(--text-dim);
+}
+
+/* Promemoria della modalità apprendimento nel foglio delle impostazioni. */
+.sheet__note--learn {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #e0a800 45%, var(--border));
+  background: color-mix(in srgb, #ffd54a 12%, var(--surface));
+  color: var(--text);
 }
 
 /* Voci in fondo: pulsanti piccoli, non tre pulsanti grandi. */
@@ -1056,6 +1096,41 @@ body::before {
   filter: drop-shadow(0 0 4px rgba(124, 92, 255, 0.7));
 }
 
+/*
+ * Frecce del SUGGERIMENTO (modalità apprendimento): stesso disegno del percorso
+ * del giocatore ma in verde, così non si confondono con lo swipe in corso.
+ *
+ * Ogni tratto compare con `--arrow-delay` (impostato inline in base alla
+ * posizione nel percorso): le frecce seguono l'accensione delle celle, quindi si
+ * capisce l'ORDINE della parola, non solo quali celle la formano.
+ */
+.grid-trail__hint {
+  animation: trail-hint-in 0.3s ease-out var(--arrow-delay, 0ms) both;
+}
+
+.grid-trail__hint .grid-trail__line {
+  stroke: #16a34a;
+  filter: drop-shadow(0 0 5px rgba(22, 163, 74, 0.85));
+}
+
+.grid-trail__hint .grid-trail__glow {
+  stroke: rgba(22, 163, 74, 0.28);
+}
+
+.grid-trail__hint .grid-trail__head {
+  fill: #16a34a;
+  filter: drop-shadow(0 0 4px rgba(22, 163, 74, 0.7));
+}
+
+@keyframes trail-hint-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .grid-cells {
   display: grid;
   gap: var(--grid-gap);
@@ -1284,19 +1359,12 @@ body::before {
 /* ---------- Anteprima parola in composizione (sopra la griglia) ---------- */
 
 .current-word-banner {
-  grid-column: 1 / -1;
   /*
-   * Altezza FISSA (non `min-height`) e contenuto che non va a capo.
-   *
-   * Prima: `min-height: 56px` con il placeholder a 0.95rem e le lettere a 1.8rem.
-   * Il banner cambiava altezza quando si iniziava a comporre (la riga cresceva)
-   * e, con parole lunghe, andava a capo su due righe: la griglia si spostava
-   * verso il basso proprio mentre si gioca.
-   *
-   * Con `height` fissa il banner non si muove mai: le lettere in eccesso
-   * scorrono in orizzontale invece di andare a capo.
+   * Il banner è ora la FACCIA ANTERIORE della carta (vedi `.current-word-card`
+   * più sotto): riempie la faccia, che è alta 64px. `grid-column` sta sulla
+   * carta, non qui.
    */
-  height: 64px;
+  height: 100%;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -6409,107 +6477,170 @@ body::before {
   font-size: 1.1rem;
 }
 
+/* ================================================================== */
+/* Carta della parola con DEFINIZIONE sul retro (flip 3D)              */
+/* ================================================================== */
+
 /*
- * Pulsante "?" e pannello della definizione.
+ * Il riquadro di composizione è una CARTA a due facce. Il tasto "?" la fa
+ * ruotare di 180° e sul retro compaiono le definizioni.
  *
- * Il pannello è `absolute` rispetto al pulsante: compare sopra il riquadro di
- * composizione, verso l'alto, perché sotto c'è la griglia. Su schermo stretto si
- * àncora alla viewport (come l'InfoBox) per non sbordare.
+ * PERCHÉ così e non una nuvoletta sovrapposta: la nuvoletta copriva la griglia
+ * ed era un secondo elemento da chiudere, con il suo margine dal bordo. Qui non
+ * si aggiunge nulla allo schermo: cambia la faccia dello stesso riquadro, che ha
+ * già l'altezza giusta e sta dove l'occhio è puntato. `perspective` dà profondità
+ * alla rotazione (senza, sembrerebbe uno schiacciamento piatto).
  */
-.word-def {
+.current-word-card {
+  grid-column: 1 / -1;
+  perspective: 900px;
+}
+
+.current-word-card__inner {
   position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
+  height: 64px;
+  transform-style: preserve-3d;
+  /* La rotazione e l'ALTEZZA si animano insieme: girandosi la carta si allunga
+     per ospitare la definizione (vedi `.current-word-card--flipped`). */
+  transition:
+    transform 0.55s cubic-bezier(0.2, 0.8, 0.3, 1),
+    height 0.4s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-.word-def__btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  color: var(--text-dim);
-  font-weight: 800;
-  font-size: 0.85rem;
-  line-height: 1;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+.current-word-card--flipped .current-word-card__inner {
+  /* 180° sull'asse orizzontale: la carta "si gira" come un pannello. */
+  transform: rotateX(180deg);
+  /*
+   * Da girata la carta CRESCE, perché 64px non bastano per una definizione (si
+   * vedrebbero due righe, obbligando a scorrere dentro un riquadro minuscolo).
+   * Cresce verso il basso: la griglia sotto si restringe un po', ma solo mentre
+   * si legge la definizione (e solo in modalità apprendimento). Il tetto evita
+   * che una definizione lunga mangi la griglia: oltre, il retro scrolla.
+   */
+  height: min(34vh, 200px);
 }
 
-.word-def__btn:hover,
-.word-def__btn--open {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-.word-def__panel {
+/*
+ * Le due facce occupano lo stesso spazio. `backface-visibility: hidden` nasconde
+ * quella che NON guarda l'osservatore: senza, si vedrebbe il retro specchiato
+ * attraverso la faccia anteriore (le lettere al contrario).
+ */
+.current-word-banner,
+.current-word-card__back {
   position: absolute;
-  bottom: calc(100% + 8px);
-  right: 0;
-  z-index: 45;
-  width: min(360px, calc(100vw - 32px));
-  max-height: min(55vh, 420px);
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: var(--radius-lg);
+}
+
+/* Il fronte resta il riquadro di prima: eredita tutte le sue regole. */
+.current-word-banner {
+  transform: rotateX(0deg);
+  /* Lascia spazio al tasto "?" in alto a destra, che sta sopra il testo. */
+  padding-right: 46px;
+}
+
+/*
+ * Il RETRO è ruotato di 180° così, quando la carta si gira, risulta dritto.
+ * Può scorrere in verticale: una definizione non entra in 64px, ed è l'unica
+ * parte che scrolla (il fronte ha altezza fissa e non si muove mai).
+ */
+.current-word-card__back {
+  transform: rotateX(180deg);
   overflow-y: auto;
-  padding: 12px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 18px 40px rgb(0 0 0 / 0.25);
+  padding: 8px 44px 8px 14px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--border));
   text-align: left;
 }
 
-.word-def__head {
+/*
+ * Tasto "?" (fronte) e "✕" (retro). Stanno in alto a destra della faccia
+ * rispettiva: sono lo stesso angolo, quindi il gesto di chiudere è dove ci si
+ * aspetta di trovarlo.
+ */
+.current-word-card__flip {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text-dim);
+  font-weight: 800;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, transform 0.15s;
+  z-index: 2;
+}
+
+.current-word-card__flip:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-50%) scale(1.08);
+}
+
+/* Il "✕" del retro non deve ereditare il `translateY` del `:hover` del fronte. */
+.current-word-card__flip--back:hover {
+  transform: translateY(-50%) scale(1.08);
+}
+
+/* Contenuto del retro. */
+.current-word-card__definition {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.current-word-card__def-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
-.word-def__title {
-  font-size: 1rem;
+.current-word-card__def-head strong {
+  font-size: 0.95rem;
 }
 
-.word-def__pos {
-  font-size: 0.7rem;
+.current-word-card__def-pos {
+  font-size: 0.66rem;
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
   padding: 1px 6px;
   border-radius: 6px;
 }
 
-.word-def__senses {
+.current-word-card__def-senses {
   margin: 0;
-  padding-left: 18px;
-  font-size: 0.84rem;
-  line-height: 1.45;
-  color: var(--text);
+  padding-left: 16px;
 }
 
-.word-def__senses li {
-  margin-bottom: 5px;
+.current-word-card__def-senses li {
+  margin-bottom: 3px;
 }
 
-.word-def__loading,
-.word-def__none {
+.current-word-card__def-loading,
+.current-word-card__def-none {
   margin: 0;
-  font-size: 0.82rem;
   color: var(--text-dim);
 }
 
-.word-def__link {
-  display: block;
-  margin-top: 6px;
+.current-word-card__def-none a {
   color: var(--primary);
   font-weight: 600;
 }
 
-@media (max-width: 560px) {
-  .word-def__panel {
-    position: fixed;
-    top: auto;
-    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
-    left: 12px;
-    right: 12px;
-    width: auto;
+/*
+ * Riduzione del movimento: chi preferisce niente animazioni vede la carta
+ * passare da una faccia all'altra senza rotazione.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .current-word-card__inner {
+    transition: none;
   }
 }

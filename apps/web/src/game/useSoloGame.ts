@@ -14,6 +14,9 @@ import {
   type Scheda,
 } from '@boggle/shared';
 import { loadRandomScheda } from './schedeLoader.js';
+// Il passo dell'animazione del suggerimento vive in GridBoard (insieme alle
+// frecce): qui serve per calcolare quando spegnere il suggerimento.
+import { HINT_STEP_MS } from '../components/GridBoard.js';
 import { audio } from '../audio/AudioEngine.js';
 import { activeToken } from './profileStore.js';
 import { submitGame } from './statsClient.js';
@@ -181,15 +184,16 @@ export function useSoloGame(options: UseSoloGameOptions) {
       setHintWord(word);
       if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
       /*
-       * Durata dell'animazione: si accende una cella ogni 260 ms, poi resta
-       * visibile un secondo perché la parola si possa leggere (e se ne possa
-       * aprire la definizione col pulsante "?") prima che sparisca.
+       * Durata dell'animazione: si accende una cella ogni `HINT_STEP_MS` (lo
+       * stesso passo delle frecce, vedi `GridBoard`), poi resta visibile un
+       * secondo perché la parola si possa leggere (e se ne possa aprire la
+       * definizione col pulsante "?") prima che sparisca.
        */
       hintTimerRef.current = window.setTimeout(() => {
         hintTimerRef.current = null;
         setHintPath(null);
         setHintWord(null);
-      }, 1600 + path.length * 260);
+      }, 1600 + path.length * HINT_STEP_MS);
       return true;
     }
     return false;

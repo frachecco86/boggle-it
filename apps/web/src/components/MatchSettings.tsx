@@ -18,14 +18,17 @@ interface MatchSettingsProps {
   durationMs: number;
   /** Insieme di criteri delle schede da giocare. */
   variant: SchedaVariant;
-  /** Modalità apprendimento (solo single player): suggerimento, definizioni, tempo infinito. */
+  /**
+   * Modalità apprendimento attiva (si attiva dal tasto in home, non da qui).
+   * In questo foglio serve solo a mostrare un promemoria: tempo infinito,
+   * suggerimento e definizioni sono attivi.
+   */
   learningMode: boolean;
   onSize: (s: GridSize) => void;
   onDifficulty: (d: Difficulty) => void;
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
   onVariant: (v: SchedaVariant) => void;
-  onLearningMode: (on: boolean) => void;
   onClose: () => void;
 }
 
@@ -55,7 +58,6 @@ export function MatchSettings({
   onRounds,
   onDuration,
   onVariant,
-  onLearningMode,
   onClose,
 }: MatchSettingsProps) {
   return (
@@ -177,38 +179,21 @@ export function MatchSettings({
         </p>
 
         {/*
-         * Modalità apprendimento: un interruttore perché è una modalità, non una
-         * difficoltà. Attiva suggerimento, definizioni e tempo INFINITO: è pensata
-         * per imparare le parole, non per gareggiare.
+         * Promemoria (non un interruttore): la modalità apprendimento si attiva
+         * dal tasto in home. Qui si ricorda cosa comporta, perché cambia l'esito
+         * della partita (tempo infinito, suggerimenti, definizioni).
          */}
-        <div className="sheet__row">
-          <span className="sheet__label">Apprendimento</span>
-          <div className="rounds-options">
-            <button
-              type="button"
-              className={`pill${learningMode ? ' pill--active' : ''}`}
-              onClick={() => onLearningMode(true)}
-              disabled={false}
-            >
-              Sì
-            </button>
-            <button
-              type="button"
-              className={`pill${!learningMode ? ' pill--active' : ''}`}
-              onClick={() => onLearningMode(false)}
-            >
-              No
-            </button>
-          </div>
-        </div>
-        <p className="sheet__note">
-          {learningMode
-            ? 'Tempo infinito, tasto 💡 per un suggerimento animato e definizione della parola trovata.'
-            : 'Partita a tempo, come sempre. Attiva Apprendimento per suggerimenti e definizioni.'}
-        </p>
+        {learningMode && (
+          <p className="sheet__note sheet__note--learn">
+            <span aria-hidden>💡</span> Modalità apprendimento attiva: tempo infinito, tasto
+            suggerimento e definizioni delle parole. Si disattiva dalla home.
+          </p>
+        )}
 
-        {/* Le regole stanno qui perché prima erano nell'anteprima della scheda,
-            che non c'è più (vedere la scheda prima di giocare avvantaggia). */}
+        {/**
+         * Le regole stanno qui perché prima erano nell'anteprima della scheda,
+         * che non c'è più (vedere la scheda prima di giocare avvantaggia).
+         */}
         <RulesPanel />
 
         <div className="sheet__actions">

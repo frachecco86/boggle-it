@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.31.0';
+export const APP_VERSION = '0.32.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,36 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    "version": "0.32.0",
+    "date": "2026-09-26",
+    "title": "La definizione gira il riquadro, e l'apprendimento è un tasto in home",
+    "promo": {
+      "emoji": "🔄",
+      "headline": "La parola si gira e mostra il significato",
+      "text": "Il \"?\" non apre più una nuvoletta: il riquadro di composizione ruota su se stesso e sul retro compare la definizione. E la modalità apprendimento ha il suo tasto nella home, accanto a \"Gioca da solo\"."
+    },
+    "changes": [
+      {
+        "kind": "improvement",
+        "items": [
+          "**La definizione ora sta NEL riquadro di composizione**: il tasto \"?\" fa girare la carta di 180° (flip 3D) e sul retro compaiono le definizioni. Prima si apriva una nuvoletta sovrapposta, che copriva la griglia ed era un secondo elemento da chiudere con il suo pulsante. Ora non si aggiunge nulla allo schermo: cambia la faccia dello stesso riquadro, che è già dove l'occhio è puntato.",
+          "**La carta si allarga quando è girata** (da 64 a 200px, con una transizione fluida): in 64px ci starebbero due righe di definizione. Oltre il tetto il retro scorre, così una definizione lunga non mangia la griglia.",
+          "**Modalità apprendimento: tasto nella home**, accanto a \"Gioca da solo\". Attivarlo apre subito le impostazioni partita (griglia e difficoltà) e diventa \"Apprendimento attivo · disattiva\": è un interruttore, quindi si spegne dallo stesso punto. Prima era nascosta dentro le impostazioni, dove non si trovava.",
+          "**Il suggerimento mostra anche le FRECCE e l'ordine di accensione**: oltre alle celle che si illuminano in sequenza, ogni collegamento è disegnato con una freccia verde che compare con lo stesso ritmo. Così si capisce in quale ordine leggere le lettere, non solo quali formano la parola. (Il percorso del dito resta viola: i due non si confondono.)",
+          "Nel foglio delle impostazioni resta un promemoria quando l'apprendimento è attivo (tempo infinito, suggerimento, definizioni): non è più un interruttore lì, perché si accende dalla home."
+        ]
+      },
+      {
+        "kind": "tech",
+        "items": [
+          "Il riquadro è una carta a due facce (`CurrentWord`): `.current-word-card__inner` ruota con `rotateX(180deg)`, le due facce hanno `backface-visibility: hidden` (senza, si vedrebbe il retro specchiato) e `perspective: 900px` dà profondità alla rotazione.",
+          "`useWordDefinition` (hook) carica la definizione solo quando il retro si apre davvero: la maggior parte delle parole non viene mai aperta, quindi non si fanno richieste inutili.",
+          "Con `prefers-reduced-motion` la carta passa da una faccia all'altra senza rotazione."
+        ]
+      }
+    ]
+  },
   {
     "version": "0.31.0",
     "date": "2026-09-26",

@@ -70,6 +70,32 @@ function buildArrows(points: { x: number; y: number }[]): TrailArrow[] {
 }
 
 /**
+ * Passo dell'animazione del suggerimento, in millisecondi.
+ *
+ * Una cella si accende ogni `HINT_STEP_MS`. Deve coincidere con il valore usato
+ * in `useSoloGame` per la durata del suggerimento (e con il passo delle frecce),
+ * altrimenti le lettere e i collegamenti si sfasano.
+ */
+export const HINT_STEP_MS = 260;
+
+/** Ritardo dell'accensione della cella in posizione `index` del percorso. */
+export function hintTileDelayMs(index: number): number {
+  return index * HINT_STEP_MS;
+}
+
+/**
+ * Ritardo della freccia `index` (collega la cella `index` alla `index + 1`).
+ *
+ * Mezzo passo di anticipo rispetto alla cella di ARRIVO: la freccia è già
+disegnata quando la lettera successiva si accende. Con lo stesso ritardo della
+cella di arrivo il tratto comparirebbe insieme alla lettera, e non si vedrebbe
+il collegamento.
+ */
+export function hintArrowDelayMs(index: number): number {
+  return index * HINT_STEP_MS + HINT_STEP_MS / 2;
+}
+
+/**
  * Griglia con swipe. Il percorso è renderizzato come catena di frecce luminose
  * che collegano le celle selezionate (stile Boggle).
  *
@@ -190,7 +216,27 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       .map((p) => ({ x: p.x - dx, y: p.y - dy }));
   }, [selectedPath, centers]);
 
+  /*
+   * Punti del SUGGERIMENTO (modalità apprendimento), con la stessa conversione
+   * di coordinate del trail del giocatore. Separati perché i due percorsi possono
+   * coesistere: il suggerimento è verde, il percorso del dito è viola.
+   */
+  const hintPoints = useMemo(() => {
+    const svg = trailSvgRef.current;
+    const board = containerRef.current;
+    if (!svg || !board || !hintPath || hintPath.length === 0) return [];
+    const sRect = svg.getBoundingClientRect();
+    const bRect = board.getBoundingClientRect();
+    const dx = sRect.left - bRect.left;
+    const dy = sRect.top - bRect.top;
+    return hintPath
+      .map((i) => centers[i])
+      .filter((p): p is { x: number; y: number } => Boolean(p))
+      .map((p) => ({ x: p.x - dx, y: p.y - dy }));
+  }, [hintPath, centers]);
+
   const arrows = useMemo(() => buildArrows(trailPoints), [trailPoints]);
+  const hintArrows = useMemo(() => buildArrows(hintPoints), [hintPoints]);
 
   return (
     <div
@@ -202,6 +248,35 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
       <svg ref={trailSvgRef} className="grid-trail" aria-hidden>
         {arrows.map((arrow, i) => (
           <g key={i}>
+            <line
+              className="grid-trail__glow"
+              x1={arrow.line.x1}
+              y1={arrow.line.y1}
+              x2={arrow.line.x2}
+              y2={arrow.line.y2}
+            />
+            <line
+              className="grid-trail__line"
+              x1={arrow.line.x1}
+              y1={arrow.line.y1}
+              x2={arrow.line.x2}
+              y2={arrow.line.y2}
+            />
+            <path className="grid-trail__head" d={arrow.head} />
+          </g>
+        ))}
+        {/*
+         * Frecce del SUGGERIMENTO: stesso disegno, colore verde, e ogni tratto
+         * compare con un ritardo crescente (`--arrow-delay`) così le frecce
+         * seguono l'accensione delle celle, dalla prima all'ultima. Senza il
+         * ritardo si vedrebbe tutto il percorso insieme, staccato dalle lettere.
+         */}
+        {hintArrows.map((arrow, i) => (
+          <g
+            key={`hint-${i}`}
+            className="grid-trail__hint"
+            style={{ ['--arrow-delay' as string]: `${hintArrowDelayMs(i)}ms` }}
+          >
             <line
               className="grid-trail__glow"
               x1={arrow.line.x1}
@@ -239,7 +314,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
                 ['--order' as string]: pathIndex,
                 // Ritardo dell'animazione del suggerimento: la cella N si accende
                 // dopo N passi (vedi `--hint-delay` nel CSS).
-                ...(hinted ? { ['--hint-delay' as string]: `${hintIndex * 260}ms` } : {}),
+                ...(hinted ? { ['--hint-delay' as string]: `${hintTileDelayMs(hintIndex)}ms` } : {}),
               }}
             >
               <span className="tile__letter">{tile.display}</span>

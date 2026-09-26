@@ -222,6 +222,35 @@ export function HomeScreen() {
           </button>
         )}
 
+        {/*
+         * Modalità apprendimento: un tasto della home (solo single player).
+         *
+         * Attiva la modalità E apre le impostazioni partita, così si scelgono
+         * griglia e difficoltà prima di iniziare. Il tasto è distinto da "Gioca
+         * da solo" perché è una modalità diversa, non un'opzione nascosta del
+         * menù: da qui la si trova senza aprire nulla.
+         *
+         * Ri-toccandolo si DISATTIVA (torna a partita a tempo): è l'unico posto
+         * dove si accende e si spegne, quindi il comportamento deve essere
+         * prevedibile come un interruttore.
+         */}
+        {mode === 'solo' && (
+          <button
+            type="button"
+            className={`btn home__learn${learningMode ? ' home__learn--active' : ''}`}
+            aria-pressed={learningMode}
+            disabled={busy}
+            onClick={() => {
+              const next = !learningMode;
+              setLearningMode(next);
+              if (next) setShowSettings(true);
+            }}
+          >
+            <span aria-hidden>💡</span>{' '}
+            {learningMode ? 'Apprendimento attivo · disattiva' : 'Modalità apprendimento'}
+          </button>
+        )}
+
         <button
           className="btn btn--secondary"
           disabled={busy}
@@ -314,7 +343,6 @@ export function HomeScreen() {
           onRounds={setHostRounds}
           onDuration={setHostDurationMs}
           onVariant={setSchedaVariant}
-          onLearningMode={setLearningMode}
           onClose={() => setShowSettings(false)}
         />
       )}
