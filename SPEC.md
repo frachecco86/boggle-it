@@ -72,11 +72,33 @@ Requisiti di qualità (imposti in generazione, con rigenerazione finché non è 
 - tutte le griglie risolvono contro il **dizionario completo**: ogni voce del dizionario è
   giocabile e viceversa (una sola lista di parole valide).
 
-I numeri si rimisurano con `pnpm --filter @boggle/server measure:schede`; le schede si
-verificano con `verify:schede`.
+**Due insiemi di criteri, selezionabili in partita** (`Scheda.variant`):
 
-Catalogo di base: **90 schede** (10 per ognuna delle 9 combinazioni dimensione × difficoltà),
-rigenerabili con `pnpm gen:schede` e ampliabili dal pannello admin.
+| | `standard` | `full` ("full criteria") |
+|---|---|---|
+| Composizione | modello storico: vocali 40–52% / 27–38% / 16–27%, rare ≤3% / ≤12% / ≤22% | rapporto vocali/consonanti per livello: **40–45% / 30–35% / <30%**, lettere rare solo nel difficile (almeno una obbligatoria) |
+| Frequenza delle lettere | consonanti comuni | pool di consonanti per livello (alta frequenza → consonanti medie → lettere rare) |
+| Numero di parole | bande misurate (46–200 / 25–120 / 10–60 su 4×4) | dai criteri: **>120 / 60–100 / <45** su 4×4, **>200 / 100–160 / <80** su 5×5, **>350 / 180–280 / <130** su 6×6 |
+| Parole ancora | almeno 1 parola lunga | più parole lunghe: 2–4 da 6+ (4×4 facile), multiple da 7+ (5×5 facile), 8+ (6×6 facile) |
+| Lunghezza media | — | bande misurate (4,4 / 4,1 / 3,8 su 4×4) |
+
+La scelta si fa in home (foglio impostazioni) e vale sia per il single player sia per la stanza
+creata; in lobby l'host può cambiarla. Le schede `full` portano l'etichetta **FULL** nella pagina
+"Sfoglia le schede", dove si possono anche filtrare.
+
+Non implementati dei criteri "full" (non misurabili nel generatore): **morfologia/desinenze**
+(servirebbe un'analisi morfologica delle parole: in parte la fa la fascia di frequenza) e
+**geometria dei percorsi** (servirebbe il tracciato di ogni parola trovata). La lunghezza media
+dei criteri (3–5 facile, 7+ difficile) è realizzata con bande misurate: su griglie reali la
+direzione è invertita (facile 4,4 · difficile 3,8 su 4×4) perché con vocali e consonanti comuni
+si formano parole lunghe.
+
+I numeri si rimisurano con `pnpm --filter @boggle/server measure:schede` (opzione `--variant`);
+le schede si verificano con `verify:schede`.
+
+Catalogo di base: **135 schede** — 10 `standard` + 5 `full` per ognuna delle 9 combinazioni
+dimensione × difficoltà — rigenerabili con `pnpm gen:schede` (opzioni `--variant`, `--append`) e
+ampliabili dal pannello admin.
 
 ### 3.2 Selezione parola (swipe)
 - Il giocatore preme su una cella e trascina verso celle **adiacenti** (8 direzioni).

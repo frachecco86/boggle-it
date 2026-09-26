@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.27.0';
+export const APP_VERSION = '0.28.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,43 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.28.0',
+    date: '2026-09-26',
+    title: 'Un secondo catalogo di schede, con i criteri completi (e si può scegliere)',
+    promo: {
+      emoji: '🧪',
+      headline: 'Schede "full criteria": scegli tu come giocare',
+      text: 'Oltre alle schede di sempre c\u2019è un catalogo costruito con i criteri completi: rapporto vocali/consonanti per livello, lettere ad alta frequenza nel facile e lettere rare nel difficile, numero di parole e parole ancora. Nelle impostazioni partita scegli quale catalogo usare, e nella pagina delle schede quelle nuove si riconoscono dall\u2019etichetta FULL.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Catalogo "full criteria"**: 5 schede nuove per ciascuna delle 9 combinazioni dimensione × difficoltà (45 in tutto), generate con i criteri completi: rapporto vocali/consonanti **40–45% / 30–35% / <30%**, frequenza delle lettere controllata dal pool di consonanti (alta frequenza nel facile, consonanti medie nel normale, lettere rare — almeno una obbligatoria — nel difficile), numero di parole richiesto dai criteri (**>120 / 60–100 / <45** su 4×4, **>200 / 100–160 / <80** su 5×5, **>350 / 180–280 / <130** su 6×6), più parole ancora lunghe e lunghezza media in banda.',
+          '**Etichetta FULL**: le schede con i criteri completi hanno `variant: "full"` e si riconoscono nella pagina "Sfoglia le schede" (badge e filtro "Criteri"), oltre che nel file JSON.',
+          '**Selezione in partita**: un\u2019opzione nel foglio "Impostazioni partita" (vale sia per il single player sia per la stanza creata) e la stessa scelta in lobby per l\u2019host. Ogni stanza ricorda i criteri scelti: tutti giocano le stesse schede.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          'Anche il pannello admin può generare schede `full`, e le statistiche delle schede (parole, punteggio massimo) usano l\u2019insieme accettato.',
+          'Nell\u2019app senza rete la pagina "Sfoglia le schede" ora ha i metadati anche offline: prima l\u2019ordinamento per punteggio e i filtri mostravano zeri.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '`Scheda` è al formato 3: `variant` (`standard` / `full`). Le schede di formato ≤ 2 valgono `standard` (`schedaVariantOf`), quindi il catalogo esistente resta valido senza rigenerarlo.',
+          'Criteri in due insiemi espliciti (`SPECS.standard` / `SPECS.full` in `schedaGen.ts`), con la composizione in `grid.ts` (`COMPOSITION` e `FULL_COMPOSITION`). `densityBandFor`/`anchorFor` prendono la variante, e `verify:schede` controlla ogni scheda con i criteri della SUA variante.',
+          '`measure:schede --variant full` misura le griglie dei criteri completi per tarare le bande: le\u2019bande di lunghezza media sono il risultato di quella misura (l\u2019ordine reale è facile 4,4 · normale 4,1 · difficile 3,8 su 4×4, invertito rispetto ai criteri, che chiedono 7+ per il difficile: su una griglia reale le parole corte dominano).',
+          'Morfologia/desinenze e geometria dei percorsi NON sono implementate: servirebbe un\u2019analisi morfologica delle parole e il tracciato di ogni parola trovata. Il resto dei criteri della pagina è implementato e verificato.',
+          '`AudioEngine.test.ts` scalda il modulo in `beforeAll`: il primo import costa ~2s e con i test dei quattro pacchetti in parallelo faceva scadere il timeout del primo test (era un falso rosso, non un difetto del motore).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.27.0',
     date: '2026-09-26',

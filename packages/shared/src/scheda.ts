@@ -21,7 +21,49 @@ import { letterDisplay } from './grid.js';
 import type { Grid, GridSize, Tile } from './types.js';
 
 /** Versione del formato degli elementi di `Scheda`: da alzare su cambi incompatibili. */
-export const SCHEDA_FORMAT_VERSION = 2;
+export const SCHEDA_FORMAT_VERSION = 3;
+
+/**
+ * Insieme di criteri con cui una scheda è stata generata.
+ *
+ *  - `standard`: il modello storico;
+ *  - `full`: i "full criteria" (rapporto vocali/consonanti per livello,
+ *    frequenza delle lettere, numero di parole e parole ancora della pagina
+ *    *Criteri generazione schede*).
+ */
+export type SchedaVariant = 'standard' | 'full';
+
+/** Ordine con cui le varianti si mostrano nel selettore. */
+export const SCHEDA_VARIANTS: readonly SchedaVariant[] = ['standard', 'full'];
+
+/** Etichette per l'interfaccia. */
+export const SCHEDA_VARIANT_LABELS: Record<SchedaVariant, string> = {
+  standard: 'Standard',
+  full: 'Full criteria',
+};
+
+/** Una riga di spiegazione per il selettore. */
+export const SCHEDA_VARIANT_HINTS: Record<SchedaVariant, string> = {
+  standard: 'Il catalogo storico.',
+  full: 'Criteri completi: vocali/consonanti, frequenza delle lettere, numero di parole e parole ancora.',
+};
+
+export function isSchedaVariant(value: unknown): value is SchedaVariant {
+  return value === 'standard' || value === 'full';
+}
+
+/** Variante valida a partire da un valore arbitrario (default `standard`). */
+export function resolveSchedaVariant(value: unknown): SchedaVariant {
+  return isSchedaVariant(value) ? value : 'standard';
+}
+
+/**
+ * Variante di una scheda. Le schede senza `variant` (formato ≤ 2, schede create
+ * a mano dall'admin) valgono `standard`.
+ */
+export function schedaVariantOf(scheda: Pick<Scheda, 'variant'>): SchedaVariant {
+  return resolveSchedaVariant(scheda.variant);
+}
 
 /**
  * Parole accettate sulla griglia: `allWords` dal formato 2, altrimenti le sole
@@ -41,6 +83,11 @@ export interface Scheda {
    * Un carattere per cella, `q` = faccia "Qu"; lettere minuscole.
    */
   grid: string;
+  /**
+   * Insieme di criteri di generazione. Assente nelle schede di formato ≤ 2 e in
+   * quelle create a mano: valgono `standard` (vedi `schedaVariantOf`).
+   */
+  variant?: SchedaVariant;
   /**
    * Parole della FASCIA della difficoltà trovabili sulla griglia, ordinate per
    * lunghezza decrescente. Pre-calcolate: a runtime non si risolve più nulla.

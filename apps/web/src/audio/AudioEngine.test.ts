@@ -10,7 +10,18 @@
  * AudioContext che REGISTRA i valori di gain, così possiamo verificare i volumi
  * senza un browser.
  */
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { beforeAll, describe, expect, it, beforeEach, vi } from 'vitest';
+
+/*
+ * Riscaldamento: il PRIMO import del motore (e la trasformazione TypeScript dei
+ * suoi moduli) costa ~2 secondi. Con i test dei quattro pacchetti in parallelo
+ * quel costo cadeva dentro il timeout del primo test, che scadeva (5s) senza
+ * nulla di sbagliato nel codice. Qui il costo si paga fuori dai test.
+ */
+beforeAll(async () => {
+  vi.resetModules();
+  await import('./AudioEngine.js');
+}, 30_000);
 
 /** Oscillatore finto: registra frequenza e type. */
 class FakeOscillator {
@@ -133,9 +144,15 @@ describe('AudioEngine — volume delle esultanze', () => {
      */
     expect(opponent).toBeLessThan(own);
     expect(opponent / own).toBeCloseTo(0.5, 2);
-    // La propria resta ben udibile; quella dell'avversario è sommessa ma c'è.
-    expect(own).toBeGreaterThan(0.08);
-    expect(opponent).toBeGreaterThan(0.03);
+    /*
+     * Valori di picco ATTESI, non solo "più basso":
+     *   propria    = 0.19 (picco del motivo) × 0.5  = 0.095
+     *   avversario = 0.19 × 0.25                 = 0.0475
+     * Fissarli evita un test che passa con qualunque volume sopra una soglia
+     * larga (era 0.08/0.03: un margine sottile che ogni tanto falliva).
+     */
+    expect(own).toBeCloseTo(0.095, 4);
+    expect(opponent).toBeCloseTo(0.0475, 4);
   });
 
   it('la differenza vale per tutte le lunghezze di parola', async () => {

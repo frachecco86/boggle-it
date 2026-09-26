@@ -10,7 +10,7 @@
  * Così l'app Android ha il single player completo anche senza connessione,
  * mentre la pagina scheda e il multiplayer restano online.
  */
-import type { Difficulty, GridSize, Scheda } from '@boggle/shared';
+import { schedaVariantOf, type Difficulty, type GridSize, type Scheda, type SchedaVariant } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
 
 /**
@@ -24,6 +24,8 @@ export interface SchedaMeta {
   id: string;
   size: GridSize;
   difficulty: Difficulty;
+  /** Insieme di criteri con cui è stata generata (standard / full criteria). */
+  variant?: SchedaVariant;
   /** Parole trovabili. */
   words: number;
   /** Punteggio massimo ottenibile: somma dei punti di tutte le parole. */
@@ -92,25 +94,33 @@ function schedaFileFor(id: string): string {
   return `schede-${parts[0]}-${difficulty}.json`;
 }
 
-/** Una scheda casuale per dimensione/difficoltà, con lo stesso fallback. */
+/**
+ * Una scheda casuale per dimensione/difficoltà, con lo stesso fallback.
+ *
+ * `variant` sceglie l'insieme di criteri delle schede (`standard` o `full`):
+ * online lo applica il server, offline si filtra l'indice del bundle.
+ */
 export async function loadRandomScheda(
   size: GridSize,
   difficulty: Difficulty,
+  variant: SchedaVariant = 'standard',
 ): Promise<Scheda | null> {
   const online = await fetchJson<{ schedaId: string | null }>(
-    `${SERVER_BASE}/preview?gridSize=${size}&difficulty=${encodeURIComponent(difficulty)}`,
+    `${SERVER_BASE}/preview?gridSize=${size}&difficulty=${encodeURIComponent(difficulty)}&variant=${variant}`,
   );
   if (online?.schedaId) {
     const scheda = await loadScheda(online.schedaId);
     if (scheda) return scheda;
   }
 
-  // Offline: pesca a caso dall'indice incluso nel bundle.
+  // Offline: pesca a caso dall'indice incluso nel bundle, filtrando la variante.
   const catalog = await fetchJson<Omit<CatalogInfo, 'offline'>>(`${LOCAL_BASE}/index.json`);
   const key = `${size}-${difficulty}`;
   const list = catalog?.ids?.[key];
   if (!list || list.length === 0) return null;
-  const id = list[Math.floor(Math.random() * list.length)]!;
-  const all = await fetchJson<{ schede: Scheda[] }>(`${LOCAL_BASE}/${schedaFileFor(id)}`);
-  return all?.schede.find((s) => s.id === id) ?? null;
+
+  const all = await fetchJson<{ schede: Scheda[] }>(`${LOCAL_BASE}/${schedaFileFor(list[0]!)}`);
+  const matching = (all?.schede ?? []).filter((s) => schedaVariantOf(s) === variant);
+  if (matching.length === 0) return null;
+  return matching[Math.floor(Math.random() * matching.length)] ?? null;
 }

@@ -21,12 +21,14 @@ import {
   acceptedWords,
   schedaFileName,
   schedaKey,
+  schedaVariantOf,
   schedaWordPoints,
   SCHEDA_FORMAT_VERSION,
   type Difficulty,
   type GridSize,
   type Scheda,
   type SchedaFile,
+  type SchedaVariant,
   type WordCatalogEntry,
   type WordCatalogQuery,
   type WordCatalogResponse,
@@ -64,6 +66,8 @@ export interface SchedaMeta {
   id: string;
   size: GridSize;
   difficulty: Difficulty;
+  /** Insieme di criteri con cui è stata generata (standard / full criteria). */
+  variant: SchedaVariant;
   grid: string;
   longest: number;
   wordCount: number;
@@ -74,6 +78,7 @@ export function toMeta(scheda: Scheda): SchedaMeta {
     id: scheda.id,
     size: scheda.size,
     difficulty: scheda.difficulty,
+    variant: schedaVariantOf(scheda),
     grid: scheda.grid,
     longest: scheda.longest,
     // Conteggio delle parole che il giocatore può trovare (insieme accettato).
@@ -173,11 +178,37 @@ export class SchedaCatalog {
     return out;
   }
 
-  /** Scheda casuale per dimensione/difficoltà, o `undefined` se il gruppo è vuoto. */
-  random(size: GridSize, difficulty: Difficulty, rng: () => number = Math.random): Scheda | undefined {
+  /**
+   * Scheda casuale per dimensione/difficoltà, o `undefined` se il gruppo (o la
+   * variante richiesta) è vuoto.
+   *
+   * La VARIANTE filtra il catalogo: `standard` (storico) o `full` ("full
+   * criteria"). Se la variante richiesta non ha schede si ritorna `undefined`
+   * invece di ripiegare sull'altra: giocare criteri diversi da quelli scelti
+   * sarebbe peggio di un errore esplicito ("nessuna scheda disponibile").
+   */
+  random(
+    size: GridSize,
+    difficulty: Difficulty,
+    rng: () => number = Math.random,
+    variant: SchedaVariant = 'standard',
+  ): Scheda | undefined {
     const list = this.byKey.get(schedaKey(size, difficulty));
     if (!list || list.length === 0) return undefined;
-    return list[Math.floor(rng() * list.length)];
+    const matching = list.filter((s) => schedaVariantOf(s) === variant);
+    if (matching.length === 0) return undefined;
+    return matching[Math.floor(rng() * matching.length)];
+  }
+
+  /** Quante schede per dimensione/difficoltà e variante (per il selettore). */
+  countByVariant(): Record<string, Record<SchedaVariant, number>> {
+    const out: Record<string, Record<SchedaVariant, number>> = {};
+    for (const [key, list] of this.byKey) {
+      const counts: Record<SchedaVariant, number> = { standard: 0, full: 0 };
+      for (const scheda of list) counts[schedaVariantOf(scheda)]++;
+      out[key] = counts;
+    }
+    return out;
   }
 
   /**

@@ -21,8 +21,11 @@ import {
   type LeaderboardPeriod,
   type WordCatalogQuery,
   type SchedaStats,
+  type SchedaVariant,
   type SfxSlot,
   acceptedWords,
+  resolveSchedaVariant,
+  schedaVariantOf,
   schedaWordPoints,
   WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
@@ -163,9 +166,11 @@ app.get('/preview', (req, res) => {
   const gridSize: GridSize = gridSizeRaw === 5 || gridSizeRaw === 6 ? gridSizeRaw : 4;
   const difficultyRaw = String(req.query.difficulty ?? 'normale');
   const difficulty: Difficulty = isDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
+  // Criteri delle schede: `standard` (default) o `full` ("full criteria").
+  const variant = resolveSchedaVariant(req.query.variant);
 
   res.setHeader('Cache-Control', 'no-store');
-  const scheda = schede.random(gridSize, difficulty);
+  const scheda = schede.random(gridSize, difficulty, Math.random, variant);
   if (!scheda) {
     return res.json({
       gridSize,
@@ -216,6 +221,8 @@ app.get('/schede', (_req, res) => {
     id: string;
     size: GridSize;
     difficulty: Difficulty;
+    /** Insieme di criteri con cui è stata generata (standard / full criteria). */
+    variant: SchedaVariant;
     words: number;
     maxScore: number;
     longest: number;
@@ -227,6 +234,7 @@ app.get('/schede', (_req, res) => {
       id: scheda.id,
       size: scheda.size,
       difficulty: scheda.difficulty,
+      variant: schedaVariantOf(scheda),
       words: acceptedWords(scheda).length,
       maxScore: acceptedWords(scheda).reduce((total, w) => total + schedaWordPoints(w.length), 0),
       longest: scheda.longest,
@@ -237,7 +245,8 @@ app.get('/schede', (_req, res) => {
     const size = key.split('-')[0]!;
     bySize[size] = (bySize[size] ?? 0) + count;
   }
-  res.json({ total: schede.size, byKey, bySize, ids, meta });
+  // Quante schede per criterio: il client può mostrare cosa è disponibile.
+  res.json({ total: schede.size, byKey, bySize, ids, meta, byVariant: schede.countByVariant() });
 });
 
 
@@ -789,6 +798,8 @@ app.post('/admin/schede/genera', async (req, res) => {
   const size = Number(req.body?.size);
   const difficulty = String(req.body?.difficulty ?? '');
   const count = Math.max(1, Math.min(100, Number(req.body?.count ?? 10)));
+  // Criteri di generazione: `standard` (default) o `full` ("full criteria").
+  const variant = resolveSchedaVariant(req.body?.variant);
   if (size !== 4 && size !== 5 && size !== 6) {
     return res.status(400).json({ error: 'size deve essere 4, 5 o 6' });
   }
@@ -800,7 +811,7 @@ app.post('/admin/schede/genera', async (req, res) => {
   try {
     const pool = await getSchedaPool();
     const startIndex = schede.list(size, difficulty).length + 1;
-    const created = pool.generate(size, difficulty, count, { startIndex });
+    const created = pool.generate(size, difficulty, count, { startIndex, variant });
 
     /*
      * ORDINE IMPORTANTE: prima si scrive su DISCO, poi si aggiunge in memoria.
@@ -1215,7 +1226,16 @@ io.on('connection', (socket) => {
       const difficulty = isDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
       const roundDurationMs = clampDuration(payload?.roundDurationMs);
       const maxPlayers = clampMaxPlayers(payload?.maxPlayers);
-      const room = registry.create(gridSize, rounds, difficulty, roundDurationMs, maxPlayers);
+      // Insieme di criteri delle schede della stanza (standard / full criteria).
+      const schedaVariant = resolveSchedaVariant(payload?.schedaVariant);
+      const room = registry.create(
+        gridSize,
+        rounds,
+        difficulty,
+        roundDurationMs,
+        maxPlayers,
+        schedaVariant,
+      );
       // Profilo (se loggato): nome, avatar, foto pubblica e musica preferita.
       const profile = resolveProfile(payload?.token);
       if (profile) room.setMusic(profile.musicId);
@@ -1311,7 +1331,7 @@ io.on('connection', (socket) => {
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
-    const scheda = schede.random(room.gridSize, room.difficulty);
+    const scheda = schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
     if (!scheda) return;
     room.pendingSchedaId = scheda.id;
     broadcastState(room);
@@ -1329,7 +1349,8 @@ io.on('connection', (socket) => {
       // altrimenti ne pesca una a caso. Per i round successivi al primo, se non
       // c'è una pending si pesca una scheda nuova.
       const fromPending = room.pendingSchedaId ? schede.get(room.pendingSchedaId) : undefined;
-      const scheda = fromPending ?? schede.random(room.gridSize, room.difficulty);
+      const scheda =
+        fromPending ?? schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
       // La pending è consumata: il prossimo round ne pescherà una nuova.
       room.pendingSchedaId = null;
       const { grid, endsAt } = room.startRound(scheda);
@@ -1363,7 +1384,7 @@ io.on('connection', (socket) => {
     setTimeout(startRound, COUNTDOWN_MS);
   });
 
-  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId }) => {
+  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId, schedaVariant }) => {
     const st = socketState.get(socket.id);
     const room = registry.get(code);
     if (!room || !st || st.code !== room.code) return;
@@ -1376,6 +1397,12 @@ io.on('connection', (socket) => {
     if (sizeChanged || diffChanged) room.pendingSchedaId = null;
     if (isValidGridSize(gridSize)) room.gridSize = gridSize;
     if (isDifficulty(difficulty)) room.difficulty = difficulty;
+    // Cambiando i criteri delle schede cambia anche l'insieme da cui pescare:
+    // la scheda già scelta non appartiene più alla selezione.
+    if (schedaVariant !== undefined && resolveSchedaVariant(schedaVariant) !== room.schedaVariant) {
+      room.schedaVariant = resolveSchedaVariant(schedaVariant);
+      room.pendingSchedaId = null;
+    }
     room.rounds = clampRounds(rounds);
     room.roundDurationMs = clampDuration(roundDurationMs);
     // La musica la scegle l'host e vale per tutti.

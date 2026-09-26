@@ -1,17 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type {
-  Difficulty,
-  Grid,
-  GridSize,
-  MusicChoice,
-  MusicTrackMeta,
-  PlayerPublic,
-  ProfilePrivate,
-  RoomState,
-  RoundResultEntry,
-  SfxSlot,
-  VoiceAudioPayload,
+import {
+  resolveSchedaVariant,
+  type Difficulty,
+  type Grid,
+  type GridSize,
+  type MusicChoice,
+  type MusicTrackMeta,
+  type PlayerPublic,
+  type ProfilePrivate,
+  type RoomState,
+  type RoundResultEntry,
+  type SchedaVariant,
+  type SfxSlot,
+  type VoiceAudioPayload,
 } from '@boggle/shared';
 import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
@@ -218,6 +220,14 @@ interface AppState {
   soloDifficulty: Difficulty;
   soloRoundDurationMs: number;
   soloRounds: number;
+  /**
+   * Insieme di criteri delle schede da giocare (`standard` o `full`).
+   *
+   * Vale sia per il single player sia per le stanze create da questo dispositivo:
+   * è una scelta del giocatore, non della partita. La stanza la espone in
+   * `RoomState.schedaVariant` perché tutti giochino le stesse schede.
+   */
+  schedaVariant: SchedaVariant;
   // audio
   audioSettings: AudioSettings;
   // multiplayer
@@ -300,6 +310,8 @@ interface AppState {
   setNickname: (n: string) => void;
   setAvatar: (a: Avatar) => void;
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
+  /** Cambia l'insieme di criteri delle schede (standard / full criteria). */
+  setSchedaVariant: (variant: SchedaVariant) => void;
   setAudioSettings: (next: Partial<AudioSettings>) => void;
   createRoom: (
     gridSize: GridSize,
@@ -319,6 +331,7 @@ interface AppState {
     roundDurationMs: number,
     musicId?: MusicChoice,
     maxPlayers?: number,
+    schedaVariant?: SchedaVariant,
   ) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
   leaveRoom: () => void;
@@ -335,6 +348,7 @@ export const useAppStore = create<AppState>()(
       soloDifficulty: 'normale',
       soloRoundDurationMs: 180_000,
       soloRounds: 3,
+      schedaVariant: 'standard',
       audioSettings: audio.getSettings(),
       roomCode: null,
       playerId: null,
@@ -758,6 +772,8 @@ export const useAppStore = create<AppState>()(
         set({ audioSettings: audio.getSettings() });
       },
 
+      setSchedaVariant: (variant) => set({ schedaVariant: resolveSchedaVariant(variant) }),
+
       createRoom: async (gridSize, difficulty, rounds, roundDurationMs, maxPlayers) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Host';
@@ -773,6 +789,8 @@ export const useAppStore = create<AppState>()(
               rounds,
               roundDurationMs,
               maxPlayers,
+              // Criteri delle schede scelti in home: valgono per tutta la stanza.
+              schedaVariant: get().schedaVariant,
               token: activeToken() ?? undefined,
             },
             (res) => {
@@ -832,7 +850,7 @@ export const useAppStore = create<AppState>()(
         getSocket().emit('room:shuffleScheda', { code });
       },
 
-      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers) => {
+      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers, schedaVariant) => {
         const code = get().roomCode;
         if (!code) return;
         getSocket().emit('room:config', {
@@ -844,6 +862,8 @@ export const useAppStore = create<AppState>()(
           musicId,
           // Se non specificato manteniamo quello attuale della stanza.
           maxPlayers: maxPlayers ?? get().room?.maxPlayers ?? 8,
+          // Idem per i criteri delle schede: senza il parametro non si toccano.
+          schedaVariant: schedaVariant ?? get().room?.schedaVariant ?? 'standard',
         });
       },
 
@@ -931,6 +951,7 @@ export const useAppStore = create<AppState>()(
         soloDifficulty: s.soloDifficulty,
         soloRounds: s.soloRounds,
         soloRoundDurationMs: s.soloRoundDurationMs,
+        schedaVariant: s.schedaVariant,
         audioSettings: s.audioSettings,
         playerIds: s.playerIds,
         adminToken: s.adminToken,

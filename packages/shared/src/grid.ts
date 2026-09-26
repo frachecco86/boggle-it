@@ -29,6 +29,19 @@ export interface DifficultyComposition {
   vowels: { min: number; max: number };
   /** Numero massimo di lettere rare, come quota della griglia. */
   rareMax: number;
+  /**
+   * Numero MINIMO di lettere rare da mettere in griglia (misura "full criteria").
+   * Serve ai livelli difficili, dove la presenza di lettere trappola (Q, Z) è
+   * parte della difficoltà e non può essere lasciata al caso.
+   */
+  rareMin?: number;
+  /**
+   * Consonanti ammesse (misura "full criteria": la frequenza delle lettere cambia
+   * con il livello). Se assente si usa `COMMON_CONSONANTS`.
+   */
+  consonants?: readonly string[];
+  /** Probabilità di includere una `h` e una `q` (per che/chi, qui/qua). */
+  hqChance?: number;
 }
 
 export const COMPOSITION: Record<Difficulty, DifficultyComposition> = {
@@ -47,8 +60,59 @@ export const COMPOSITION: Record<Difficulty, DifficultyComposition> = {
   difficile: { vowels: { min: 0.16, max: 0.27 }, rareMax: 0.22 },
 };
 
+/** Consonanti italiane comuni usate per riempire la griglia. */
+export const COMMON_CONSONANTS = [
+  'r', 's', 't', 'n', 'l', 'c', 'm', 'd', 'p', 'g', 'v', 'b', 'f',
+] as const;
+
+const VOWELS = ['a', 'e', 'i', 'o', 'u'] as const;
+
 /** Lettere rare/straniere che rendono il gioco difficile. */
 export const RARE_LETTERS = ['z', 'k', 'w', 'x', 'y', 'j'] as const;
+
+/**
+ * Composizione per le schede "full criteria" (`Criteri generazione schede`).
+ *
+ * Differenze rispetto a `COMPOSITION`:
+ *  - la quota di vocali segue le fasce della pagina: 40–45% (facile), 30–35%
+ *    (medio), sotto il 30% (difficile);
+ *  - la frequenza delle lettere è controllata dal POOL di consonanti: solo
+ *    consonanti ad alta frequenza nel facile, consonanti medie nel medio,
+ *    lettere rare/difficili (Q, Z) nel difficile — dove almeno una lettera
+ *    rara è OBBLIGATORIA (`rareMin`).
+ *
+ * Misura non implementata: morfologia/desinenze e geometria dei percorsi (la
+ * pagina le elenca fra i criteri). Richiederebbero un'analisi morfologica delle
+ * parole e il tracciato di ogni parola trovata: nel generatore non ci sono.
+ */
+export const FULL_COMPOSITION: Record<Difficulty, DifficultyComposition> = {
+  facile: {
+    vowels: { min: 0.4, max: 0.45 },
+    rareMax: 0,
+    // Consonanti ad alta frequenza (la pagina indica A E I O R S T C: oltre a
+    // queste servono N, L, M, D per poter formare parole italiane).
+    consonants: ['r', 's', 't', 'n', 'l', 'c', 'm', 'd'],
+    hqChance: 0.17,
+  },
+  normale: {
+    vowels: { min: 0.3, max: 0.35 },
+    rareMax: 0.05,
+    // Pool standard: entrano le consonanti medie (b, v, f, g, p).
+    consonants: COMMON_CONSONANTS,
+    hqChance: 0.17,
+  },
+  difficile: {
+    // "< 30% o > 55% (sbilanciato)": si usa il caso consonantico, che è quello
+    // che rende la griglia difficile.
+    vowels: { min: 0.16, max: 0.29 },
+    rareMax: 0.22,
+    // Almeno una lettera rara: senza, una griglia "difficile" può uscire con
+    // lettere tutte comuni e risultare facile.
+    rareMin: 1,
+    consonants: COMMON_CONSONANTS,
+    hqChance: 0.3,
+  },
+};
 
 
 /**
@@ -71,9 +135,14 @@ export function generateGrid(
   size: GridSize,
   rng: () => number = Math.random,
   difficulty: Difficulty = 'normale',
+  /**
+   * Composizione da usare. Di default quella del modello standard; le schede
+   * "full criteria" passano `FULL_COMPOSITION[difficulty]`.
+   */
+  composition: DifficultyComposition = COMPOSITION[difficulty] ?? COMPOSITION.normale,
 ): Grid {
   const total = size * size;
-  const comp = COMPOSITION[difficulty] ?? COMPOSITION.normale;
+  const comp = composition;
 
   const random = () => Math.min(0.999999, Math.max(0, rng()));
   const pick = <T>(arr: readonly T[]): T => arr[Math.floor(random() * arr.length)]!;
@@ -83,28 +152,29 @@ export function generateGrid(
   const maxV = Math.round(total * comp.vowels.max);
   const vowelCount = minV + Math.floor(random() * (maxV - minV + 1));
   const rareMax = Math.max(0, Math.round(total * comp.rareMax));
-  const rareCount = Math.floor(random() * (rareMax + 1));
+  const rareMin = Math.max(0, Math.min(rareMax, comp.rareMin ?? 0));
+  // Il minimo può superare il massimo quando la quota è piccola (rareMax 0 con
+  // rareMin 1): in quel caso vince il minimo, è una richiesta esplicita.
+  const rareCount = Math.max(
+    rareMin,
+    Math.floor(random() * (Math.max(rareMax, rareMin) + 1)),
+  );
 
   // 2. Composizione della griglia.
+  const consonantPool = comp.consonants ?? COMMON_CONSONANTS;
+  const hqChance = comp.hqChance ?? 0.17;
   const faces: string[] = [];
   for (let i = 0; i < vowelCount; i++) faces.push(pick(VOWELS));
   for (let i = 0; i < rareCount; i++) faces.push(pick(RARE_LETTERS));
   // 'H' e 'Qu' servono per parole comunissime (che/chi/qui/qua): li includiamo
   // in modo probabilistico, senza consumare il budget di lettere rare.
-  if (random() < 0.17 && faces.length < total) faces.push('h');
-  if (random() < 0.17 && faces.length < total) faces.push('q');
-  while (faces.length < total) faces.push(pick(COMMON_CONSONANTS));
+  if (random() < hqChance && faces.length < total) faces.push('h');
+  if (random() < hqChance && faces.length < total) faces.push('q');
+  while (faces.length < total) faces.push(pick(consonantPool));
 
   shuffleWith(faces, rng);
   return buildGrid(size, faces);
 }
-
-/** Consonanti italiane comuni usate per riempire la griglia. */
-export const COMMON_CONSONANTS = [
-  'r', 's', 't', 'n', 'l', 'c', 'm', 'd', 'p', 'g', 'v', 'b', 'f',
-] as const;
-
-const VOWELS = ['a', 'e', 'i', 'o', 'u'] as const;
 
 function shuffleWith<T>(arr: T[], rng: () => number): T[] {
   for (let i = arr.length - 1; i > 0; i--) {

@@ -17,9 +17,10 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
 - **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**
   e le abbreviazioni da dizionario. **Ogni voce è giocabile**: è la stessa lista usata dalle schede.
-- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (180 schede di base,
-  20 per ognuna delle 9 combinazioni dimensione × difficoltà). Ogni scheda contiene la griglia
-  e **tutte** le parole trovabili, con parole di varia lunghezza (fino a 10-12 lettere su 6×6).
+- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (135 schede di base:
+  10 `standard` + 5 `full criteria` per ognuna delle 9 combinazioni dimensione × difficoltà).
+  Ogni scheda contiene la griglia e **tutte** le parole trovabili (accettate in partita), con
+  parole di varia lunghezza. I due cataloghi si scelgono nelle impostazioni partita.
   Niente più griglie improvvisate: partite riproducibili e soluzioni verificate.
 - **La difficoltà è il numero di parole trovabili**, non la composizione delle lettere: le bande
   di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
@@ -152,14 +153,17 @@ mentre il container gira come `node`. Dettagli in [`docs/DEPLOY.md`](docs/DEPLOY
 
 ### Schede
 
-Le schede di base sono versionate in `packages/shared/schede/` (180 schede, ~540 KB).
+Le schede di base sono versionate in `packages/shared/schede/` (135 schede, ~330 KB).
 Per rigenerarle o aggiungerne:
 
 ```bash
-pnpm gen:schede                                  # tutte le combinazioni, 40 schede ciascuna
+pnpm gen:schede                                   # 10 schede standard per combinazione
+pnpm gen:schede -- --variant full --n 5 --append   # 5 schede "full criteria"
 pnpm gen:schede -- --size 4 --difficolta facile --n 60
-pnpm gen:schede -- --size 4 --difficolta normale --n 40 --append
 ```
+
+Le schede generate con i **criteri completi** portano `variant: "full"` e l’etichetta **FULL**
+nella pagina "Sfoglia le schede" (dove si possono anche filtrare).
 
 L'admin può generarne altre a runtime dal pannello `/admin` (richiede `ADMIN_TOKEN`).
 Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata).

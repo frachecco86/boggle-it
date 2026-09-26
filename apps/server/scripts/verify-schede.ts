@@ -22,13 +22,16 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  anchorFor,
   createSchedaPool,
   DIFFICULTY_ORDER,
   densityBandFor,
-  minLongestFor,
   normalizeWord,
   SCHEDA_CRITERIA,
   schedaFileName,
+  schedaVariantOf,
+  SCHEDA_VARIANT_LABELS,
+  SPECS,
   type Difficulty,
   type GridSize,
   type Scheda,
@@ -79,9 +82,12 @@ interface Violation {
 
 interface SchedaSummary {
   id: string;
+  /** Criteri con cui è stata generata (standard / full criteria). */
+  variant: string;
   words: number;
   score: number;
   longest: number;
+  meanLength: number;
 }
 
 /**
@@ -105,11 +111,15 @@ function checkScheda(
   dictionary: Set<string>,
 ): { violations: Violation[]; stats: SchedaSummary } {
   const violations: Violation[] = [];
-  const band = densityBandFor(scheda.size, scheda.difficulty);
+  // I criteri dipendono dalla VARIANTE della scheda (standard / full criteria).
+  const variant = schedaVariantOf(scheda);
+  const spec = SPECS[variant];
+  const band = densityBandFor(scheda.size, scheda.difficulty, variant);
+  const anchor = anchorFor(scheda.size, scheda.difficulty, variant);
+  const meanBand = spec.meanLength?.[scheda.size]?.[scheda.difficulty];
   const tol = SCHEDA_CRITERIA.densityTolerance;
   const minWords = Math.floor(band.min * (1 - tol));
   const maxWords = Math.ceil(band.max * (1 + tol));
-  const minLongest = minLongestFor(scheda.size);
 
   /*
    * L'insieme accettato in partita. Le schede di formato 1 non hanno `allWords`:
@@ -131,11 +141,16 @@ function checkScheda(
   let notInDictionary = 0;
   let score = 0;
   let longest = 0;
+  let anchors = 0;
+  let totalLength = 0;
   for (const w of accepted) {
     score += w.length - 2;
     if (w.length > longest) longest = w.length;
+    if (w.length >= anchor.length) anchors++;
+    totalLength += w.length;
     if (dictionary.size > 0 && !dictionary.has(w)) notInDictionary++;
   }
+  const meanLength = accepted.length > 0 ? totalLength / accepted.length : 0;
 
   // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
   if (accepted.length < minWords || accepted.length > maxWords) {
@@ -146,16 +161,25 @@ function checkScheda(
     });
   }
 
-  // 2. Almeno una parola lunga (vicina al massimo della griglia).
-  if (longest < minLongest) {
+  // 2. Parole ancora: almeno N parole di almeno L lettere.
+  if (anchors < anchor.count) {
     violations.push({
       schedaId: scheda.id,
-      criterion: 'parola lunga',
-      detail: `la più lunga è di ${longest} lettere, minimo ${minLongest}`,
+      criterion: 'parole ancora',
+      detail: `${anchors} parole da ${anchor.length}+ lettere, minimo ${anchor.count}`,
     });
   }
 
-  // 3. Il campo `longest` deve descrivere la scheda.
+  // 3. Lunghezza media (solo "full criteria").
+  if (meanBand && (meanLength < meanBand.min || meanLength > meanBand.max)) {
+    violations.push({
+      schedaId: scheda.id,
+      criterion: 'lunghezza media',
+      detail: `${meanLength.toFixed(2)} fuori banda [${meanBand.min}, ${meanBand.max}]`,
+    });
+  }
+
+  // 4. Il campo `longest` deve descrivere la scheda.
   if (scheda.longest !== longest) {
     violations.push({
       schedaId: scheda.id,
@@ -164,7 +188,7 @@ function checkScheda(
     });
   }
 
-  // 4. Le parole ATTESE (fascia) devono essere un sottoinsieme delle accettate.
+  // 5. Le parole ATTESE (fascia) devono essere un sottoinsieme delle accettate.
   const notAccepted = scheda.words.filter((w) => !acceptedSet.has(w));
   if (notAccepted.length > 0) {
     violations.push({
@@ -174,7 +198,7 @@ function checkScheda(
     });
   }
 
-  // 5. Coerenza con il dizionario.
+  // 6. Coerenza con il dizionario.
   if (notInDictionary > 0) {
     violations.push({
       schedaId: scheda.id,
@@ -187,9 +211,11 @@ function checkScheda(
     violations,
     stats: {
       id: scheda.id,
+      variant,
       words: accepted.length,
       score,
       longest,
+      meanLength,
     },
   };
 }
@@ -203,11 +229,18 @@ function summarize(label: string, summaries: SchedaSummary[], violations: Violat
   const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
   const sd = Math.sqrt(scores.reduce((a, b) => a + (b - mean) ** 2, 0) / scores.length);
   const words = summaries.reduce((a, b) => a + b.words, 0) / summaries.length;
+  const meanLen = summaries.reduce((a, b) => a + b.meanLength, 0) / summaries.length;
+  // Varianti presenti nel gruppo: il catalogo mescola standard e "full criteria".
+  const byVariant = new Map<string, number>();
+  for (const s of summaries) byVariant.set(s.variant, (byVariant.get(s.variant) ?? 0) + 1);
+  const variantLabel = [...byVariant.entries()]
+    .map(([v, n]) => `${SCHEDA_VARIANT_LABELS[v as keyof typeof SCHEDA_VARIANT_LABELS] ?? v} ${n}`)
+    .join(' + ');
   const flag = violations.length === 0 ? '✓' : '✗';
   console.log(
-    `${flag} ${label.padEnd(20)} n=${String(summaries.length).padStart(3)}  ` +
+    `${flag} ${label.padEnd(20)} n=${String(summaries.length).padStart(3)}  [${variantLabel}]  ` +
       `punteggio max ${Math.min(...scores)}–${Math.max(...scores)} (μ${mean.toFixed(0)} σ${sd.toFixed(0)} CV${((sd / mean) * 100).toFixed(0)}%)  ` +
-      `parole accettate~${words.toFixed(0)}  ${ms}ms`,
+      `parole~${words.toFixed(0)}  media ${meanLen.toFixed(2)}  ${ms}ms`,
   );
 }
 

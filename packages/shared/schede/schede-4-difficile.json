@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "generatedAt": "2026-09-26T09:42:09.438Z",
+  "version": 3,
+  "generatedAt": "2026-09-26T11:38:20.811Z",
   "size": 4,
   "difficulty": "difficile",
   "schede": [
@@ -41,7 +41,8 @@
         "uno",
         "zip"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-002",
@@ -119,7 +120,8 @@
         "voi",
         "vox"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-003",
@@ -155,7 +157,8 @@
         "mai",
         "sci"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-004",
@@ -209,7 +212,8 @@
         "via",
         "vip"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-005",
@@ -274,7 +278,8 @@
         "ugo",
         "voi"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-006",
@@ -335,7 +340,8 @@
         "mal",
         "rag"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-007",
@@ -375,7 +381,8 @@
         "mig",
         "mil"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-008",
@@ -454,7 +461,8 @@
         "usl",
         "uso"
       ],
-      "longest": 7
+      "longest": 7,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-009",
@@ -514,7 +522,8 @@
         "ste",
         "tre"
       ],
-      "longest": 6
+      "longest": 6,
+      "variant": "standard"
     },
     {
       "id": "4-difficile-010",
@@ -570,7 +579,287 @@
         "uve",
         "vet"
       ],
-      "longest": 7
+      "longest": 7,
+      "variant": "standard"
+    },
+    {
+      "id": "4-difficile-011",
+      "size": 4,
+      "difficulty": "difficile",
+      "variant": "full",
+      "grid": "lqcs\nmjpw\ntdod\netuj",
+      "words": [
+        "detto",
+        "dote",
+        "dott",
+        "etto",
+        "judo",
+        "pote",
+        "spot",
+        "duo",
+        "ode",
+        "ott",
+        "out",
+        "top",
+        "tuo"
+      ],
+      "allWords": [
+        "detto",
+        "dotte",
+        "potte",
+        "dote",
+        "dott",
+        "etto",
+        "judo",
+        "pote",
+        "spot",
+        "duo",
+        "ode",
+        "ott",
+        "out",
+        "top",
+        "tuo"
+      ],
+      "longest": 5
+    },
+    {
+      "id": "4-difficile-012",
+      "size": 4,
+      "difficulty": "difficile",
+      "variant": "full",
+      "grid": "bmin\nnpra\nwtiy\nxwgg",
+      "words": [
+        "girai",
+        "mirai",
+        "piani",
+        "tirai",
+        "trina",
+        "armi",
+        "arti",
+        "gira",
+        "giri",
+        "mina",
+        "mira",
+        "miri",
+        "pina",
+        "pira",
+        "prim",
+        "tipi",
+        "tira",
+        "tiri",
+        "trai",
+        "trip",
+        "ani",
+        "ari",
+        "arm",
+        "art",
+        "gia",
+        "gip",
+        "ina",
+        "ira",
+        "mia",
+        "pia",
+        "rai",
+        "ria",
+        "tip",
+        "tir",
+        "tra"
+      ],
+      "allWords": [
+        "girai",
+        "minai",
+        "mirai",
+        "mirti",
+        "piani",
+        "tirai",
+        "trani",
+        "trina",
+        "armi",
+        "arti",
+        "gira",
+        "giri",
+        "irti",
+        "mina",
+        "mira",
+        "miri",
+        "piai",
+        "piar",
+        "pina",
+        "pira",
+        "prim",
+        "tipi",
+        "tira",
+        "tiri",
+        "trai",
+        "trip",
+        "ani",
+        "ari",
+        "arm",
+        "art",
+        "gia",
+        "gip",
+        "ina",
+        "ira",
+        "iri",
+        "mia",
+        "pia",
+        "rai",
+        "ria",
+        "tip",
+        "tir",
+        "tra"
+      ],
+      "longest": 5
+    },
+    {
+      "id": "4-difficile-013",
+      "size": 4,
+      "difficulty": "difficile",
+      "variant": "full",
+      "grid": "odos\ntgye\noddh\nkffi",
+      "words": [
+        "esodo",
+        "goffi",
+        "dose",
+        "foto",
+        "godo",
+        "goto",
+        "sedi",
+        "sodo",
+        "fot",
+        "odo",
+        "off",
+        "ose"
+      ],
+      "allWords": [
+        "esodo",
+        "goffi",
+        "dose",
+        "doto",
+        "fide",
+        "foto",
+        "godo",
+        "goto",
+        "ideo",
+        "sedi",
+        "sodo",
+        "yogo",
+        "fot",
+        "odo",
+        "off",
+        "ose"
+      ],
+      "longest": 5
+    },
+    {
+      "id": "4-difficile-014",
+      "size": 4,
+      "difficulty": "difficile",
+      "variant": "full",
+      "grid": "bhof\ncmua\nwsei\nyszy",
+      "words": [
+        "house",
+        "mouse",
+        "musei",
+        "fumo",
+        "fuse",
+        "home",
+        "muse",
+        "sumo",
+        "emu",
+        "fai",
+        "fui",
+        "mus",
+        "sei",
+        "sua",
+        "sue",
+        "sui",
+        "suo",
+        "ufo",
+        "use",
+        "zia",
+        "zie"
+      ],
+      "allWords": [
+        "esumo",
+        "house",
+        "mouse",
+        "musei",
+        "fume",
+        "fumo",
+        "fuse",
+        "home",
+        "muse",
+        "sumo",
+        "aie",
+        "aus",
+        "emu",
+        "fai",
+        "fui",
+        "mus",
+        "sei",
+        "sua",
+        "sue",
+        "sui",
+        "suo",
+        "ufo",
+        "use",
+        "zia",
+        "zie"
+      ],
+      "longest": 5
+    },
+    {
+      "id": "4-difficile-015",
+      "size": 4,
+      "difficulty": "difficile",
+      "variant": "full",
+      "grid": "ngsd\novmd\ngyoi\nlnmg",
+      "words": [
+        "dogmi",
+        "gnomi",
+        "domi",
+        "godi",
+        "mimo",
+        "modi",
+        "nodi",
+        "nomi",
+        "smog",
+        "dio",
+        "don",
+        "imo",
+        "mig",
+        "mio",
+        "noi",
+        "odi",
+        "voi",
+        "von"
+      ],
+      "allWords": [
+        "dogmi",
+        "gimno",
+        "giovo",
+        "gnomi",
+        "dogi",
+        "domi",
+        "godi",
+        "mimo",
+        "modi",
+        "mogi",
+        "nodi",
+        "nomi",
+        "smog",
+        "dio",
+        "don",
+        "imo",
+        "mig",
+        "mio",
+        "noi",
+        "odi",
+        "voi",
+        "von"
+      ],
+      "longest": 5
     }
   ]
 }

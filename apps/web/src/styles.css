@@ -526,6 +526,14 @@ body {
   color: var(--text-dim);
 }
 
+/* Nota sotto una riga del foglio impostazioni (es. criteri delle schede). */
+.sheet__note {
+  margin: -4px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
 /* Voci in fondo: pulsanti piccoli, non tre pulsanti grandi. */
 .home__links {
   margin-top: 0;
@@ -5654,6 +5662,31 @@ body {
 .scheda__item-id {
   font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+/*
+ * Etichetta delle schede generate con i "full criteria": nell'elenco si
+ * riconoscono a colpo d'occhio, senza aprire la scheda.
+ */
+.scheda__item-variant,
+.scheda__variant {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--primary);
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.scheda__variant {
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  vertical-align: middle;
+  margin-left: 8px;
 }
 
 .scheda__item-meta {

@@ -58,8 +58,8 @@
  * `pnpm --filter @boggle/server measure:schede`.
  */
 import type { Difficulty } from './difficulty.js';
-import { generateGrid } from './grid.js';
-import { gridToRows, type Scheda } from './scheda.js';
+import { COMPOSITION, FULL_COMPOSITION, generateGrid, type DifficultyComposition } from './grid.js';
+import { gridToRows, type Scheda, type SchedaVariant } from './scheda.js';
 import { solveGrid, type TrieNode } from './solver.js';
 import type { GridSize } from './types.js';
 
@@ -80,6 +80,11 @@ export interface GenerateSchedaOptions {
   maxAttempts?: number;
   /** Id assegnato alla scheda (se assente, la generazione non lo popola). */
   id?: string;
+  /**
+   * Insieme di criteri: `standard` (predefinito) o `full` ("full criteria",
+   * vedi `FULL_SPEC`). Le schede generate portano l'etichetta in `variant`.
+   */
+  variant?: SchedaVariant;
 }
 
 /**
@@ -100,10 +105,34 @@ export function bandNameFor(difficulty: Difficulty): keyof SchedaTries['bands'] 
 }
 
 /**
- * Banda di DENSITÀ per dimensione × difficoltà: quante parole (del dizionario
- * intero) devono essere trovabili sulla griglia.
+ * Insieme di criteri di generazione. Ce ne sono due, selezionabili in partita:
+ *  - `standard`: il modello storico (composizione di `COMPOSITION`, densità e
+ *    parola lunga misurate);
+ *  - `full`: i "full criteria" della pagina *Criteri generazione schede* —
+ *    rapporto vocali/consonanti per livello, frequenza delle lettere controllata
+ *    dal pool di consonanti, numero di parole per dimensione × livello, parole
+ *    ancora e lunghezza media.
+ */
+export interface SchedaSpec {
+  /** Composizione della griglia per difficoltà. */
+  composition: Record<Difficulty, DifficultyComposition>;
+  /** Banda di densità: quante parole accettate. */
+  density: Record<GridSize, Record<Difficulty, { min: number; max: number }>>;
+  /** Parole "ancora": almeno `count` parole di almeno `length` lettere. */
+  anchors: Record<GridSize, Record<Difficulty, { length: number; count: number }>>;
+  /**
+   * Lunghezza MEDIA delle parole accettate (misurata). È la trasposizione
+   * realizzabile del criterio "lunghezza media parole" della pagina: su una 4×4
+   * una media di 7+ lettere è impossibile (le parole corte dominano), quindi si
+   * usano bande misurate che mantengono l'ordine giusto fra i livelli.
+   */
+  meanLength?: Record<GridSize, Record<Difficulty, { min: number; max: number }>>;
+}
+
+/**
+ * Criteri STANDARD (storici).
  *
- * `min` / `max` sono MISURATI (`measure-schede.ts`, 300 griglie per
+ * `density` e `anchors` sono MISURATI (`measure:schede`, 300 griglie per
  * configurazione) e vanno in ordine: più parole sui livelli facili, meno su
  * quelli difficili.
  */
@@ -126,11 +155,121 @@ const DENSITY: Record<GridSize, Record<Difficulty, { min: number; max: number }>
 };
 
 /**
- * Lunghezza minima della parola più lunga della scheda: "una parola vicina al
- * massimo della griglia". Su una 4×4 il massimo realistico è ~7, quindi si chiede
- * almeno una parola da 6; su 5×5 da 7; su 6×6 da 8.
+ * Parole lunghe richieste dai criteri standard: "una parola vicina al massimo
+ * della griglia". Su una 4×4 il massimo realistico è ~7, quindi si chiede almeno
+ * una parola da 6; su 5×5 da 7; su 6×6 da 8.
  */
 const MIN_LONGEST: Record<GridSize, number> = { 4: 6, 5: 7, 6: 8 };
+
+const STANDARD_SPEC: SchedaSpec = {
+  composition: COMPOSITION,
+  density: DENSITY,
+  anchors: {
+    4: {
+      facile: { length: MIN_LONGEST[4], count: 1 },
+      normale: { length: MIN_LONGEST[4], count: 1 },
+      difficile: { length: MIN_LONGEST[4], count: 1 },
+    },
+    5: {
+      facile: { length: MIN_LONGEST[5], count: 1 },
+      normale: { length: MIN_LONGEST[5], count: 1 },
+      difficile: { length: MIN_LONGEST[5], count: 1 },
+    },
+    6: {
+      facile: { length: MIN_LONGEST[6], count: 1 },
+      normale: { length: MIN_LONGEST[6], count: 1 },
+      difficile: { length: MIN_LONGEST[6], count: 1 },
+    },
+  },
+};
+
+/**
+ * Criteri FULL "Criteri generazione schede".
+ *
+ * Il numero di parole è quello della pagina ("numero minimo di parole", "numero
+ * di parole", "< N parole"); le "parole ancora" diventano i requisiti di
+ * lunghezza; la composizione è in `FULL_COMPOSITION` (rapporto vocali/consonanti
+ * per livello + frequenza delle lettere).
+ *
+ * NON implementati (non misurabili nel generatore):
+ *  - **morfologia e desinenze** (cluster di suffissi, radici comuni): servirebbe
+ *    un'analisi morfologica delle parole. In parte lo fa già la fascia di
+ *    frequenza: le parole del top 5k hanno desinenze regolari, quelle del 60k no;
+ *  - **geometria dei percorsi** (lineare / a L / a serpentina): servirebbe il
+ *    tracciato di ogni parola trovata, non solo la parola.
+ */
+const FULL_SPEC: SchedaSpec = {
+  composition: FULL_COMPOSITION,
+  density: {
+    4: {
+      facile: { min: 121, max: 400 }, // "numero minimo di parole: > 120"
+      normale: { min: 60, max: 100 },
+      difficile: { min: 8, max: 44 }, // "< 45 parole"
+    },
+    5: {
+      facile: { min: 201, max: 700 }, // "> 200 parole"
+      normale: { min: 100, max: 160 },
+      difficile: { min: 8, max: 79 }, // "< 80 parole"
+    },
+    6: {
+      facile: { min: 351, max: 1400 }, // "> 350 parole"
+      normale: { min: 180, max: 280 },
+      difficile: { min: 8, max: 129 }, // "< 130 parole"
+    },
+  },
+  anchors: {
+    4: {
+      facile: { length: 6, count: 2 }, // 2–4 parole di 6+ lettere
+      normale: { length: 5, count: 1 },
+      difficile: { length: 5, count: 1 },
+    },
+    5: {
+      facile: { length: 7, count: 2 }, // "multiple parole da 7+"
+      normale: { length: 6, count: 3 }, // 3–5 parole da 6–7 lettere
+      difficile: { length: 6, count: 1 },
+    },
+    6: {
+      facile: { length: 8, count: 2 }, // parole di 8+ lettere
+      normale: { length: 7, count: 4 }, // 4–6 parole da 7–8 lettere
+      difficile: { length: 8, count: 1 },
+    },
+  },
+  /*
+   * Lunghezza MEDIA delle parole accettate: bande MISURATE, con l'ordine reale.
+   *
+   * Il file chiede 3–5 lettere per il facile e 7+ per il difficile. Su griglie
+   * reali la direzione è INVERTITA — facile 4,4 · normale 4,1 · difficile 3,8 su
+   * 4×4 — perché con vocali e consonanti comuni si formano parole lunghe (poche
+   * lettere "chiuse"), mentre gli incontri consonantici del difficile producono
+   * molte parole corte. Su una 4×4 una media di 7 lettere è comunque impossibile:
+   * le parole corte dominano sempre.
+   *
+   * Il criterio resta utile così: dice che una scheda facile deve avere parole
+   * mediamente lunghe (è il segno di una griglia ricca), non solo tante parole.
+   */
+  meanLength: {
+    4: {
+      facile: { min: 4.15, max: 4.7 },
+      normale: { min: 3.85, max: 4.3 },
+      difficile: { min: 3.55, max: 4.05 },
+    },
+    5: {
+      facile: { min: 4.55, max: 5.1 },
+      normale: { min: 4.15, max: 4.7 },
+      difficile: { min: 3.7, max: 4.25 },
+    },
+    6: {
+      facile: { min: 4.85, max: 5.35 },
+      normale: { min: 4.3, max: 4.85 },
+      difficile: { min: 3.9, max: 4.5 },
+    },
+  },
+};
+
+export const SPECS: Record<SchedaVariant, SchedaSpec> = {
+  standard: STANDARD_SPEC,
+  full: FULL_SPEC,
+};
 
 /*
  * Tolleranza sul numero di parole quando si verifica una scheda già generata: il
@@ -152,22 +291,29 @@ const FULL_SOLVE_LIMIT = 50_000;
 
 /** Criteri esposti agli strumenti di verifica (una sola fonte di verità). */
 export const SCHEDA_CRITERIA = {
-  density: DENSITY,
-  minLongest: MIN_LONGEST,
+  specs: SPECS,
   bandSizes: BAND_SIZES,
   densityTolerance: DENSITY_TOLERANCE,
   bandSolveLimit: BAND_SOLVE_LIMIT,
   fullSolveLimit: FULL_SOLVE_LIMIT,
 } as const;
 
-/** Banda di densità (numero di parole) per dimensione e difficoltà. */
-export function densityBandFor(size: GridSize, difficulty: Difficulty) {
-  return DENSITY[size][difficulty];
+/** Banda di densità (numero di parole accettate) per dimensione, difficoltà e criterio. */
+export function densityBandFor(
+  size: GridSize,
+  difficulty: Difficulty,
+  variant: SchedaVariant = 'standard',
+) {
+  return SPECS[variant].density[size][difficulty];
 }
 
-/** Lunghezza minima della parola più lunga, per dimensione. */
-export function minLongestFor(size: GridSize): number {
-  return MIN_LONGEST[size];
+/** Parole "ancora" richieste, per dimensione, difficoltà e criterio. */
+export function anchorFor(
+  size: GridSize,
+  difficulty: Difficulty,
+  variant: SchedaVariant = 'standard',
+): { length: number; count: number } {
+  return SPECS[variant].anchors[size][difficulty];
 }
 
 /* ------------------------------------------------------------------ */
@@ -177,21 +323,25 @@ export function minLongestFor(size: GridSize): number {
 /**
  * Genera una scheda di qualità, o `null` se nessun tentativo la soddisfa.
  *
- * Criteri (entrambi verificati a ogni tentativo):
- *  1. DENSITÀ — numero di parole della fascia dentro `[min, max]`.
- *  2. PAROLA LUNGA — la più lunga trovata raggiunge `MIN_LONGEST[size]`.
+ * Criteri (tutti verificati a ogni tentativo, secondo `SPECS[variant]`):
+ *  1. DENSITÀ — numero di parole accettate dentro `[min, max]`.
+ *  2. PAROLE ANCORA — almeno N parole di almeno L lettere.
+ *  3. LUNGHEZZA MEDIA (solo "full criteria") — dentro la banda misurata.
  *
- * Il risultato porta `words` (fascia) e `allWords` (dizionario intero), entrambi
- * ordinati per lunghezza decrescente.
+ * Il risultato porta `words` (parole attese della fascia), `allWords` (tutte le
+ * accettate, entrambi ordinati per lunghezza decrescente) e `variant`.
  */
 export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
   const { size, difficulty, tries } = options;
+  const variant: SchedaVariant = options.variant ?? 'standard';
   const rng = options.rng ?? Math.random;
   const maxAttempts = options.maxAttempts ?? 400;
   const bandTrie = tries.bands[difficulty];
+  const spec = SPECS[variant];
 
-  const band = DENSITY[size][difficulty];
-  const minLongest = MIN_LONGEST[size];
+  const band = spec.density[size][difficulty];
+  const anchor = spec.anchors[size][difficulty];
+  const meanBand = spec.meanLength?.[size]?.[difficulty];
 
   /*
    * Candidato di ripiego: la griglia più vicina alla banda vista finora.
@@ -202,13 +352,17 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
    *
    * ATTENZIONE: il ripiego va EVITATO per quanto possibile — se scatta spesso, il
    * catalogo contiene schede che non rispettano la difficoltà dichiarata. Lo
-   * script `verify:schede` le segnala. Se succede, allargare la banda in `DENSITY`.
+   * script `verify:schede` le segnala. Se succede, allargare la banda in `SPECS`.
    */
-  let best: { grid: ReturnType<typeof generateGrid>; allWords: string[]; distance: number } | null = null;
+  let best: {
+    grid: ReturnType<typeof generateGrid>;
+    allWords: string[];
+    distance: number;
+  } | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Griglia con la composizione della difficoltà (vocali e rare controllate).
-    const grid = generateGrid(size, rng, difficulty);
+    // Griglia con la composizione della difficoltà (vocali, rare, consonanti).
+    const grid = generateGrid(size, rng, difficulty, spec.composition[difficulty]);
     /*
      * Le parole che il giocatore PUÒ trovare: si risolve sul dizionario intero.
      * È anche l'insieme che il gioco accetta in partita (`allWords`), quindi
@@ -217,28 +371,38 @@ export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
     const allWords = solveGrid(grid, tries.full, { limit: FULL_SOLVE_LIMIT, minLength: 3 });
 
     let longest = 0;
-    for (const w of allWords) if (w.length > longest) longest = w.length;
+    let anchorCount = 0;
+    let totalLength = 0;
+    for (const w of allWords) {
+      if (w.length > longest) longest = w.length;
+      if (w.length >= anchor.length) anchorCount++;
+      totalLength += w.length;
+    }
+    const meanLength = allWords.length > 0 ? totalLength / allWords.length : 0;
 
     /*
      * Distanza dal centro della banda, normalizzata: usata solo per scegliere il
-     * ripiego. Il termine sulla lunghezza evita di preferire una griglia dentro
-     * banda ma senza nessuna parola lunga.
+     * ripiego. Somma tre scostamenti (parole, parole ancora, lunghezza media)
+     * così il ripiego resta il più vicino possibile ai criteri.
      */
     const mid = (band.min + band.max) / 2;
     const distance =
       Math.abs(allWords.length - mid) / Math.max(1, mid) +
-      Math.max(0, minLongest - longest) / minLongest;
+      Math.max(0, anchor.count - anchorCount) / Math.max(1, anchor.count) +
+      (meanBand ? Math.max(0, meanBand.min - meanLength) / meanBand.min : 0);
     if (!best || distance < best.distance) best = { grid, allWords, distance };
 
     // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
     if (allWords.length < band.min || allWords.length > band.max) continue;
-    // 2. Almeno una parola "vicina al massimo" della griglia.
-    if (longest < minLongest) continue;
+    // 2. Parole ancora lunghe a sufficienza.
+    if (anchorCount < anchor.count) continue;
+    // 3. Lunghezza media nella banda (solo "full criteria").
+    if (meanBand && (meanLength < meanBand.min || meanLength > meanBand.max)) continue;
 
-    return toScheda(options, size, difficulty, grid, allWords, bandTrie);
+    return toScheda(options, size, difficulty, variant, grid, allWords, bandTrie);
   }
 
-  if (best) return toScheda(options, size, difficulty, best.grid, best.allWords, bandTrie);
+  if (best) return toScheda(options, size, difficulty, variant, best.grid, best.allWords, bandTrie);
   return null;
 }
 
@@ -254,6 +418,7 @@ function toScheda(
   options: GenerateSchedaOptions,
   size: GridSize,
   difficulty: Difficulty,
+  variant: SchedaVariant,
   grid: ReturnType<typeof generateGrid>,
   allWords: string[],
   bandTrie: TrieNode,
@@ -263,6 +428,7 @@ function toScheda(
     id: options.id ?? '',
     size,
     difficulty,
+    variant,
     grid: gridToRows(grid),
     words,
     allWords,

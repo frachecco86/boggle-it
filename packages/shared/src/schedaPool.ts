@@ -14,7 +14,7 @@
  */
 import { DIFFICULTY_ORDER, type Difficulty } from './difficulty.js';
 import { BAND_SIZES, generateScheda, type SchedaTries } from './schedaGen.js';
-import { schedaKey, type Scheda } from './scheda.js';
+import { schedaKey, type Scheda, type SchedaVariant } from './scheda.js';
 import { buildTrie } from './solver.js';
 import { normalizeWord } from './scoring.js';
 import type { GridSize } from './types.js';
@@ -150,13 +150,14 @@ export class SchedaPool {
   /**
    * Genera `count` schede di qualità per una coppia dimensione/difficoltà.
    * Gli id seguono `size-difficulty-NNN`; `startIndex` permette di continuare
-   * una numerazione esistente quando l'admin aggiunge schede.
+   * una numerazione esistente quando l'admin aggiunge schede, e `variant` sceglie
+   * l'insieme di criteri (`standard` o `full`).
    */
   generate(
     size: GridSize,
     difficulty: Difficulty,
     count: number,
-    options: { startIndex?: number; rng?: () => number } = {},
+    options: { startIndex?: number; rng?: () => number; variant?: SchedaVariant } = {},
   ): Scheda[] {
     const out: Scheda[] = [];
     const prefix = schedaKey(size, difficulty);
@@ -172,6 +173,7 @@ export class SchedaPool {
         tries: this.tries,
         rng: options.rng,
         id,
+        variant: options.variant,
       });
       if (scheda) {
         out.push(scheda);

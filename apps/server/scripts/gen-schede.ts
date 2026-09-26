@@ -7,14 +7,15 @@
  * (densità + una parola lunga) e insieme accettato = dizionario intero.
  *
  * Uso:
- *   pnpm gen:schede                      # tutte le combinazioni, 10 schede ciascuna
+ *   pnpm gen:schede                                     # 10 schede standard per combinazione
+ *   pnpm gen:schede -- --variant full --n 5 --append     # 5 schede "full criteria"
  *   pnpm gen:schede -- --size 4 --difficolta normale --n 60
- *   pnpm gen:schede -- --size 4 --difficolta facile --n 40 --append
  *
  * Opzioni:
  *   --size 4|5|6          dimensione della griglia (default: tutte)
  *   --difficolta <nome>   facile|normale|difficile (default: tutte)
  *   --n <numero>          schede da generare per combinazione (default 10)
+ *   --variant <nome>      standard|full: insieme di criteri (default standard)
  *   --append              aggiunge alle schede esistenti invece di sovrascrivere
  *   --seed <numero>       seme del generatore (per risultati riproducibili)
  */
@@ -24,6 +25,8 @@ import { fileURLToPath } from 'node:url';
 import {
   acceptedWords,
   createSchedaPool,
+  resolveSchedaVariant,
+  SCHEDA_VARIANT_LABELS,
   DIFFICULTY_ORDER,
   normalizeWord,
   schedaFileName,
@@ -97,6 +100,8 @@ function main(): void {
   const append = hasFlag('append');
   const seed = arg('seed') ? Number(arg('seed')) : undefined;
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
+  // Insieme di criteri: `standard` (storico) o `full` ("full criteria").
+  const variant = resolveSchedaVariant(arg('variant'));
 
   for (const size of sizes) {
     if (!ALL_SIZES.includes(size)) throw new Error(`Dimensione non valida: ${size}`);
@@ -139,7 +144,7 @@ function main(): void {
       const existing = append ? loadExisting(size, difficulty) : [];
       const startIndex = existing.length + 1;
       const startedAt = Date.now();
-      const fresh = pool.generate(size, difficulty, count, { startIndex, rng });
+      const fresh = pool.generate(size, difficulty, count, { startIndex, rng, variant });
       const schede = append ? [...existing, ...fresh] : fresh;
       const file: SchedaFile = {
         version: SCHEDA_FORMAT_VERSION,
@@ -157,7 +162,8 @@ function main(): void {
         : 0;
       const avgLongest = schede.length ? (schede.reduce((s, x) => s + x.longest, 0) / schede.length).toFixed(1) : '0';
       console.log(
-        `✓ ${size}×${size} ${difficulty}: ${schede.length} schede  (medie: ${avgWords} parole, più lunga ${avgLongest})  in ${Date.now() - startedAt}ms`,
+        `✓ ${size}×${size} ${difficulty} [${SCHEDA_VARIANT_LABELS[variant]}]: ${schede.length} schede  ` +
+          `(medie: ${avgWords} parole, più lunga ${avgLongest})  in ${Date.now() - startedAt}ms`,
       );
     }
   }

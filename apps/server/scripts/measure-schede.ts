@@ -19,15 +19,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  anchorFor,
   createSchedaPool,
   DIFFICULTY_ORDER,
   densityBandFor,
   generateGrid,
-  minLongestFor,
   normalizeWord,
+  resolveSchedaVariant,
+  SCHEDA_VARIANT_LABELS,
   solveGrid,
+  SPECS,
   type Difficulty,
   type GridSize,
+  type SchedaVariant,
 } from '@boggle/shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -79,14 +83,19 @@ function percentile(sorted: number[], p: number): number {
  * che il giocatore sente, perché le statistiche di lettera dell'italiano sono
  * uguali in tutte le fasce di frequenza (misurato).
  */
-function compositionOf(size: GridSize, difficulty: Difficulty, samples = 200): string {
+function compositionOf(
+  size: GridSize,
+  difficulty: Difficulty,
+  composition = SPECS.standard.composition[difficulty],
+  samples = 200,
+): string {
   const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
   const RARE = new Set(['z', 'k', 'w', 'x', 'y', 'j']);
   let vowels = 0;
   let rare = 0;
   let total = 0;
   for (let i = 0; i < samples; i++) {
-    const grid = generateGrid(size, Math.random, difficulty);
+    const grid = generateGrid(size, Math.random, difficulty, composition);
     for (const tile of grid.tiles) {
       total++;
       if (VOWELS.has(tile.letter)) vowels++;
@@ -100,6 +109,10 @@ function main(): void {
   const count = Number(arg('n') ?? '300');
   const onlySize = arg('size') ? (Number(arg('size')) as GridSize) : undefined;
   const sizes = onlySize ? [onlySize] : ALL_SIZES;
+  const variant: SchedaVariant = resolveSchedaVariant(arg('variant'));
+  const spec = SPECS[variant];
+
+  console.log(`Criteri: ${SCHEDA_VARIANT_LABELS[variant]}`);
 
   console.log('Carico dizionario e fasce…');
   const pool = createSchedaPool({
@@ -113,32 +126,45 @@ function main(): void {
   for (const size of sizes) {
     for (const difficulty of DIFFICULTY_ORDER) {
       const bandTrie = pool.tries.bands[difficulty];
-      const band = densityBandFor(size, difficulty);
-      const minLongest = minLongestFor(size);
+      const band = densityBandFor(size, difficulty, variant);
+      const anchor = anchorFor(size, difficulty, variant);
+      const meanBand = spec.meanLength?.[size]?.[difficulty];
 
       const accepted: number[] = [];
+      const means: number[] = [];
       const bandCounts: number[] = [];
       const longs: number[] = [];
       let longEnough = 0;
       let inBand = 0;
+      let meanOk = 0;
       let both = 0;
       const started = Date.now();
 
       for (let i = 0; i < count; i++) {
-        const grid = generateGrid(size, Math.random, difficulty);
+        const grid = generateGrid(size, Math.random, difficulty, spec.composition[difficulty]);
         // Quante parole può trovare DAVVERO il giocatore (dizionario intero):
         // è il numero che determina la ricchezza della griglia, ed è la misura
         // su cui è tarata la banda di densità.
         const all = solveGrid(grid, pool.tries.full, { limit: 50_000, minLength: 3 });
         let longest = 0;
-        for (const w of all) if (w.length > longest) longest = w.length;
+        let anchors = 0;
+        let total = 0;
+        for (const w of all) {
+          if (w.length > longest) longest = w.length;
+          if (w.length >= anchor.length) anchors++;
+          total += w.length;
+        }
+        const mean = all.length > 0 ? total / all.length : 0;
         accepted.push(all.length);
+        means.push(mean);
         longs.push(longest);
-        const okLong = longest >= minLongest;
+        const okLong = anchors >= anchor.count;
         const okBand = all.length >= band.min && all.length <= band.max;
+        const okMean = !meanBand || (mean >= meanBand.min && mean <= meanBand.max);
         if (okLong) longEnough++;
         if (okBand) inBand++;
-        if (okLong && okBand) {
+        if (okMean) meanOk++;
+        if (okLong && okBand && okMean) {
           both++;
           // Parole ATTESE (fascia) sulle griglie che passano: dice quante parole
           // mostrerà il riepilogo "parole che esistevano".
@@ -147,8 +173,10 @@ function main(): void {
       }
 
       const sortedAccepted = [...accepted].sort((a, b) => a - b);
+      const sortedMeans = [...means].sort((a, b) => a - b);
       const pct = (p: number) => percentile(sortedAccepted, p);
-      const vowels = compositionOf(size, difficulty);
+      const meanPct = (p: number) => percentile(sortedMeans, p);
+      const vowels = compositionOf(size, difficulty, spec.composition[difficulty]);
       const sortedBand = [...bandCounts].sort((a, b) => a - b);
 
       console.log(
@@ -157,10 +185,16 @@ function main(): void {
           `(media ${(accepted.reduce((a, b) => a + b, 0) / count).toFixed(0)})`,
       );
       console.log(
-        `            lunghezza max: p50=${percentile([...longs].sort((a, b) => a - b), 50)}  ` +
-          `≥${minLongest}: ${((longEnough / count) * 100).toFixed(0)}%  |  ` +
+        `            ancora ≥${anchor.length}: ${((longEnough / count) * 100).toFixed(0)}%  |  ` +
           `in banda [${band.min},${band.max}]: ${((inBand / count) * 100).toFixed(0)}%  |  ` +
-          `entrambe: ${((both / count) * 100).toFixed(0)}%  (${Date.now() - started}ms)`,
+          (meanBand
+            ? `media [${meanBand.min},${meanBand.max}]: ${((meanOk / count) * 100).toFixed(0)}%  |  `
+            : '') +
+          `TUTTI: ${((both / count) * 100).toFixed(0)}%  (${Date.now() - started}ms)`,
+      );
+      console.log(
+        `            lunghezza media p25=${meanPct(25).toFixed(2)} p50=${meanPct(50).toFixed(2)} p75=${meanPct(75).toFixed(2)}  |  ` +
+          `lunghezza max p50=${percentile([...longs].sort((a, b) => a - b), 50)}`,
       );
       console.log(
         `            composizione: ${vowels}  |  parole attese (fascia) sulle accettate: ` +

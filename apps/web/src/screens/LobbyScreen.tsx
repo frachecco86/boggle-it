@@ -2,7 +2,11 @@ import { useState } from 'react';
 import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
+  resolveSchedaVariant,
   ROUND_DURATIONS_SEC,
+  SCHEDA_VARIANT_HINTS,
+  SCHEDA_VARIANT_LABELS,
+  SCHEDA_VARIANTS,
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
@@ -105,6 +109,8 @@ export function LobbyScreen() {
   }
 
   const activeDifficulty = DIFFICULTIES[room.difficulty];
+  // Criteri delle schede della stanza (le stanze vecchie non hanno il campo).
+  const variant = resolveSchedaVariant(room.schedaVariant);
 
   return (
     <div className="screen lobby">
@@ -254,6 +260,32 @@ export function LobbyScreen() {
               ))}
             </div>
 
+            {/* Criteri delle schede: cambia l'insieme da cui si pesca la scheda. */}
+            <span className="field__label">Schede</span>
+            <div className="rounds-options">
+              {SCHEDA_VARIANTS.map((v) => (
+                <button
+                  key={v}
+                  className={`pill${variant === v ? ' pill--active' : ''}`}
+                  title={SCHEDA_VARIANT_HINTS[v]}
+                  onClick={() =>
+                    configureRoom(
+                      room.gridSize,
+                      room.difficulty,
+                      room.rounds,
+                      room.roundDurationMs,
+                      room.musicId,
+                      room.maxPlayers,
+                      v,
+                    )
+                  }
+                >
+                  {SCHEDA_VARIANT_LABELS[v]}
+                </button>
+              ))}
+            </div>
+            <p className="settings-host__hint">{SCHEDA_VARIANT_HINTS[variant]}</p>
+
             <MusicPicker
               value={room.musicId ?? 'none'}
               onChange={(choice) =>
@@ -269,7 +301,7 @@ export function LobbyScreen() {
           <div className="settings-readonly">
             <span>
               {activeDifficulty.label} · {room.gridSize}×{room.gridSize} · {room.roundDurationMs / 1000}s ·{' '}
-              {room.rounds} round · max {room.maxPlayers} giocatori
+              {room.rounds} round · max {room.maxPlayers} giocatori · {SCHEDA_VARIANT_LABELS[variant]}
             </span>
           </div>
         )}

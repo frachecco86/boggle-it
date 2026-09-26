@@ -2,8 +2,12 @@ import {
   DIFFICULTIES,
   DIFFICULTY_ORDER,
   ROUND_DURATIONS_SEC,
+  SCHEDA_VARIANT_HINTS,
+  SCHEDA_VARIANT_LABELS,
+  SCHEDA_VARIANTS,
   type Difficulty,
   type GridSize,
+  type SchedaVariant,
 } from '@boggle/shared';
 import { RulesPanel } from './RulesPanel.js';
 
@@ -12,10 +16,13 @@ interface MatchSettingsProps {
   difficulty: Difficulty;
   rounds: number;
   durationMs: number;
+  /** Insieme di criteri delle schede da giocare. */
+  variant: SchedaVariant;
   onSize: (s: GridSize) => void;
   onDifficulty: (d: Difficulty) => void;
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
+  onVariant: (v: SchedaVariant) => void;
   onClose: () => void;
 }
 
@@ -38,10 +45,12 @@ export function MatchSettings({
   difficulty,
   rounds,
   durationMs,
+  variant,
   onSize,
   onDifficulty,
   onRounds,
   onDuration,
+  onVariant,
   onClose,
 }: MatchSettingsProps) {
   return (
@@ -126,6 +135,30 @@ export function MatchSettings({
             ))}
           </div>
         </div>
+
+        {/*
+         * Criteri delle schede: due cataloghi diversi, non due difficoltà. Le
+         * schede "full criteria" seguono i criteri completi (rapporto
+         * vocali/consonanti per livello, frequenza delle lettere, numero di
+         * parole e parole ancora); le standard sono il catalogo storico.
+         */}
+        <div className="sheet__row">
+          <span className="sheet__label">Schede</span>
+          <div className="rounds-options">
+            {SCHEDA_VARIANTS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={`pill${variant === v ? ' pill--active' : ''}`}
+                title={SCHEDA_VARIANT_HINTS[v]}
+                onClick={() => onVariant(v)}
+              >
+                {SCHEDA_VARIANT_LABELS[v]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="sheet__note">{SCHEDA_VARIANT_HINTS[variant]}</p>
 
         {/* Le regole stanno qui perché prima erano nell'anteprima della scheda,
             che non c'è più (vedere la scheda prima di giocare avvantaggia). */}

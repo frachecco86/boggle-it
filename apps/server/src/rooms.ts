@@ -17,6 +17,7 @@ import {
   type PlayerPublic,
   type RoomState,
   type Scheda,
+  type SchedaVariant,
   type SfxSlot,
 } from '@boggle/shared';
 import type { Dictionary } from './dictionary.js';
@@ -94,6 +95,11 @@ export class Room {
   roundDurationMs: number;
   /** Numero massimo di giocatori: 2 (sfida), 4 o 8 (partita allargata). */
   maxPlayers: number;
+  /**
+   * Insieme di criteri delle schede di questa stanza: `standard` o `full`
+   * (vedi `Scheda.variant`). L'host lo sceglie creando la stanza o dalla lobby.
+   */
+  schedaVariant: SchedaVariant = 'standard';
   currentRound = 0;
   phase: RoomState['phase'] = 'lobby';
   grid: Grid | null = null;
@@ -149,6 +155,8 @@ export class Room {
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
     maxPlayers: number = 8,
+    /** Insieme di criteri delle schede della stanza (standard / full criteria). */
+    schedaVariant: SchedaVariant = 'standard',
   ) {
     this.code = code;
     this.hostId = '';
@@ -157,6 +165,7 @@ export class Room {
     this.difficulty = difficulty;
     this.roundDurationMs = roundDurationMs;
     this.maxPlayers = maxPlayers;
+    this.schedaVariant = schedaVariant;
     this.dictionary = dictionary;
   }
 
@@ -167,6 +176,7 @@ export class Room {
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
     maxPlayers: number = 8,
+    schedaVariant: SchedaVariant = 'standard',
   ): Room {
     return new Room(
       generateRoomCode(),
@@ -176,6 +186,7 @@ export class Room {
       difficulty,
       roundDurationMs,
       maxPlayers,
+      schedaVariant,
     );
   }
 
@@ -218,6 +229,7 @@ export class Room {
       rounds: this.rounds,
       roundDurationMs: this.roundDurationMs,
       maxPlayers: this.maxPlayers,
+      schedaVariant: this.schedaVariant,
       currentRound: this.currentRound,
       phase: this.phase,
       players: this.publicPlayers(),
@@ -446,11 +458,20 @@ export class RoomRegistry {
     difficulty: Difficulty = 'normale',
     roundDurationMs: number = DEFAULT_ROUND_DURATION_MS,
     maxPlayers: number = 8,
+    schedaVariant: SchedaVariant = 'standard',
   ): Room {
     let room: Room;
     let attempts = 0;
     do {
-      room = Room.create(this.dictionary, gridSize, rounds, difficulty, roundDurationMs, maxPlayers);
+      room = Room.create(
+        this.dictionary,
+        gridSize,
+        rounds,
+        difficulty,
+        roundDurationMs,
+        maxPlayers,
+        schedaVariant,
+      );
       attempts++;
     } while (this.rooms.has(room.code) && attempts < 200);
     this.rooms.set(room.code, room);

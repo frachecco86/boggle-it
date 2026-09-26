@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyMeta, type Difficulty, type GridSize } from '@boggle/shared';
+import {
+  acceptedWords,
+  DIFFICULTIES,
+  DIFFICULTY_ORDER,
+  difficultyMeta,
+  resolveSchedaVariant,
+  SCHEDA_VARIANT_LABELS,
+  SCHEDA_VARIANTS,
+  schedaVariantOf,
+  type Difficulty,
+  type GridSize,
+  type SchedaVariant,
+} from '@boggle/shared';
 import { loadCatalog, loadScheda, type CatalogInfo, type SchedaMeta } from '../game/schedeLoader.js';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
@@ -38,6 +50,8 @@ export function SchedaScreen() {
   const [sort, setSort] = useState<SortField>('maxScore');
   const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
   const [minScore, setMinScore] = useState<number | 'all'>('all');
+  /** Filtro sui criteri di generazione: tutte / standard / full criteria. */
+  const [variant, setVariant] = useState<SchedaVariant | 'all'>('all');
 
   // Carica il catalogo (per il selettore): server, con fallback alle schede incluse.
   useEffect(() => {
@@ -101,6 +115,7 @@ export function SchedaScreen() {
       if (size !== 'all' && m.size !== size) return false;
       if (difficulty !== 'all' && m.difficulty !== difficulty) return false;
       if (minScore !== 'all' && m.maxScore < minScore) return false;
+      if (variant !== 'all' && resolveSchedaVariant(m.variant) !== variant) return false;
       return true;
     });
 
@@ -112,13 +127,14 @@ export function SchedaScreen() {
       return dir * (a.words - b.words) || a.id.localeCompare(b.id, 'it');
     });
     return filtered;
-  }, [catalog, size, difficulty, sort, direction, minScore]);
+  }, [catalog, size, difficulty, sort, direction, minScore, variant]);
 
   const rows = useMemo(() => (scheda ? scheda.grid.split('\n') : []), [scheda]);
   const byLength = useMemo(() => {
     if (!scheda) return [];
     const map = new Map<number, string[]>();
-    for (const word of scheda.words) {
+    // Parole che il giocatore può trovare (insieme accettato), non le sole attese.
+    for (const word of acceptedWords(scheda)) {
       const list = map.get(word.length) ?? [];
       list.push(word);
       map.set(word.length, list);
@@ -130,7 +146,10 @@ export function SchedaScreen() {
 
   // Punteggio massimo della scheda mostrata: somma dei punti di tutte le parole.
   const maxScore = useMemo(
-    () => (scheda ? scheda.words.reduce((total, w) => total + Math.max(0, w.length - 2), 0) : 0),
+    () =>
+      scheda
+        ? acceptedWords(scheda).reduce((total, w) => total + Math.max(0, w.length - 2), 0)
+        : 0,
     [scheda],
   );
 
@@ -241,6 +260,24 @@ export function SchedaScreen() {
             </button>
           ))}
         </div>
+
+        {/*
+         * Filtro sui CRITERI di generazione: permette di vedere solo le schede
+         * "full criteria" (quelle con l'etichetta FULL nell'elenco) o solo quelle
+         * del catalogo standard.
+         */}
+        <div className="scheda__score-pills">
+          <span className="field__label">Criteri</span>
+          {(['all', ...SCHEDA_VARIANTS] as const).map((v) => (
+            <button
+              key={String(v)}
+              className={`pill${variant === v ? ' pill--active' : ''}`}
+              onClick={() => setVariant(v as SchedaVariant | 'all')}
+            >
+              {v === 'all' ? 'Tutti' : SCHEDA_VARIANT_LABELS[v as SchedaVariant]}
+            </button>
+          ))}
+        </div>
       </section>
 
       {catalog?.offline && (
@@ -265,6 +302,11 @@ export function SchedaScreen() {
                   style={{ ['--level-accent' as string]: difficultyMeta(m.difficulty).theme.accent }}
                 >
                   <span className="scheda__item-id">{m.id}</span>
+                  {resolveSchedaVariant(m.variant) === 'full' && (
+                    <span className="scheda__item-variant" title="Generata con i criteri completi">
+                      FULL
+                    </span>
+                  )}
                   <span className="scheda__item-meta">
                     <span className="scheda__item-diff">{difficultyMeta(m.difficulty).label}</span>
                     <span className="scheda__item-score" title="Punteggio massimo ottenibile">
@@ -293,10 +335,15 @@ export function SchedaScreen() {
           {scheda && (
             <>
               <header className="scheda__head">
-                <h2 className="screen__title">{scheda.id}</h2>
+                <h2 className="screen__title">
+                  {scheda.id}
+                  {schedaVariantOf(scheda) === 'full' && (
+                    <span className="scheda__variant">Full criteria</span>
+                  )}
+                </h2>
                 <p className="scheda__meta">
                   {scheda.size}×{scheda.size} · {difficultyMeta(scheda.difficulty).label} ·{' '}
-                  {scheda.words.length} parole · più lunga {scheda.longest} lettere ·{' '}
+                  {acceptedWords(scheda).length} parole · più lunga {scheda.longest} lettere ·{' '}
                   <strong>massimo {maxScore} punti</strong>
                 </p>
               </header>

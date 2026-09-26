@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DIFFICULTIES, type Difficulty, type GridSize } from '@boggle/shared';
+import { DIFFICULTIES, SCHEDA_VARIANT_LABELS, type Difficulty, type GridSize } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { loadCatalog } from '../game/schedeLoader.js';
 import { consumeRoomCodeFromUrl } from '../net/roomLink.js';
@@ -29,6 +29,8 @@ export function HomeScreen() {
     soloRoundDurationMs,
     setSoloSetup,
     soloRounds,
+    schedaVariant,
+    setSchedaVariant,
   } = useAppStore();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -229,7 +231,8 @@ export function HomeScreen() {
         {/* Le impostazioni in vigore, in chiaro: valgono per entrambe le modalità. */}
         <p className="home__setup">
           {hostGridSize}×{hostGridSize} · {DIFFICULTIES[hostDifficulty].label} ·{' '}
-          {Math.round(hostDurationMs / 1000)}s · {hostRounds} round
+          {Math.round(hostDurationMs / 1000)}s · {hostRounds} round ·{' '}
+          {SCHEDA_VARIANT_LABELS[schedaVariant]}
         </p>
 
         {mode === 'multi' && (
@@ -302,10 +305,12 @@ export function HomeScreen() {
           difficulty={hostDifficulty}
           rounds={hostRounds}
           durationMs={hostDurationMs}
+          variant={schedaVariant}
           onSize={setHostGridSize}
           onDifficulty={setHostDifficulty}
           onRounds={setHostRounds}
           onDuration={setHostDurationMs}
+          onVariant={setSchedaVariant}
           onClose={() => setShowSettings(false)}
         />
       )}

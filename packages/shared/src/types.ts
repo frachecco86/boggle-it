@@ -4,6 +4,7 @@
  */
 
 import type { Difficulty } from './difficulty.js';
+import type { SchedaVariant } from './scheda.js';
 import type { MusicChoice } from './music.js';
 import type { SfxSlot } from './profile.js';
 
@@ -83,6 +84,11 @@ export interface RoomState {
    * L'host può cambiarla prima di avviare; tutti la vedono.
    */
   pendingSchedaId?: string;
+  /**
+   * Insieme di criteri delle schede della stanza (`standard` o `full`).
+   * Se assente (stanze vecchie), vale `standard`.
+   */
+  schedaVariant?: SchedaVariant;
   currentRound: number;
   phase: GamePhase;
   players: PlayerPublic[];
@@ -111,6 +117,11 @@ export interface RoomCreatePayload {
   roundDurationMs: number;
   /** Numero massimo di giocatori (2, 4 o 8). Se assente, 8. */
   maxPlayers?: number;
+  /**
+   * Insieme di criteri delle schede da giocare in questa stanza (`standard` o
+   * `full`). Se assente, `standard`.
+   */
+  schedaVariant?: SchedaVariant;
   /** Token del profilo, se il giocatore è loggato (per foto e avatar). */
   token?: string;
 }
@@ -147,6 +158,8 @@ export interface RoomConfigPayload {
   musicId?: MusicChoice;
   /** Numero massimo di giocatori (2, 4 o 8). */
   maxPlayers?: number;
+  /** Insieme di criteri delle schede della stanza (solo host). */
+  schedaVariant?: SchedaVariant;
 }
 
 export interface SubmitWordPayload {
