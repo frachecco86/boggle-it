@@ -273,7 +273,14 @@ export interface WordCatalogEntry {
 
 /** Filtri del catalogo parole. */
 export interface WordCatalogQuery {
-  /** Ricerca testuale (prefisso o sottostringa). */
+  /**
+   * Ricerca testuale, per PREFISSO.
+   *
+   * Era una sottostringa pura (`includes`): "amo" matchava ogni "-iamo"
+   * (`abbacchiamo`), cioè 12.782 risultati quasi tutti verbi. Nel dizionario
+   * (368k parole) rendeva la ricerca inutilizzabile. Ora si cerca l'INIZIO della
+   * parola: "amo" → `amo`, `amore`, `amorevole`.
+   */
   search?: string;
   /** Lunghezza esatta. */
   length?: number;

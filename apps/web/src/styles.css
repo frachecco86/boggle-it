@@ -80,8 +80,14 @@ html,
 body,
 #root {
   margin: 0;
+  /*
+   * `min-height` e non `height`: le pagine lunghe (dizionario, elenco schede)
+   * devono poter scorrere. Con `height: 100%` il contenuto veniva tagliato e lo
+   * sfondo su `body` copriva solo la prima viewport (si ripeteva). Il fondo ora
+   * vive su `body::before`, che è `position: fixed` e non dipende da questa
+   * altezza.
+   */
   min-height: 100%;
-  height: 100%;
   /*
    * `stable` riserva SEMPRE lo spazio della scrollbar verticale.
    *
@@ -94,14 +100,41 @@ body,
 }
 
 body {
-  /* Sfondo pilotato dalla difficoltà (impostato da App.tsx). Fallback al tema normale. */
-  background: var(--difficulty-bg, radial-gradient(1200px 800px at 50% -10%, #f3f1ff 0%, #e7e3fb 55%, #ded9f7 100%));
-  background-attachment: fixed;
-  transition: background 0.6s ease;
+  /*
+   * Colore di base (fallback): lo sfondo VERO è il layer fisso qui sotto.
+   *
+   * PERCHÉ non usiamo più lo sfondo direttamente su `body`:
+   * `body` ha `height: 100%` (una sola viewport) e lo sfondo era agganciato con
+   * `background-attachment: fixed` per restare fermo scorrendo. Sui browser
+   * mobili `fixed` viene però spesso IGNORATO (limite noto diiOS/Android con i
+   * fondi a gradiente), quindi il fondo passava a `scroll`: copriva solo la prima
+   * viewport e per il resto della pagina **si ripeteva**, e il taglio del
+   * gradiente si vedeva come una banda. Spostando il gradiente su un layer
+   * `position: fixed` a tutta viewport il problema non può più presentarsi, su
+   * nessun browser.
+   */
+  background: var(--page-bg, #e7e3fb);
   color: var(--text);
   font-family: var(--font);
   overscroll-behavior: none;
   user-select: none;
+}
+
+/*
+ * Layer di sfondo: fisso, a copertura dell'intera viewport, e `inset: 0`.
+ *
+ * `--page-bg` è uguale a `--difficulty-bg` di default, e viene ridefinito in tema
+ * scuro con il gradiente scuro (vedi `[data-theme='dark']`). `z-index: -1` lo
+ * mette dietro a TUTTO il contenuto senza togliere interattività (è `pointer-events:
+ * none`).
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--page-bg, var(--difficulty-bg, radial-gradient(1200px 800px at 50% -10%, #f3f1ff 0%, #e7e3fb 55%, #ded9f7 100%)));
 }
 
 .app {
@@ -3146,6 +3179,105 @@ body {
   margin-bottom: 16px;
 }
 
+/*
+ * Tab del pannello: Schede / Musica / Profili.
+ *
+ * Riusano l'aspetto delle tab della pagina Parole (pill) per coerenza. Prima le
+ * tre aree erano una sotto l'altra in un'unica pagina lunga: per arrivare ai
+ * profili si scorreva oltre tutte le schede.
+ */
+.admin__tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.admin__tab {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 7px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin__tab--active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.admin__subtitle {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 16px 0 8px;
+  font-weight: 600;
+}
+
+/* Riga del tool "importa da link": input largo, pulsante a destra. */
+.admin__form--link {
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.admin__profile-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin__profile-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.admin__profile-avatar {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.admin__profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin__profile-meta {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+/* Conferma di cancellazione: riquadro evidenziato, con campo nickname. */
+.admin__confirm {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, #c0392b 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, #c0392b 45%, var(--border));
+  border-radius: var(--radius);
+}
+
+.admin__confirm p {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+
 .admin__section {
   margin-bottom: 26px;
 }
@@ -4911,9 +5043,17 @@ body {
  * In tema scuro il fondo è il gradiente SCURO della difficoltà (vedi
  * `difficulty.ts`): ogni livello ha la sua notte colorata (blu, viola, prugna)
  * invece di un nero piatto uguale per tutti.
+ *
+ * Si imposta `--page-bg` (usato dal layer `body::before`) E anche il colore di
+ * `body`, così non c'è un istante in cui il fondo resta chiaro mentre il resto
+ * della pagina è già scuro.
  */
+[data-theme='dark'] {
+  --page-bg: var(--difficulty-bg-dark, var(--bg));
+}
+
 [data-theme='dark'] body {
-  background: var(--difficulty-bg-dark, var(--bg));
+  background: var(--page-bg);
 }
 
 /*
@@ -5455,6 +5595,30 @@ body {
   padding-top: 8px;
   font-size: 0.76rem;
   opacity: 0.85;
+}
+
+/*
+ * Su schermo stretto il pannello diventa un foglio ancorato alla viewport.
+ *
+ * PERCHÉ: il pulsante "?" sta accanto al titolo (vicino al centro), e il pannello
+ * è `position: absolute; right: 0` rispetto a un contenitore largo solo 34px.
+ * Con `width: min(420px, 100vw - 32px)` finiva per sbordare a sinistra e ad
+ * allargare/far scorrere la pagina. Ancorandolo alla viewport con margini
+ * simmetrici resta centrato e sempre dentro lo schermo.
+ *
+ * Nessun antenato ha `transform` (l'animazione di `.screen` tocca solo
+ * l'opacità), quindi `position: fixed` è riferito alla viewport e non a un
+ * contenitore interno.
+ */
+@media (max-width: 560px) {
+  .info-box__panel {
+    position: fixed;
+    top: calc(64px + env(safe-area-inset-top, 0px));
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(70vh, 560px);
+  }
 }
 
 /* ================================================================== */

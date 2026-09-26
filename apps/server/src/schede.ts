@@ -204,7 +204,7 @@ export class SchedaCatalog {
   countByVariant(): Record<string, Record<SchedaVariant, number>> {
     const out: Record<string, Record<SchedaVariant, number>> = {};
     for (const [key, list] of this.byKey) {
-      const counts: Record<SchedaVariant, number> = { standard: 0, full: 0 };
+      const counts: Record<SchedaVariant, number> = { standard: 0, full: 0, ale: 0 };
       for (const scheda of list) counts[schedaVariantOf(scheda)]++;
       out[key] = counts;
     }
@@ -266,7 +266,8 @@ export class SchedaCatalog {
       if (query.length !== undefined && word.length !== query.length) continue;
       if (query.minLength !== undefined && word.length < query.minLength) continue;
       if (query.maxLength !== undefined && word.length > query.maxLength) continue;
-      if (search && !word.includes(search)) continue;
+      // Ricerca per PREFISSO: "amo" deve trovare "amore", non "abbacchiamo".
+      if (search && !word.startsWith(search)) continue;
 
       const pos = this.lexical.pos.get(word) ?? 'n.c.';
       if (query.pos && query.pos !== 'all' && pos !== query.pos) continue;

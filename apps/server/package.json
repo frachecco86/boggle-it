@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run --passWithNoTests",
     "gen:schede": "tsx scripts/gen-schede.ts",
+    "gen:schede:ale": "tsx scripts/gen-schede-ale.ts",
     "verify:schede": "tsx scripts/verify-schede.ts",
     "measure:schede": "tsx scripts/measure-schede.ts"
   },

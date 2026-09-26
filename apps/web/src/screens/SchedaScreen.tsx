@@ -331,9 +331,12 @@ export function SchedaScreen() {
                   style={{ ['--level-accent' as string]: difficultyMeta(m.difficulty).theme.accent }}
                 >
                   <span className="scheda__item-id">{m.id}</span>
-                  {resolveSchedaVariant(m.variant) === 'full' && (
-                    <span className="scheda__item-variant" title="Generata con i criteri completi">
-                      FULL
+                  {resolveSchedaVariant(m.variant) !== 'standard' && (
+                    <span
+                      className="scheda__item-variant"
+                      title={`Generata con i criteri ${SCHEDA_VARIANT_LABELS[resolveSchedaVariant(m.variant)]}`}
+                    >
+                      {resolveSchedaVariant(m.variant) === 'full' ? 'FULL' : 'ALE'}
                     </span>
                   )}
                   <span className="scheda__item-meta">
@@ -366,8 +369,10 @@ export function SchedaScreen() {
               <header className="scheda__head">
                 <h2 className="screen__title">
                   {scheda.id}
-                  {schedaVariantOf(scheda) === 'full' && (
-                    <span className="scheda__variant">Full criteria</span>
+                  {schedaVariantOf(scheda) !== 'standard' && (
+                    <span className="scheda__variant">
+                      {SCHEDA_VARIANT_LABELS[schedaVariantOf(scheda)]}
+                    </span>
                   )}
                 </h2>
                 <p className="scheda__meta">

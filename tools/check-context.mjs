@@ -16,7 +16,6 @@ const DATA = path.join(ROOT, 'packages/dictionary/data');
 const REQUIRED = [
   // words.txt è generato, words.br è la fonte versionata: ne basta una.
   { name: 'words.txt o words.br', anyOf: ['words.txt', 'words.br'] },
-  { name: 'abbreviations.txt', anyOf: ['abbreviations.txt'] },
   // Fasce di frequenza: servono alla generazione delle schede (build e admin).
   // Sono ritagliate dalla lista di frequenza grezza, che NON e' versionata.
   { name: 'frequency-it.txt', anyOf: ['frequency-it.txt'] },
@@ -24,8 +23,9 @@ const REQUIRED = [
   // Morph-it (gitignored) non può fornire nei build di deploy: senza, la pagina
   // Parole mostra tutte le voci come `n.c.`.
   { name: 'word-index.br', anyOf: ['word-index.br'] },
-  // Whitelist in consonante e abbreviazioni: regola di giocabilità, condivisa
-  // tra build del dizionario e generazione delle schede.
+  // Whitelist in consonante: regola di giocabilità, condivisa tra build del
+  // dizionario e generazione delle schede. (Le abbreviazioni non sono più una
+  // fonte: `abbreviations.txt` è stato rimosso.)
   { name: 'consonant-endings.txt', anyOf: ['consonant-endings.txt'] },
 ];
 

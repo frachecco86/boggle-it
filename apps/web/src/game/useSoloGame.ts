@@ -119,12 +119,13 @@ export function useSoloGame(options: UseSoloGameOptions) {
 
   const score = useMemo(() => found.reduce((sum, f) => sum + f.points, 0), [found]);
 
-  // L'esito della parola si spegne da solo: il rettangolo torna a "Componi".
-  useEffect(() => {
-    if (!feedback) return;
-    const id = window.setTimeout(() => setFeedback(null), FEEDBACK_VISIBLE_MS);
-    return () => window.clearTimeout(id);
-  }, [feedback]);
+  /*
+   * L'esito della parola (punti, "già trovata", "non valida") resta finché il
+   * giocatore non ricomincia: NON si spegne da solo dopo un tempo fisso. Prima
+   * spariva dopo 1 secondo, quindi il punteggio si leggeva solo con la coda
+   * dell'occhio. Ora compare quando si rilascia la parola e resta visibile fino
+   * a quando si tocca una nuova lettera (vedi `setSelectedPath` più sotto).
+   */
 
   const currentWord = useMemo(
     () => (grid ? wordFromPath(grid, selectedPath) : ''),
@@ -354,7 +355,16 @@ export function useSoloGame(options: UseSoloGameOptions) {
     start,
     beginRound,
     commitPath,
-    setSelectedPath,
+    setSelectedPath: (path: number[]) => {
+      /*
+       * Toccare una nuova lettera spegne l'esito della parola precedente: è il
+       * gesto che dice "sto componendo un'altra parola". Se il percorso è vuoto
+       * (il giocatore ha ritirato il dito senza comporre) l'esito resta, così
+       * non si perde leggendo un undo.
+       */
+      if (path.length > 0) setFeedback(null);
+      setSelectedPath(path);
+    },
     nextRound,
     clearFeedback: () => setFeedback(null),
   };

@@ -145,20 +145,37 @@ export function MatchSettings({
         <div className="sheet__row">
           <span className="sheet__label">Schede</span>
           <div className="rounds-options">
-            {SCHEDA_VARIANTS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={`pill${variant === v ? ' pill--active' : ''}`}
-                title={SCHEDA_VARIANT_HINTS[v]}
-                onClick={() => onVariant(v)}
-              >
-                {SCHEDA_VARIANT_LABELS[v]}
-              </button>
-            ))}
+            {SCHEDA_VARIANTS.map((v) => {
+              /*
+               * Le schede "ale" esistono solo sulla griglia 5×5 (la calibrazione è
+               * per dimensione e il catalogo è concentrato lì). Altrove il tasto è
+               * disabilitato: sceglierlo darebbe "nessuna scheda disponibile".
+               */
+              const disabled = v === 'ale' && size !== 5;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  disabled={disabled}
+                  className={`pill${variant === v ? ' pill--active' : ''}`}
+                  title={
+                    disabled
+                      ? 'Disponibili solo sulla griglia 5×5'
+                      : SCHEDA_VARIANT_HINTS[v]
+                  }
+                  onClick={() => onVariant(v)}
+                >
+                  {SCHEDA_VARIANT_LABELS[v]}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <p className="sheet__note">{SCHEDA_VARIANT_HINTS[variant]}</p>
+        <p className="sheet__note">
+          {variant === 'ale' && size !== 5
+            ? 'Le schede Ale sono disponibili solo sulla griglia 5×5.'
+            : SCHEDA_VARIANT_HINTS[variant]}
+        </p>
 
         {/* Le regole stanno qui perché prima erano nell'anteprima della scheda,
             che non c'è più (vedere la scheda prima di giocare avvantaggia). */}

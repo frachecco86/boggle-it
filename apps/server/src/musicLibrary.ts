@@ -35,6 +35,17 @@ export const MUSIC_DIR = process.env.MUSIC_DIR
  */
 const DISABLED_FILE_NAME = 'disabled.json';
 
+/**
+ * Elenco delle tracce NASCOSTE dall'admin.
+ *
+ * Differenza da `disabled.json`: una traccia disabilitata resta nell'elenco
+ * dell'admin (riaccendibile), una nascosta SPARISCE dall'elenco e dalla playlist.
+ * Serve per le tracce INCLUSE nel bundle, che non si possono cancellare (sono
+ * versionate nel client): l'admin puo' toglierle dall'elenco definitivamente.
+ * Per le tracce caricate si usa `remove()` (cancella il file).
+ */
+const HIDDEN_FILE_NAME = 'hidden.json';
+
 /** Quanto può pesare un MP3 caricato. Le tracce incluse stanno sotto 1,5 MB. */
 export const MUSIC_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -77,15 +88,19 @@ export class MusicLibrary {
   private readonly dir: string;
   private readonly manifestFile: string;
   private readonly disabledFile: string;
+  private readonly hiddenFile: string;
   /** Traccia le voci caricate, indicizzate per id. */
   private readonly uploaded = new Map<string, StoredTrack>();
   /** Id delle tracce escluse dalla playlist (caricate o incluse). */
   private readonly disabled = new Set<string>();
+  /** Id delle tracce nascoste dall'elenco dell'admin (tipicamente incluse). */
+  private readonly hidden = new Set<string>();
 
   constructor(dir: string = MUSIC_DIR) {
     this.dir = dir;
     this.manifestFile = path.join(dir, 'library.json');
     this.disabledFile = path.join(dir, DISABLED_FILE_NAME);
+    this.hiddenFile = path.join(dir, HIDDEN_FILE_NAME);
     this.load();
   }
 
@@ -118,6 +133,18 @@ export class MusicLibrary {
         console.warn('⚠ Elenco tracce disabilitate illeggibile, lo ignoro:', err);
       }
     }
+
+    // Tracce nascoste: file opzionale.
+    if (existsSync(this.hiddenFile)) {
+      try {
+        const raw = JSON.parse(readFileSync(this.hiddenFile, 'utf8')) as unknown;
+        if (Array.isArray(raw)) {
+          for (const id of raw) if (typeof id === 'string') this.hidden.add(id);
+        }
+      } catch (err) {
+        console.warn('⚠ Elenco tracce nascoste illeggibile, lo ignoro:', err);
+      }
+    }
   }
 
   private save(): void {
@@ -128,6 +155,11 @@ export class MusicLibrary {
   private saveDisabled(): void {
     mkdirSync(this.dir, { recursive: true });
     writeFileSync(this.disabledFile, JSON.stringify([...this.disabled], null, 2));
+  }
+
+  private saveHidden(): void {
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(this.hiddenFile, JSON.stringify([...this.hidden], null, 2));
   }
 
   /**
@@ -145,16 +177,21 @@ export class MusicLibrary {
   /**
    * Catalogo COMPLETO con lo stato di attivazione: usato dal pannello admin,
    * che deve mostrare anche le tracce spente (per poterle riaccendere).
+   *
+   * Esclude le tracce NASCOSTE (`hide`): l'admin le ha tolte dall'elenco e non
+   * devono più comparire, né qui né nella playlist.
    */
   listAll(): Array<MusicTrackMeta & { enabled: boolean }> {
-    const builtIn = DEFAULT_MUSIC_CATALOG.map((t) => ({
+    const builtIn = DEFAULT_MUSIC_CATALOG.filter((t) => !this.hidden.has(t.id)).map((t) => ({
       ...t,
       enabled: !this.disabled.has(t.id),
     }));
-    const uploaded = [...this.uploaded.values()].map((t) => ({
-      ...this.toMeta(t),
-      enabled: !this.disabled.has(t.id),
-    }));
+    const uploaded = [...this.uploaded.values()]
+      .filter((t) => !this.hidden.has(t.id))
+      .map((t) => ({
+        ...this.toMeta(t),
+        enabled: !this.disabled.has(t.id),
+      }));
     return [...builtIn, ...uploaded];
   }
 
@@ -238,6 +275,23 @@ export class MusicLibrary {
     return this.toMeta(stored);
   }
 
+  /**
+   * Nasconde una traccia dall'elenco (tipicamente una INCLUSA nel bundle, che non
+   * si può cancellare). Smette di comparire in admin e nella playlist; il file
+   * resta nel client. Per le tracce caricate si usa `remove()`.
+   */
+  hide(id: string): boolean {
+    if (!this.exists(id)) return false;
+    this.hidden.add(id);
+    this.saveHidden();
+    return true;
+  }
+
+  /** true se la traccia è nascosta dall'admin. */
+  isHidden(id: string): boolean {
+    return this.hidden.has(id);
+  }
+
   /** Rimuove una traccia caricata (file + manifest). */
   remove(id: string): boolean {
     const track = this.uploaded.get(id);
@@ -249,9 +303,10 @@ export class MusicLibrary {
     }
     this.uploaded.delete(id);
     this.save();
-    // Una traccia rimossa non deve restare nell'elenco dei disabilitati: se in
-    // futuro un id venisse riusato, resterebbe spento senza motivo.
+    // Una traccia rimossa non deve restare negli elenchi: se in futuro un id
+    // venisse riusato, resterebbe spento o nascosto senza motivo.
     if (this.disabled.delete(id)) this.saveDisabled();
+    if (this.hidden.delete(id)) this.saveHidden();
     return true;
   }
 

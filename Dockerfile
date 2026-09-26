@@ -62,7 +62,6 @@ COPY --from=builder /app/packages/shared/schede ./packages/shared/schede
 COPY --from=builder /app/packages/dictionary/data/words.txt ./packages/dictionary/data/words.txt
 COPY --from=builder /app/packages/dictionary/data/words.br ./packages/dictionary/data/words.br
 COPY --from=builder /app/packages/dictionary/data/consonant-endings.txt ./packages/dictionary/data/consonant-endings.txt
-COPY --from=builder /app/packages/dictionary/data/abbreviations.txt ./packages/dictionary/data/abbreviations.txt
 # Fasce di frequenza (5k/20k/60k): servono all'admin per generare nuove schede.
 # Senza questo file la generazione dell'admin fallisce ("fascia vuota").
 COPY --from=builder /app/packages/dictionary/data/frequency-it.txt ./packages/dictionary/data/frequency-it.txt
@@ -71,6 +70,32 @@ COPY --from=builder /app/packages/dictionary/data/frequency-it.txt ./packages/di
 # produzione l'elenco del lessico non si vedeva. Il build di deploy lo genera ora
 # anche nel percorso offline (`build-words.mjs`).
 COPY --from=builder /app/packages/dictionary/data/word-index.br ./packages/dictionary/data/word-index.br
+# Vocabolario comune NVdB e calibrazione "ale".
+#
+# NOTA: la calibrazione (`calibration.json`) è già pronta perché il catalogo
+# versionato la include. Il vocabolario NVdB serve solo per RIGENERARE le schede
+# ale con `pnpm gen:schede:ale`, che richiede anche `morph-it_048.txt` (escluso
+# dall'immagine per dimensione): la rigenerazione delle schede ale si fa quindi
+# in locale, non dentro il container. Il server non ne ha bisogno a runtime.
+COPY --from=builder /app/packages/dictionary/data/ale ./packages/dictionary/data/ale
+
+# Tool di estrazione audio da link (tab Musica dell'admin).
+#
+# `yt-dlp` scarica, `ffmpeg` converte in MP3. Si installano QUI e non nel builder
+# perché servono a RUNTIME: il builder non li usa. Sono opzionali per il gioco —
+# se mancassero, la tab Musica continuerebbe a funzionare con l'upload manuale
+# (l'endpoint risponde 503 con le istruzioni).
+#
+# NOTA: `yt-dlp` è uno script Python, quindi serve `python3`; ffmpeg è il
+# convertitore usato da yt-dlp con `--audio-format mp3`.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg python3 ca-certificates curl \
+ && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+      -o /usr/local/bin/yt-dlp \
+ && chmod +x /usr/local/bin/yt-dlp \
+ && apt-get purge -y curl \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
 
 # Dati persistenti: DB profili + schede generate dall'admin (`schede-extra/`)
 # + MP3 caricati dall'admin (`music/`).

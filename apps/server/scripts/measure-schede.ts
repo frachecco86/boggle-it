@@ -120,7 +120,13 @@ function main(): void {
   const onlySize = arg('size') ? (Number(arg('size')) as GridSize) : undefined;
   const sizes = onlySize ? [onlySize] : ALL_SIZES;
   const variant: SchedaVariant = resolveSchedaVariant(arg('variant'));
-  const spec = SPECS[variant];
+  if (variant === 'ale') {
+    console.log('Le schede "ale" non usano SPECS: la loro banda viene dalla calibrazione.');
+    console.log('Misura con: pnpm gen:schede:ale  (stampa range e fasce calibrate).');
+    return;
+  }
+  const classicVariant = variant === 'full' ? 'full' : 'standard';
+  const spec = SPECS[classicVariant];
 
   console.log(`Criteri: ${SCHEDA_VARIANT_LABELS[variant]}`);
 
@@ -135,8 +141,8 @@ function main(): void {
   for (const size of sizes) {
     for (const difficulty of DIFFICULTY_ORDER) {
       const bandTrie = pool.tries.bands[difficulty];
-      const band = densityBandFor(size, difficulty, variant);
-      const anchor = anchorFor(size, difficulty, variant);
+      const band = densityBandFor(size, difficulty, classicVariant);
+      const anchor = anchorFor(size, difficulty, classicVariant);
       const meanBand = spec.meanLength?.[size]?.[difficulty];
 
       const accepted: number[] = [];

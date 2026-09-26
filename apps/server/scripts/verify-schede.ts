@@ -115,13 +115,22 @@ function checkScheda(
   const violations: Violation[] = [];
   // I criteri dipendono dalla VARIANTE della scheda (standard / full criteria).
   const variant = schedaVariantOf(scheda);
-  const spec = SPECS[variant];
-  const band = densityBandFor(scheda.size, scheda.difficulty, variant);
-  const anchor = anchorFor(scheda.size, scheda.difficulty, variant);
-  const meanBand = spec.meanLength?.[scheda.size]?.[scheda.difficulty];
+  /*
+   * Le schede "ale" NON usano `SPECS`: i loro limiti (intervallo di parole e
+   * fasce di difficoltà) vengono dalla CALIBRAZIONE (`packages/dictionary/data/ale/
+   * calibration.json`), non da bande fisse nel codice. Qui si verifica solo ciò che
+   * vale per tutte le varianti: formato, coerenza `words ⊆ allWords`, presenza nel
+   * dizionario, coerenza di `longest`. La verifica dei criteri "ale" la fa lo
+   * script di generazione e il test dedicato.
+   */
+  const isAle = variant === 'ale';
+  const spec = isAle ? null : SPECS[variant];
+  const band = isAle ? null : densityBandFor(scheda.size, scheda.difficulty, variant);
+  const anchor = isAle ? null : anchorFor(scheda.size, scheda.difficulty, variant);
+  const meanBand = spec?.meanLength?.[scheda.size]?.[scheda.difficulty];
   const tol = SCHEDA_CRITERIA.densityTolerance;
-  const minWords = Math.floor(band.min * (1 - tol));
-  const maxWords = Math.ceil(band.max * (1 + tol));
+  const minWords = band ? Math.floor(band.min * (1 - tol)) : 0;
+  const maxWords = band ? Math.ceil(band.max * (1 + tol)) : Infinity;
 
   /*
    * L'insieme accettato in partita. Le schede di formato 1 non hanno `allWords`:
@@ -148,14 +157,15 @@ function checkScheda(
   for (const w of accepted) {
     score += w.length - 2;
     if (w.length > longest) longest = w.length;
-    if (w.length >= anchor.length) anchors++;
+    if (anchor && w.length >= anchor.length) anchors++;
     totalLength += w.length;
     if (dictionary.size > 0 && !dictionary.has(w)) notInDictionary++;
   }
   const meanLength = accepted.length > 0 ? totalLength / accepted.length : 0;
 
   // 1. Densità: quante parole si possono trovare, nella banda della difficoltà.
-  if (accepted.length < minWords || accepted.length > maxWords) {
+  //    Le schede "ale" non hanno una banda fissa: saltano questo controllo.
+  if (band && (accepted.length < minWords || accepted.length > maxWords)) {
     violations.push({
       schedaId: scheda.id,
       criterion: 'densità',
@@ -164,7 +174,7 @@ function checkScheda(
   }
 
   // 2. Parole ancora: almeno N parole di almeno L lettere.
-  if (anchors < anchor.count) {
+  if (anchor && anchors < anchor.count) {
     violations.push({
       schedaId: scheda.id,
       criterion: 'parole ancora',
@@ -182,7 +192,7 @@ function checkScheda(
   }
 
   // 3b. Struttura giocabile (solo "full criteria"): niente zone morte.
-  if (spec.requirePlayableStructure) {
+  if (spec?.requirePlayableStructure) {
     const issues = gridStructureIssues(rowsToGrid(scheda.grid));
     if (issues.length > 0) {
       violations.push({

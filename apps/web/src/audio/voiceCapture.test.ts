@@ -41,3 +41,25 @@ describe('worklet di cattura della voce', () => {
     expect(ack).toBeGreaterThan(flush);
   });
 });
+
+describe('worklet di cattura: qualità (anti-aliasing)', () => {
+  it('filtra prima di decimare: niente semplice media a blocchi', () => {
+    /*
+     * Regressione: la prima versione faceva la media di 2-3 campioni. A 44,1 kHz
+     * il rapporto è 2,756, quindi la finestra cambiava di lunghezza e la voce
+     * "gracchiava". Ora deve esserci un filtro a più sezioni e un'interpolazione.
+     */
+    expect(workletSource).toContain('lowpassBiquad');
+    expect(workletSource).toContain('biquad(');
+    // Decimazione a fase continua (interpolazione lineare), non a blocchi.
+    expect(workletSource).toContain('this.nextAt');
+    expect(workletSource).toMatch(/while \(this\.nextAt <= this\.inputIndex\)/);
+    // L'alto-passo toglie continua e tonfi.
+    expect(workletSource).toContain('highpassPole');
+  });
+
+  it('usa due sezioni di passa-basso in cascata (4° ordine)', () => {
+    expect(workletSource).toContain('this.lp1');
+    expect(workletSource).toContain('this.lp2');
+  });
+});

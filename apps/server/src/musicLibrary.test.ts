@@ -184,3 +184,40 @@ describe('abilitazione delle tracce', () => {
     expect(l.firstPlayable()).toBeNull();
   });
 });
+
+describe('MusicLibrary: tracce incluse nascoste', () => {
+  it('nasconde una traccia inclusa: sparisce da admin e playlist, resta il file', () => {
+    const l = makeLibrary();
+    // Una traccia inclusa è presente all'inizio.
+    expect(l.listAll().some((t) => t.id === 'allegra')).toBe(true);
+    expect(l.list().some((t) => t.id === 'allegra')).toBe(true);
+
+    expect(l.hide('allegra')).toBe(true);
+    expect(l.isHidden('allegra')).toBe(true);
+    // Sparita sia dall'elenco admin sia da quello pubblico.
+    expect(l.listAll().some((t) => t.id === 'allegra')).toBe(false);
+    expect(l.list().some((t) => t.id === 'allegra')).toBe(false);
+    // Le altre restano.
+    expect(l.listAll().some((t) => t.id === 'classica')).toBe(true);
+  });
+
+  it('la traccia nascosta resta nascosta dopo un riavvio', () => {
+    makeLibrary().hide('spazio');
+    const reloaded = makeLibrary();
+    expect(reloaded.isHidden('spazio')).toBe(true);
+    expect(reloaded.listAll().some((t) => t.id === 'spazio')).toBe(false);
+  });
+
+  it('nascondere un id inesistente ritorna false', () => {
+    expect(makeLibrary().hide('non-esiste')).toBe(false);
+  });
+
+  it('rimuovere una traccia caricata pulisce anche lo stato nascosto', () => {
+    const l = makeLibrary();
+    const track = l.add({ label: 'Prova', ...fakeMp3() });
+    expect(l.hide(track.id)).toBe(true);
+    expect(l.remove(track.id)).toBe(true);
+    // Un id futuro riusato non deve restare nascosto.
+    expect(l.isHidden(track.id)).toBe(false);
+  });
+});

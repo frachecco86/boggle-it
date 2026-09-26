@@ -7,9 +7,11 @@
  *  2. **Si parla** → un AudioWorklet (@see audio/worklets/voice-capture.worklet.js)
  *     riduce la voce a 16 kHz mono e la impacchetta in blocchi da 64 ms, che
  *     partono subito (`voice:chunk`). Il server li inoltra agli altri della stanza.
- *  3. **Si ascolta** → ogni blocco ricevuto viene messo in coda su un piccolo
- *     buffer (120 ms) e suonato in sequenza. Il buffer assorbe i ritardi della
- *     rete: senza, ogni pacchetto che arriva in ritardo produrrebbe un buco.
+ *  3. **Si ascolta** → ogni blocco ricevuto viene messo in coda su un buffer di
+ *     sicurezza e suonato in sequenza, con una breve dissolvenza in entrata e in
+ *     uscita che elimina i click fra un blocco e l'altro. Il buffer assorbe i
+ *     ritardi della rete: senza, ogni pacchetto che arriva in ritardo produrrebbe
+ *     un buco.
  *  4. **Si rilascia** → si manda l'ultimo blocco parziale, poi `voice:stop`, che
  *     libera il posto in modo che un altro possa parlare.
  *
@@ -37,19 +39,34 @@ import { useAppStore } from '../state/store.js';
 /**
  * Ritardo con cui si comincia a suonare il primo blocco di una voce.
  *
- * È il buffer anti-strappo: 120 ms di audio in anticipo assorbono i ritardi
- * tipici di una rete mobile senza che il ritardo totale diventi fastidioso.
+ * È il buffer anti-strappo: l'audio parte in anticipo di questo valore, così i
+ * ritardi della rete (jitter) vengono assorbiti senza buchi. 220 ms sono più di
+ * prima (120) e si sentono come una latenza leggermente maggiore, ma è il
+ * compromesso chiesto: con 120 ms bastava una piccola variazione perché un
+ * blocco arrivasse in ritardo e la voce "gracchiasse".
  */
-const PLAYBACK_LEAD_S = 0.12;
+const PLAYBACK_LEAD_S = 0.22;
 
 /**
  * Ritardo massimo tollerato prima di riallinearsi.
  *
  * Se la coda supera questo valore (rete che si blocca, pagina in background) si
- * ricomincia da `PLAYBACK_LEAD_S`: meglio un taglio che una voce che parla con
- * due secondi di ritardo.
+ * ricomincia da `PLAYBACK_LEAD_S`: meglio un taglio che una voce con due secondi
+ * di ritardo. Alzato insieme a `PLAYBACK_LEAD_S` per lasciare respiro alla coda.
  */
-const PLAYBACK_MAX_LEAD_S = 0.6;
+const PLAYBACK_MAX_LEAD_S = 0.9;
+
+/**
+ * Durata della dissolvenza applicata agli estremi di ogni blocco (in secondi).
+ *
+ * Perché serve: i blocchi vengono accodati e riprodotti con `start(time)`; se il
+ * campione iniziale di un blocco non coincide con l'ultimo del precedente
+ * (succede sempre, i blocchi sono indipendenti) si sente un **click** — ed è una
+ * delle cause del "gracchiare". Una rampa di 4 ms in entrata e in uscita elimina
+ * il salto senza intaccare la voce (4 ms sono sotto la soglia di percezione della
+ * consonante).
+ */
+const PLAYBACK_FADE_S = 0.004;
 
 /**
  * Dopo quanto silenzio si chiude il microfono per non consumare batteria.
@@ -257,11 +274,23 @@ class VoiceChat {
       }
       if (!this.stream) {
         /*
-         * Solo `channelCount`: cancellazione dell'eco, soppressione del rumore
-         * e guadagno automatico restano quelli decisi dal browser (di norma
-         * attivi). Imporli qui toglierebbe voce a chi parla piano.
+         * Lavorazioni del microfono ESPLICITE. Prima si passava solo
+         * `channelCount` lasciando fare al browser: i default (di norma
+         * cancellazione dell'eco, soppressione del rumore, guadagno automatico)
+         * non sono però garantiti, e senza di essi il rumore di fondo entra nella
+         * voce e si somma ai click dei blocchi — un'altra fonte del "gracchiare".
+         * Le chiediamo qui per avere lo stesso comportamento su tutti i browser.
+         * Il guadagno automatico resta attivo: senza, chi parla piano diventa
+         * inudibile in una stanza con musica.
          */
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
         this.source = ctx.createMediaStreamSource(this.stream);
         this.source.connect(this.node);
       }
@@ -353,6 +382,23 @@ class VoiceChat {
     const buffer = ctx.createBuffer(1, samples.length, VOICE_SAMPLE_RATE);
     const channel = buffer.getChannelData(0);
     for (let i = 0; i < samples.length; i++) channel[i] = samples[i]! / 32768;
+
+    /*
+     * Dissolvenza in entrata e in uscita (4 ms): evita il click al confine fra
+     * due blocchi. Si applica ai campioni, prima di creare la sorgente, così non
+     * servono nodi di gain aggiuntivi per ogni blocco (sarebbero centinaia al
+     * secondo).
+     */
+    const fadeSamples = Math.min(
+      Math.floor(PLAYBACK_FADE_S * VOICE_SAMPLE_RATE),
+      Math.floor(channel.length / 2),
+    );
+    for (let i = 0; i < fadeSamples; i++) {
+      const g = i / fadeSamples;
+      channel[i] = (channel[i] ?? 0) * g;
+      const last = channel.length - 1 - i;
+      channel[last] = (channel[last] ?? 0) * g;
+    }
 
     const now = ctx.currentTime;
     if (state.nextTime < now + PLAYBACK_LEAD_S) state.nextTime = now + PLAYBACK_LEAD_S;

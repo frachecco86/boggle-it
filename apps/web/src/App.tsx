@@ -70,8 +70,13 @@ export function App() {
   useEffect(() => {
     const theme = difficultyMeta(difficulty).theme;
     const root = document.documentElement;
+    /*
+     * Lo sfondo è gestito da CSS, non da qui: impostiamo solo le due variabili
+     * (chiaro e scuro) e il layer `body::before` scegle quella giusta in base a
+     * `data-theme`. Così il fondo cambia anche quando si cambia tema, senza
+     * dover rileggere il tema in JavaScript.
+     */
     root.style.setProperty('--difficulty-bg', theme.background);
-    // Sfondo scuro: un gradiente per difficoltà (vedi `difficulty.ts`).
     root.style.setProperty('--difficulty-bg-dark', theme.backgroundDark);
     root.style.setProperty('--difficulty-surface', theme.surface);
     root.style.setProperty('--primary', theme.accent);

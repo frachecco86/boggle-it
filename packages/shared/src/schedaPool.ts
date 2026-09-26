@@ -14,7 +14,7 @@
  */
 import { DIFFICULTY_ORDER, type Difficulty } from './difficulty.js';
 import { BAND_SIZES, generateScheda, type SchedaTries } from './schedaGen.js';
-import { schedaKey, type Scheda, type SchedaVariant } from './scheda.js';
+import { schedaKey, type ClassicSchedaVariant, type Scheda } from './scheda.js';
 import { buildTrie } from './solver.js';
 import { normalizeWord } from './scoring.js';
 import type { GridSize } from './types.js';
@@ -151,7 +151,7 @@ export class SchedaPool {
     size: GridSize,
     difficulty: Difficulty,
     count: number,
-    options: { startIndex?: number; rng?: () => number; variant?: SchedaVariant } = {},
+    options: { startIndex?: number; rng?: () => number; variant?: ClassicSchedaVariant } = {},
   ): Scheda[] {
     const out: Scheda[] = [];
     const prefix = schedaKey(size, difficulty);

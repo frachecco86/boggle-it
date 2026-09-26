@@ -59,7 +59,7 @@
  */
 import type { Difficulty } from './difficulty.js';
 import { COMPOSITION, FULL_COMPOSITION, generateGrid, gridStructureIssues, type DifficultyComposition } from './grid.js';
-import { gridToRows, type Scheda, type SchedaVariant } from './scheda.js';
+import { gridToRows, type ClassicSchedaVariant, type Scheda } from './scheda.js';
 import { solveGrid, type TrieNode } from './solver.js';
 import type { GridSize } from './types.js';
 
@@ -81,10 +81,10 @@ export interface GenerateSchedaOptions {
   /** Id assegnato alla scheda (se assente, la generazione non lo popola). */
   id?: string;
   /**
-   * Insieme di criteri: `standard` (predefinito) o `full` ("full criteria",
-   * vedi `FULL_SPEC`). Le schede generate portano l'etichetta in `variant`.
+   * Insieme di criteri: `standard` (predefinito) o `full` ("full criteria").
+   * `ale` è generato da una pipeline a parte (`schedaAle.ts`), non da qui.
    */
-  variant?: SchedaVariant;
+  variant?: ClassicSchedaVariant;
 }
 
 /**
@@ -287,7 +287,7 @@ const FULL_SPEC: SchedaSpec = {
   },
 };
 
-export const SPECS: Record<SchedaVariant, SchedaSpec> = {
+export const SPECS: Record<ClassicSchedaVariant, SchedaSpec> = {
   standard: STANDARD_SPEC,
   full: FULL_SPEC,
 };
@@ -323,7 +323,7 @@ export const SCHEDA_CRITERIA = {
 export function densityBandFor(
   size: GridSize,
   difficulty: Difficulty,
-  variant: SchedaVariant = 'standard',
+  variant: ClassicSchedaVariant = 'standard',
 ) {
   return SPECS[variant].density[size][difficulty];
 }
@@ -332,7 +332,7 @@ export function densityBandFor(
 export function anchorFor(
   size: GridSize,
   difficulty: Difficulty,
-  variant: SchedaVariant = 'standard',
+  variant: ClassicSchedaVariant = 'standard',
 ): { length: number; count: number } {
   return SPECS[variant].anchors[size][difficulty];
 }
@@ -354,7 +354,7 @@ export function anchorFor(
  */
 export function generateScheda(options: GenerateSchedaOptions): Scheda | null {
   const { size, difficulty, tries } = options;
-  const variant: SchedaVariant = options.variant ?? 'standard';
+  const variant: ClassicSchedaVariant = options.variant === 'full' ? 'full' : 'standard';
   const rng = options.rng ?? Math.random;
   const maxAttempts = options.maxAttempts ?? 400;
   const bandTrie = tries.bands[difficulty];
@@ -450,7 +450,7 @@ function toScheda(
   options: GenerateSchedaOptions,
   size: GridSize,
   difficulty: Difficulty,
-  variant: SchedaVariant,
+  variant: ClassicSchedaVariant,
   grid: ReturnType<typeof generateGrid>,
   allWords: string[],
   bandTrie: TrieNode,

@@ -3,6 +3,7 @@ import { DIFFICULTIES, DIFFICULTY_ORDER, type Difficulty, type GridSize } from '
 import { SERVER_BASE } from '../net/socket.js';
 import { useAppStore } from '../state/store.js';
 import { MusicAdmin } from '../components/MusicAdmin.js';
+import { ProfilesAdmin } from '../components/ProfilesAdmin.js';
 import { BackHome } from '../components/BackHome.js';
 
 interface SchedaMetaDTO {
@@ -21,16 +22,31 @@ interface AdminListResponse {
   schede: SchedaMetaDTO[];
 }
 
+/** Le sezioni del pannello, mostrate come tab. */
+type AdminTab = 'schede' | 'musica' | 'profili';
+
+const TABS: { id: AdminTab; label: string }[] = [
+  { id: 'schede', label: 'Schede' },
+  { id: 'musica', label: 'Musica' },
+  { id: 'profili', label: 'Profili' },
+];
+
 /**
- * Pannello admin: elenco schede (con anteprima visiva) e generazione di nuove.
+ * Pannello admin: schede, musica e profili, in TRE tab separate.
  *
  * Accesso con UTENTE e PASSWORD, configurati come variabili d'ambiente sul server
  * (`ADMIN_USER`, `ADMIN_PASSWORD`): nulla di segreto sta nel codice o su GitHub.
  * Il login restituisce un token di sessione, salvato in localStorage e inviato
  * come Bearer nelle richieste successive. La password viaggia una volta sola.
+ *
+ * Perché le tab: prima le tre aree erano una sotto l'altra in un'unica pagina
+ * lunga, e per arrivare ai profili si scorreva oltre tutte le schede. Le tab
+ * tengono ogni area a portata di un click, e ogni sezione carica i suoi dati solo
+ * quando serve (le schede non vengono richieste se si apre la tab Musica).
  */
 export function AdminScreen() {
   const { adminToken, setAdminToken, setScreen, setSchedaId } = useAppStore();
+  const [tab, setTab] = useState<AdminTab>('schede');
   const [userInput, setUserInput] = useState('admin');
   const [passwordInput, setPasswordInput] = useState('');
   const [authed, setAuthed] = useState(false);
@@ -108,7 +124,6 @@ export function AdminScreen() {
 
   // Se il token è già salvato, prova a entrare automaticamente.
   useEffect(() => {
-    // Il token di sessione è ancora valido? Proviamo a usarlo.
     if (adminToken && !authed) {
       load(adminToken, filterSize, filterDifficulty)
         .then((data) => {
@@ -116,20 +131,19 @@ export function AdminScreen() {
           setAuthed(true);
         })
         .catch(() => {
-          // Sessione scaduta: si torna al login.
           setAdminToken('');
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Ricarica quando cambiano i filtri (solo da autenticati).
+  // Ricarica quando cambiano i filtri (solo da autenticati e solo nella tab Schede).
   useEffect(() => {
-    if (!authed) return;
+    if (!authed || tab !== 'schede') return;
     load(adminToken, filterSize, filterDifficulty)
       .then(setList)
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, [authed, adminToken, filterSize, filterDifficulty, load]);
+  }, [authed, adminToken, filterSize, filterDifficulty, load, tab]);
 
   const generate = async () => {
     setBusy(true);
@@ -158,9 +172,8 @@ export function AdminScreen() {
   if (!authed) {
     return (
       <div className="screen admin">
-        {/* Tasto Home nella barra in alto, come in tutte le altre schermate. */}
         <BackHome />
-        <h2 className="screen__title">Amministrazione schede</h2>
+        <h2 className="screen__title">Amministrazione</h2>
         <p className="screen__hint">
           Accedi con l'utente e la password admin (variabili d'ambiente{' '}
           <code>ADMIN_USER</code> e <code>ADMIN_PASSWORD</code> sul server).
@@ -202,144 +215,167 @@ export function AdminScreen() {
 
   return (
     <div className="screen admin">
-      {/* Il tasto Home è quello della barra in alto: qui non ne serve un secondo. */}
       <BackHome />
       <div className="admin__topbar">
-        <h2 className="screen__title">Schede ({list?.total ?? '…'})</h2>
+        <h2 className="screen__title">Amministrazione</h2>
         <button className="btn btn--ghost" onClick={() => void logout()}>
           Esci
         </button>
       </div>
 
-      {error && <div className="banner banner--error">{error}</div>}
-      {notice && <div className="banner banner--ok">{notice}</div>}
-
-      <section className="admin__section">
-        <h3 className="summary__label">Genera nuove schede</h3>
-        <div className="admin__form">
-          <label className="field field--inline">
-            <span className="field__label">Griglia</span>
-            <select
-              className="field__input"
-              value={genSize}
-              onChange={(e) => setGenSize(Number(e.target.value) as GridSize)}
-            >
-              {[4, 5, 6].map((s) => (
-                <option key={s} value={s}>
-                  {s}×{s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field field--inline">
-            <span className="field__label">Difficoltà</span>
-            <select
-              className="field__input"
-              value={genDifficulty}
-              onChange={(e) => setGenDifficulty(e.target.value as Difficulty)}
-            >
-              {DIFFICULTY_ORDER.map((d) => (
-                <option key={d} value={d}>
-                  {DIFFICULTIES[d].label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field field--inline">
-            <span className="field__label">Quante</span>
-            <input
-              className="field__input"
-              type="number"
-              min={1}
-              max={100}
-              value={genCount}
-              onChange={(e) => setGenCount(Number(e.target.value))}
-            />
-          </label>
-          <button className="btn btn--primary" disabled={busy} onClick={() => void generate()}>
-            {busy ? 'Genero…' : 'Genera e salva'}
+      {/* Le tre sezioni come tab: ognuna carica i suoi dati solo quando è aperta. */}
+      <div className="admin__tabs" role="tablist" aria-label="Sezioni amministrazione">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`admin__tab${tab === t.id ? ' admin__tab--active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
           </button>
-        </div>
-      </section>
+        ))}
+      </div>
 
-      <MusicAdmin token={adminToken} />
+      {error && <div className="banner banner--error">{error}</div>}
+      {notice && tab === 'schede' && <div className="banner banner--ok">{notice}</div>}
 
-      <section className="admin__section">
-        <h3 className="summary__label">Filtra</h3>
-        <div className="admin__form">
-          <label className="field field--inline">
-            <span className="field__label">Griglia</span>
-            <select
-              className="field__input"
-              value={filterSize}
-              onChange={(e) => setFilterSize(Number(e.target.value) as GridSize | 0)}
-            >
-              <option value={0}>Tutte</option>
-              {[4, 5, 6].map((s) => (
-                <option key={s} value={s}>
-                  {s}×{s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field field--inline">
-            <span className="field__label">Difficoltà</span>
-            <select
-              className="field__input"
-              value={filterDifficulty}
-              onChange={(e) => setFilterDifficulty(e.target.value as Difficulty | '')}
-            >
-              <option value="">Tutte</option>
-              {DIFFICULTY_ORDER.map((d) => (
-                <option key={d} value={d}>
-                  {DIFFICULTIES[d].label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {list && (
-          <p className="admin__counts">
-            {Object.entries(list.byKey)
-              .sort()
-              .map(([key, n]) => `${key}: ${n}`)
-              .join(' · ')}
-          </p>
-        )}
-      </section>
+      {tab === 'schede' && (
+        <>
+          <section className="admin__section">
+            <h3 className="summary__label">Genera nuove schede</h3>
+            <div className="admin__form">
+              <label className="field field--inline">
+                <span className="field__label">Griglia</span>
+                <select
+                  className="field__input"
+                  value={genSize}
+                  onChange={(e) => setGenSize(Number(e.target.value) as GridSize)}
+                >
+                  {[4, 5, 6].map((s) => (
+                    <option key={s} value={s}>
+                      {s}×{s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--inline">
+                <span className="field__label">Difficoltà</span>
+                <select
+                  className="field__input"
+                  value={genDifficulty}
+                  onChange={(e) => setGenDifficulty(e.target.value as Difficulty)}
+                >
+                  {DIFFICULTY_ORDER.map((d) => (
+                    <option key={d} value={d}>
+                      {DIFFICULTIES[d].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--inline">
+                <span className="field__label">Quante</span>
+                <input
+                  className="field__input"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={genCount}
+                  onChange={(e) => setGenCount(Number(e.target.value))}
+                />
+              </label>
+              <button className="btn btn--primary" disabled={busy} onClick={() => void generate()}>
+                {busy ? 'Genero…' : 'Genera e salva'}
+              </button>
+            </div>
+            <p className="admin__hint">
+              Le schede <strong>Ale</strong> non si generano da qui: richiedono la calibrazione e
+              si producono con <code>pnpm gen:schede:ale</code>.
+            </p>
+          </section>
 
-      <section className="admin__section">
-        <h3 className="summary__label">Elenco ({list?.count ?? 0})</h3>
-        <div className="admin__grid">
-          {list?.schede.map((s) => (
-            <button
-              key={s.id}
-              className="admin__card"
-              onClick={() => {
-                setSchedaId(s.id);
-                setScreen('scheda');
-              }}
-              title="Apri la pagina della scheda"
-            >
-              <div className="admin__card-grid" style={{ ['--grid-size' as string]: s.size }}>
-                {s.grid.split('\n').flatMap((row, ri) =>
-                  [...row].map((ch, ci) => (
-                    <span key={`${ri}-${ci}`} className="admin__card-cell">
-                      {ch === 'q' ? 'Q' : ch.toUpperCase()}
+          <section className="admin__section">
+            <h3 className="summary__label">Filtra</h3>
+            <div className="admin__form">
+              <label className="field field--inline">
+                <span className="field__label">Griglia</span>
+                <select
+                  className="field__input"
+                  value={filterSize}
+                  onChange={(e) => setFilterSize(Number(e.target.value) as GridSize | 0)}
+                >
+                  <option value={0}>Tutte</option>
+                  {[4, 5, 6].map((s) => (
+                    <option key={s} value={s}>
+                      {s}×{s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field field--inline">
+                <span className="field__label">Difficoltà</span>
+                <select
+                  className="field__input"
+                  value={filterDifficulty}
+                  onChange={(e) => setFilterDifficulty(e.target.value as Difficulty | '')}
+                >
+                  <option value="">Tutte</option>
+                  {DIFFICULTY_ORDER.map((d) => (
+                    <option key={d} value={d}>
+                      {DIFFICULTIES[d].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {list && (
+              <p className="admin__counts">
+                {Object.entries(list.byKey)
+                  .sort()
+                  .map(([key, n]) => `${key}: ${n}`)
+                  .join(' · ')}
+              </p>
+            )}
+          </section>
+
+          <section className="admin__section">
+            <h3 className="summary__label">Elenco ({list?.count ?? 0})</h3>
+            <div className="admin__grid">
+              {list?.schede.map((s) => (
+                <button
+                  key={s.id}
+                  className="admin__card"
+                  onClick={() => {
+                    setSchedaId(s.id);
+                    setScreen('scheda');
+                  }}
+                  title="Apri la pagina della scheda"
+                >
+                  <div className="admin__card-grid" style={{ ['--grid-size' as string]: s.size }}>
+                    {s.grid.split('\n').flatMap((row, ri) =>
+                      [...row].map((ch, ci) => (
+                        <span key={`${ri}-${ci}`} className="admin__card-cell">
+                          {ch === 'q' ? 'Q' : ch.toUpperCase()}
+                        </span>
+                      )),
+                    )}
+                  </div>
+                  <div className="admin__card-meta">
+                    <strong>{s.id}</strong>
+                    <span>
+                      {s.wordCount} parole · max {s.longest}
                     </span>
-                  )),
-                )}
-              </div>
-              <div className="admin__card-meta">
-                <strong>{s.id}</strong>
-                <span>
-                  {s.wordCount} parole · max {s.longest}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {tab === 'musica' && <MusicAdmin token={adminToken} />}
+      {tab === 'profili' && <ProfilesAdmin token={adminToken} />}
     </div>
   );
 }

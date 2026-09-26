@@ -15,13 +15,8 @@ import { useFinalCountdown } from '../game/useFinalCountdown.js';
 type Feedback = CurrentWordFeedback;
 
 /**
- * Quanto resta visibile l'esito della parola nel rettangolo sopra la griglia.
- *
- * Un secondo, come in single player: prima era una nuvoletta in fondo allo
- * schermo che restava 2,6 secondi e copriva la parte bassa della griglia.
+ * Quanto resta il "+N" sull'avatar (proprio o di un avversario).
  */
-const FEEDBACK_VISIBLE_MS = 1000;
-/** Quanto resta il "+N" sull'avatar (proprio o di un avversario). */
 const BADGE_VISIBLE_MS = 1600;
 
 /** Partita multiplayer: griglia sincronizzata, validazione server, parole avversarie nascoste. */
@@ -123,9 +118,18 @@ export function MultiplayerGameScreen() {
       if (flashTimer.current) window.clearTimeout(flashTimer.current);
       flashTimer.current = window.setTimeout(() => setFlashError(false), 500);
     }
-    // Durata allineata al single player: l'esito si spegne da solo.
+    /*
+     * L'esito NON si spegne da solo: resta finché il giocatore non tocca una
+     * nuova lettera (vedi `handlePathChange`), così il punteggio si legge senza
+     * fretta. Come nel single player.
+     */
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = window.setTimeout(() => setFeedback(null), FEEDBACK_VISIBLE_MS);
+  }, []);
+
+  /** Toccare una lettera spegne l'esito della parola precedente. */
+  const handlePathChange = useCallback((path: number[]) => {
+    if (path.length > 0) setFeedback(null);
+    setSelectedPath(path);
   }, []);
 
   const handleCommit = useCallback(
@@ -244,7 +248,7 @@ export function MultiplayerGameScreen() {
         <GridBoard
           grid={grid}
           selectedPath={selectedPath}
-          onPathChange={setSelectedPath}
+          onPathChange={handlePathChange}
           onCommit={handleCommit}
           flashError={flashError}
         />

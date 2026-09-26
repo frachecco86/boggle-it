@@ -29,27 +29,35 @@ export const SCHEDA_FORMAT_VERSION = 3;
  *  - `standard`: il modello storico;
  *  - `full`: i "full criteria" (rapporto vocali/consonanti per livello,
  *    frequenza delle lettere, numero di parole e parole ancora della pagina
- *    *Criteri generazione schede*).
+ *    *Criteri generazione schede*);
+ *  - `ale`: l'algoritmo "ale" — campionamento dei token per frequenza,
+ *    `QU` come token unico, difficoltà = quota di parole fuori dal vocabolario
+ *    comune NVdB, con calibrazione (Tukey + clustering). Vedi `schedaAle.ts`.
  */
-export type SchedaVariant = 'standard' | 'full';
+export type SchedaVariant = 'standard' | 'full' | 'ale';
+
+/** Varianti generate da `generateScheda` (composizione + bande). `ale` è a parte. */
+export type ClassicSchedaVariant = 'standard' | 'full';
 
 /** Ordine con cui le varianti si mostrano nel selettore. */
-export const SCHEDA_VARIANTS: readonly SchedaVariant[] = ['standard', 'full'];
+export const SCHEDA_VARIANTS: readonly SchedaVariant[] = ['standard', 'full', 'ale'];
 
 /** Etichette per l'interfaccia. */
 export const SCHEDA_VARIANT_LABELS: Record<SchedaVariant, string> = {
   standard: 'Standard',
   full: 'Full criteria',
+  ale: 'Ale',
 };
 
 /** Una riga di spiegazione per il selettore. */
 export const SCHEDA_VARIANT_HINTS: Record<SchedaVariant, string> = {
   standard: 'Il catalogo storico.',
   full: 'Criteri completi: vocali/consonanti, frequenza delle lettere, numero di parole e parole ancora.',
+  ale: 'Algoritmo "ale": lettere pescate per frequenza, difficoltà calibrata sulle parole comuni (solo 5×5).',
 };
 
 export function isSchedaVariant(value: unknown): value is SchedaVariant {
-  return value === 'standard' || value === 'full';
+  return value === 'standard' || value === 'full' || value === 'ale';
 }
 
 /** Variante valida a partire da un valore arbitrario (default `standard`). */

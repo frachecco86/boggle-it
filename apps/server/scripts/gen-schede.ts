@@ -106,6 +106,10 @@ function main(): void {
   const rng = seed !== undefined ? mulberry32(seed) : undefined;
   // Insieme di criteri: `standard` (storico) o `full` ("full criteria").
   const variant = resolveSchedaVariant(arg('variant'));
+  if (variant === 'ale') {
+    throw new Error('Le schede "ale" si generano con `pnpm gen:schede:ale` (richiedono calibrazione e NVdB).');
+  }
+  const classicVariant = variant === 'full' ? 'full' : 'standard';
 
   for (const size of sizes) {
     if (!ALL_SIZES.includes(size)) throw new Error(`Dimensione non valida: ${size}`);
@@ -153,7 +157,7 @@ function main(): void {
       const kept = replace ? existing.filter((s) => schedaVariantOf(s) !== variant) : existing;
       const startIndex = kept.length + 1;
       const startedAt = Date.now();
-      const fresh = pool.generate(size, difficulty, count, { startIndex, rng, variant });
+      const fresh = pool.generate(size, difficulty, count, { startIndex, rng, variant: classicVariant });
       const schede = append || replace ? [...kept, ...fresh] : fresh;
       const file: SchedaFile = {
         version: SCHEDA_FORMAT_VERSION,

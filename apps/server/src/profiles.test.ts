@@ -121,3 +121,40 @@ describe('ProfileStore', () => {
     expect(store.getById(profile.id)).toBeTruthy();
   });
 });
+
+describe('ProfileStore: elenco e cancellazione (admin)', () => {
+  it('elenca i profili con il numero di partite', async () => {
+    const store = new ProfileStore(':memory:');
+    const profile = await store.register('Mario', 'pw123456', '🐱');
+    store.recordGame(profile.id, {
+      score: 10,
+      words: 3,
+      wordCount: 20,
+      longest: 'casa',
+      difficulty: 'facile',
+      gridSize: 4,
+      mode: 'solo',
+      schedaId: null,
+      foundWords: [],
+    });
+    const list = store.listProfiles();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.nickname).toBe('Mario');
+    expect(list[0]!.games).toBe(1);
+    store.close();
+  });
+
+  it('cancella un profilo con le sue cascate', async () => {
+    const store = new ProfileStore(':memory:');
+    const profile = await store.register('Luca', 'pw123456', '🐶');
+    store.createSession(profile.id);
+    expect(store.listProfiles()).toHaveLength(1);
+    expect(store.deleteProfile(profile.id)).toBe(true);
+    expect(store.listProfiles()).toHaveLength(0);
+    // Le sessioni del profilo spariscono con lui (cascata).
+    expect(store.getById(profile.id)).toBeNull();
+    // Un id inesistente non cancella nulla.
+    expect(store.deleteProfile(profile.id)).toBe(false);
+    store.close();
+  });
+});

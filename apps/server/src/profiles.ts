@@ -780,6 +780,59 @@ export class ProfileStore {
     return Number(res.changes ?? 0);
   }
 
+  /**
+   * Elenco dei profili per il pannello admin (senza password né BLOB).
+   *
+   * `games` è il numero di partite registrate: serve a mostrare quanto pesa un
+   * profilo prima di cancellarlo.
+   */
+  listProfiles(): Array<{
+    id: string;
+    nickname: string;
+    avatar: string;
+    hasPhoto: boolean;
+    games: number;
+    createdAt: number;
+  }> {
+    const rows = this.db
+      .prepare(
+        `SELECT p.id, p.nickname, p.avatar, p.photo IS NOT NULL AS has_photo,
+                p.created_at, COUNT(g.id) AS games
+           FROM profiles p
+           LEFT JOIN games g ON g.profile_id = p.id
+          GROUP BY p.id
+          ORDER BY p.created_at DESC`,
+      )
+      .all() as Array<{
+      id: string;
+      nickname: string;
+      avatar: string;
+      has_photo: number;
+      created_at: number;
+      games: number;
+    }>;
+    return rows.map((r) => ({
+      id: r.id,
+      nickname: r.nickname,
+      avatar: r.avatar,
+      hasPhoto: r.has_photo === 1,
+      games: r.games,
+      createdAt: r.created_at,
+    }));
+  }
+
+  /**
+   * Cancella un profilo e TUTTO ciò che gli appartiene.
+   *
+   * Grazie alle foreign key `ON DELETE CASCADE` (e `PRAGMA foreign_keys = ON`),
+   * spariscono sessioni, clip audio e partite. Foto è già una colonna del profilo.
+   * Ritorna false se l'id non esiste.
+   */
+  deleteProfile(profileId: string): boolean {
+    const res = this.db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);
+    return Number(res.changes ?? 0) > 0;
+  }
+
   /** Cancella TUTTE le partite (es. pulizia della classifica dall'admin). */
   clearAllGames(): number {
     const res = this.db.prepare('DELETE FROM games').run();

@@ -290,7 +290,7 @@ export function WordsScreen() {
           <input
             type="search"
             value={search}
-            placeholder="Cerca una parola…"
+            placeholder="Cerca una parola (dall'inizio)…"
             onChange={(e) => setSearch(e.target.value)}
           />
         </label>

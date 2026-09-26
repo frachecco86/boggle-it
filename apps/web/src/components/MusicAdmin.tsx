@@ -18,6 +18,8 @@ export function MusicAdmin({ token }: { token: string }) {
   const { musicCatalog, refreshMusicCatalog } = useAppStore();
   const [label, setLabel] = useState('');
   const [credits, setCredits] = useState('');
+  /** URL del tool "importa da link" (YouTube e affini). */
+  const [urlInput, setUrlInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -111,6 +113,74 @@ export function MusicAdmin({ token }: { token: string }) {
   };
 
   /**
+   * Nasconde una traccia INCLUSA nel bundle: non si può cancellare (è versionata
+   * nel client), ma sparisce dall'elenco e dalla playlist.
+   */
+  const hide = async (track: AdminMusicTrack) => {
+    if (
+      !window.confirm(
+        `Togliere "${track.label}" dall'elenco? La traccia resta nel client, ma non sarà più scegliibile.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(
+        `${SERVER_BASE}/admin/music/${encodeURIComponent(track.id)}/hidden`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setNotice(`"${track.label}" tolta dall'elenco.`);
+      await refreshMusicCatalog();
+      await loadAdminCatalog();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Importa una traccia da un link (YouTube e affini) con yt-dlp + ffmpeg. */
+  const importFromUrl = async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`${SERVER_BASE}/admin/music/from-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ url, label: label.trim(), credits: credits.trim() }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        track?: MusicTrackMeta;
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok || !body.track) {
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setNotice(`Importata "${body.track.label}". È subito disponibile per tutti.`);
+      setUrlInput('');
+      setLabel('');
+      setCredits('');
+      await refreshMusicCatalog();
+      await loadAdminCatalog();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
    * Accende o spegne una traccia.
    *
    * Non è una semplice preferenza locale: la traccia sparisce dal catalogo di
@@ -152,10 +222,56 @@ export function MusicAdmin({ token }: { token: string }) {
     <section className="admin__section">
       <h3 className="summary__label">Musica di sottofondo</h3>
       <p className="admin__hint">
-        Carica un MP3 per aggiungerlo alla playlist condivisa. Compare subito fra le tracce
-        scegliibili da tutti i giocatori (in stanza la scegle l'host).
+        Carica un MP3 o importa una traccia da un link (YouTube e affini). Compare subito fra le
+        tracce scegliibili da tutti i giocatori (in stanza la scegle l'host).
       </p>
 
+      {/* Import da link: il server scarica e converte in MP3 (yt-dlp + ffmpeg). */}
+      <div className="admin__form admin__form--link">
+        <label className="field field--inline">
+          <span className="field__label">Da link (YouTube…)</span>
+          <input
+            className="field__input"
+            type="url"
+            inputMode="url"
+            placeholder="https://www.youtube.com/watch?v=…"
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && void importFromUrl()}
+          />
+        </label>
+        <label className="field field--inline">
+          <span className="field__label">Titolo (opzionale)</span>
+          <input
+            className="field__input"
+            type="text"
+            maxLength={60}
+            placeholder="ricavato dai metatags"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+        </label>
+        <label className="field field--inline">
+          <span className="field__label">Fonte (opzionale)</span>
+          <input
+            className="field__input"
+            type="text"
+            maxLength={160}
+            placeholder="autore — sito"
+            value={credits}
+            onChange={(e) => setCredits(e.target.value)}
+          />
+        </label>
+        <button
+          className="btn btn--primary"
+          disabled={busy || !urlInput.trim()}
+          onClick={() => void importFromUrl()}
+        >
+          {busy ? 'Importo…' : 'Importa da link'}
+        </button>
+      </div>
+
+      <h4 className="admin__subtitle">Oppure carica un file</h4>
       <div className="admin__form">
         <label className="field field--inline">
           <span className="field__label">Titolo</span>
@@ -232,13 +348,23 @@ export function MusicAdmin({ token }: { token: string }) {
             >
               {track.enabled ? '🚫' : '↺'}
             </button>
-            {track.uploaded && (
+            {track.uploaded ? (
               <button
                 type="button"
                 className="btn btn--tiny btn--ghost"
                 disabled={busy}
                 onClick={() => void remove(track.id)}
                 title="Elimina il file"
+              >
+                ✕
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--tiny btn--ghost"
+                disabled={busy}
+                onClick={() => void hide(track)}
+                title="Togli dall'elenco (la traccia resta nel client)"
               >
                 ✕
               </button>

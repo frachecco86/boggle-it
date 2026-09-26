@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.29.0';
+export const APP_VERSION = '0.30.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,53 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    "version": "0.30.0",
+    "date": "2026-09-26",
+    "title": "Pannello admin a tab, schede Ale, voce più pulita e ricerca a prefisso",
+    "promo": {
+      "emoji": "🎛️",
+      "headline": "Amministrazione in ordine, meno rumore",
+      "text": "Il pannello admin ha tre tab (Schede, Musica, Profili), si possono cancellare i profili e togliere le tracce musicali. La ricerca nel dizionario non restituisce più migliaia di verbi, la voce in stanza non gracchia e i fondi non si ripetono più scorrendo."
+    },
+    "changes": [
+      {
+        "kind": "feature",
+        "items": [
+          "**Pannello admin a TRE tab**: Schede, Musica e Profili. Prima erano tre sezioni una sotto l’altra in un’unica pagina lunga, e per arrivare ai profili si scorreva oltre tutte le schede. Ogni tab carica i suoi dati solo quando si apre.",
+          "**Tab Profili**: elenco dei profili col numero di partite e cancellazione. La cancellazione è irreversibile (porta via account, foto, clip audio e partite in classifica), quindi richiede di **digitare il nickname** per conferma; c’è anche “Azzera classifica”, che cancella le partite e lascia i profili.",
+          "**Importa musica da un link** (YouTube e affini): il server scarica l’audio e lo converte in MP3 con `yt-dlp` + `ffmpeg`, leggendo titolo e autore dai metatags. Serve il pacchetto nell’immagine Docker; dove manca, il campo resta ma risponde con le istruzioni e l’upload manuale continua a funzionare.",
+          "**Novità: schede “Ale”** — una terza variante, dal documento *algoritmo schede “ale”*. 45 schede su griglia 5×5 (15 per difficoltà), selezionabili in partita come le altre."
+        ]
+      },
+      {
+        "kind": "fix",
+        "items": [
+          "**La ricerca nel dizionario ora è per PREFISSO.** Cercando `amo` uscivano **12.782** risultati, quasi tutti verbi in `-iamo` (`abbacchiamo`), perché la ricerca era una sottostringa pura. Ora `amo` trova **82** parole che iniziano così (`amo`, `amore`, `amorale`…).",
+          "**La voce in stanza non gracchia più.** La riduzione dell’audio usava una media a blocchi (a 44,1 kHz la finestra cambiava di lunghezza) e i blocchi venivano giuntati senza dissolvenza, quindi si sentivano dei click. Ora c’è un filtro anti-aliasing (passa-basso del 4° ordine) con decimazione a fase continua, una dissolvenza di 4 ms fra i blocchi e un buffer anti-strappo più generoso (220 ms). Il prezzo è un po’ più di latenza, come richiesto.",
+          "**Lo sfondo non si ripete più** nelle pagine lunghe (dizionario, elenco schede). Il gradiente stava su `body` con `background-attachment: fixed`, che su mobile viene spesso ignorato: il fondo copriva una sola viewport e si ripeteva. Ora vive su un layer fisso, quindi resta continuo su qualsiasi browser.",
+          "**Il risultato della parola resta visibile** nel riquadro di composizione finché non si tocca una nuova lettera. Prima spariva dopo un secondo, quindi il punteggio si leggeva con la coda dell’occhio. Vale in single player e in multiplayer.",
+          "**Le tracce musicali INCLUSE si possono togliere dall’elenco** (spariscono da admin e playlist; il file resta nel client perché è versionato). Le tracce caricate si cancellano come prima.",
+          "**Il pannello informativo “?” è centrato su mobile**: prima era ancorato al pulsante accanto al titolo e finiva per sbordare dallo schermo."
+        ]
+      },
+      {
+        "kind": "improvement",
+        "items": [
+          "**Nelle schede “Ale” una parola è comune se lo è la sua radice**: `amo` è comune perché lo è `amare`, anche se `amo` non compare nel vocabolario di base. La difficoltà delle fasce scende da 0,80/0,85/0,89 a 0,51/0,57/0,64: prima era gonfiata dalla morfologia (le forme flesse contate come rare).",
+          "**Il campo di ricerca dice “Cerca una parola (dall’inizio)”**, così è chiaro che si cerca per prefisso."
+        ]
+      },
+      {
+        "kind": "tech",
+        "items": [
+          "`schedaAle.ts`: pipeline completa e deterministica — pre-processing, frequenza dei token (`QU` = un token), `Common` da NVdB, radici dei lemmi da Morph-it, guard rails, calibrazione (Tukey + k-means a 3 fasce) e generazione per fascia.",
+          "`mediaTool.ts`: estrazione audio da link con `yt-dlp`/`ffmpeg`, con validazione dell’URL (solo http/https: `file:` e `pipe:` sono rifiutati) e messaggio esplicito se i binari mancano.",
+          "Le schede Ale non si generano dall’admin: richiedono calibrazione e NVdB, quindi si producono offline con `pnpm gen:schede:ale`."
+        ]
+      }
+    ]
+  },
   {
     version: '0.29.0',
     date: '2026-09-26',

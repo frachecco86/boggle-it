@@ -33,6 +33,7 @@ import {
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
 import { DATA_DIR, EXTRA_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
 import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
+import { extractAudio, probeMedia, MediaToolError } from './mediaTool.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 import { VoiceRelay } from './voice.js';
@@ -799,7 +800,14 @@ app.post('/admin/schede/genera', async (req, res) => {
   const difficulty = String(req.body?.difficulty ?? '');
   const count = Math.max(1, Math.min(100, Number(req.body?.count ?? 10)));
   // Criteri di generazione: `standard` (default) o `full` ("full criteria").
+  // `ale` non è generabile da qui: richiede la calibrazione e il vocabolario NVdB,
+  // quindi si produce offline con `pnpm gen:schede:ale`.
   const variant = resolveSchedaVariant(req.body?.variant);
+  if (variant === 'ale') {
+    return res.status(400).json({
+      error: 'Le schede "ale" si generano offline con `pnpm gen:schede:ale` (richiedono calibrazione).',
+    });
+  }
   if (size !== 4 && size !== 5 && size !== 6) {
     return res.status(400).json({ error: 'size deve essere 4, 5 o 6' });
   }
@@ -811,7 +819,7 @@ app.post('/admin/schede/genera', async (req, res) => {
   try {
     const pool = await getSchedaPool();
     const startIndex = schede.list(size, difficulty).length + 1;
-    const created = pool.generate(size, difficulty, count, { startIndex, variant });
+    const created = pool.generate(size, difficulty, count, { startIndex, variant: variant === 'full' ? 'full' : 'standard' });
 
     /*
      * ORDINE IMPORTANTE: prima si scrive su DISCO, poi si aggiunge in memoria.
@@ -940,6 +948,82 @@ app.delete('/admin/music/:id', (req, res) => {
 });
 
 /**
+ * Nasconde una traccia INCLUSA dal catalogo (non si può cancellare: è nel
+ * bundle del client). Sparisce dall'elenco admin e dalla playlist.
+ */
+app.delete('/admin/music/:id/hidden', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const id = String(req.params.id);
+  if (!musicLibrary.hide(id)) return res.status(404).json({ error: 'Traccia non trovata' });
+  console.log(`✓ Admin: nascosta traccia inclusa ${id}`);
+  // Le stanze che la usavano passano a un'altra traccia attiva, subito.
+  for (const room of registry.all()) {
+    const before = room.musicId;
+    room.ensureMusicExists(
+      (mid) => musicLibrary.isPlayable(mid),
+      musicLibrary.firstPlayable()?.id,
+    );
+    if (room.musicId !== before) {
+      console.log(`  stanza ${room.code}: musica ${before} → ${room.musicId}`);
+      broadcastState(room);
+    }
+  }
+  res.json({ ok: true, all: musicLibrary.listAll(), tracks: musicLibrary.list() });
+});
+
+/**
+ * Legge i metatags di un link (titolo, autore, durata) SENZA scaricare l'audio.
+ * Serve a precompilare il form e a validare il link prima del download.
+ */
+app.post('/admin/music/probe', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const url = String(req.body?.url ?? '').trim();
+  if (!url) return res.status(400).json({ error: 'URL mancante' });
+  try {
+    const meta = await probeMedia(url);
+    res.json(meta);
+  } catch (err) {
+    if (err instanceof MediaToolError) {
+      const status = err.code === 'missing-binary' ? 503 : err.code === 'invalid-url' ? 400 : 502;
+      return res.status(status).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
+ * Scarica l'audio da un link (YouTube e affini) e lo aggiunge alla playlist.
+ *
+ * POST /admin/music/from-url  body JSON `{ url, label?, credits? }`.
+ *
+ * Usa `yt-dlp` + `ffmpeg` (vedi `mediaTool.ts`). Se i binari non ci sono risponde
+ * 503 con le istruzioni: l'upload manuale del file resta disponibile.
+ */
+app.post('/admin/music/from-url', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const url = String(req.body?.url ?? '').trim();
+  const labelRaw = String(req.body?.label ?? '').trim();
+  const creditsRaw = String(req.body?.credits ?? '').trim();
+  if (!url) return res.status(400).json({ error: 'URL mancante' });
+  try {
+    const audio = await extractAudio(url);
+    const label = labelRaw || audio.title;
+    const credits = creditsRaw || [audio.author, audio.extractor].filter(Boolean).join(' — ');
+    const track = musicLibrary.add({ label, credits, data: audio.data, mime: audio.mime });
+    console.log(
+      `✓ Admin: importata da link "${track.label}" (${track.id}, ${Math.round(audio.data.length / 1024)} KB)`,
+    );
+    res.status(201).json({ track, meta: audio, tracks: musicLibrary.list() });
+  } catch (err) {
+    if (err instanceof MediaToolError) {
+      const status = err.code === 'missing-binary' ? 503 : err.code === 'invalid-url' ? 400 : 502;
+      return res.status(status).json({ error: err.message, code: err.code });
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+/**
  * Accende o spegne una traccia nella playlist.
  *
  * `PUT /admin/music/:id/enabled` con body JSON `{ enabled: boolean }`.
@@ -991,6 +1075,38 @@ app.post('/admin/games/reset', (req, res) => {
   const removed = profiles.clearAllGames();
   console.log(`✓ Admin: azzerate ${removed} partite dalla classifica`);
   res.json({ ok: true, removed });
+});
+
+/* ------------------------------------------------------------------ */
+/* Admin profili                                                       */
+/* ------------------------------------------------------------------ */
+
+/** Elenco dei profili registrati (senza password né dati personali). */
+app.get('/admin/profiles', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ profiles: profiles.listProfiles() });
+});
+
+/**
+ * Cancella un profilo e tutto ciò che gli appartiene.
+ *
+ * `?confirm=<nickname>` deve combaciare col nickname del profilo: è una conferma
+ * esplicita dall'admin e impedisce una cancellazione involontaria (un click su
+ * un id sbagliato). L'operazione è irreversibile e usa le CASCADE del database.
+ */
+app.delete('/admin/profiles/:id', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const id = String(req.params.id);
+  const profile = profiles.getById(id);
+  if (!profile) return res.status(404).json({ error: 'Profilo non trovato' });
+  const confirm = String(req.query.confirm ?? '');
+  if (confirm !== profile.nickname) {
+    return res.status(400).json({ error: 'Conferma mancante o errata: ripeti il nickname esatto.' });
+  }
+  if (!profiles.deleteProfile(id)) return res.status(404).json({ error: 'Profilo non trovato' });
+  console.log(`✓ Admin: cancellato profilo "${profile.nickname}" (${id})`);
+  res.json({ ok: true, removed: { id, nickname: profile.nickname } });
 });
 
 // Fallback SPA e asset statici: DOPO tutte le rotte API (schede, preview, admin,
