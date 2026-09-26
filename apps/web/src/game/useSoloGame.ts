@@ -161,43 +161,60 @@ export function useSoloGame(options: UseSoloGameOptions) {
   }, []);
 
   /**
-   * Mostra un suggerimento: pesca una parola NON ancora trovata, ne calcola il
-   * percorso e lo anima sulla griglia. Disponibile solo in modalità apprendimento.
-   *
-   * Preferisce le parole più lunghe: sono quelle che danno più punti e quelle che
-   * un principiante fa più fatica a vedere. Se nessuna parola è componibile in
-   * un percorso legale, non fa nulla (non deve sembrare un tasto rotto).
+   * Chiede un suggerimento di una lunghezza specifica: `corta`, `media`, `lunga`.
+   * La durata del percorso animato dipende dalla lunghezza scelta.
    */
-  const requestHint = useCallback((): boolean => {
-    if (!learningMode) return false;
-    const g = gridRef.current;
-    const s = schedaRef.current;
-    if (!g || !s) return false;
-    const trovate = new Set(foundRef.current.map((f) => f.word));
-    const candidate = [...acceptedWords(s)]
-      .filter((w) => !trovate.has(w) && w.length >= 3)
-      .sort((a, b) => b.length - a.length || a.localeCompare(b, 'it'));
-    for (const word of candidate) {
-      const path = findWordPath(g, word);
-      if (!path) continue;
-      setHintPath(path);
-      setHintWord(word);
-      // La parola suggerita precedente non vale più: si spegne subito.
-      if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
+  const requestHint = useCallback(
+    (size: 'corta' | 'media' | 'lunga' = 'media'): boolean => {
+      if (!learningMode) return false;
+      const g = gridRef.current;
+      const s = schedaRef.current;
+      if (!g || !s) return false;
+      const trovate = new Set(foundRef.current.map((f) => f.word));
+      const candidate = [...acceptedWords(s)].filter((w) => !trovate.has(w) && w.length >= 3);
+
       /*
-       * Durata dell'ANIMAZIONE sulla griglia: si accende una cella ogni
-       * `HINT_STEP_MS` (lo stesso passo delle frecce, vedi `GridBoard`), poi le
-       * celle tornano normali. Solo il PERCORSO si spegne: la parola resta nel
-       * riquadro (vedi sotto) perché si possa leggerla e aprirne la definizione.
+       * La lunghezza richiesta filtra le candidate. Le soglie sono in LETTERE:
+       * corta ≤ 5, media 6-7, lunga ≥ 8. Sono pensate per una 5×5, dove una
+       * parola "lunga" è 8+ lettere.
+       *
+       * Dentro ogni fascia si preferiscono le parole PIÙ LUNGHE: una parola corta
+       * trovata fra le lunghe è comunque più utile da vedere per imparare.
        */
-      hintTimerRef.current = window.setTimeout(() => {
-        hintTimerRef.current = null;
-        setHintPath(null);
-      }, 1600 + path.length * HINT_STEP_MS);
-      return true;
-    }
-    return false;
-  }, [learningMode]);
+      const inFascia = (w: string) => {
+        if (size === 'corta') return w.length <= 5;
+        if (size === 'lunga') return w.length >= 8;
+        return w.length === 6 || w.length === 7;
+      };
+      const ordered = candidate.sort((a, b) => b.length - a.length || a.localeCompare(b, 'it'));
+      const pool = ordered.filter(inFascia);
+      // Se la fascia richiesta è vuota (es. nessuna parola lunga rimasta) si
+      // ripiega sull'intero elenco: meglio un suggerimento che un tasto muto.
+      const words = pool.length > 0 ? pool : ordered;
+
+      for (const word of words) {
+        const path = findWordPath(g, word);
+        if (!path) continue;
+        setHintPath(path);
+        setHintWord(word);
+        // La parola suggerita precedente non vale più: si spegne subito.
+        if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
+        /*
+         * Durata dell'ANIMAZIONE sulla griglia: si accende una cella ogni
+         * `HINT_STEP_MS` (lo stesso passo delle frecce, vedi `GridBoard`), poi le
+         * celle tornano normali. Solo il PERCORSO si spegne: la parola resta nel
+         * riquadro (vedi sotto) perché si possa leggerla e aprirne la definizione.
+         */
+        hintTimerRef.current = window.setTimeout(() => {
+          hintTimerRef.current = null;
+          setHintPath(null);
+        }, 1600 + path.length * HINT_STEP_MS);
+        return true;
+      }
+      return false;
+    },
+    [learningMode],
+  );
 
   const startRound = useCallback(
     async (roundNumber: number) => {

@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { acceptedWords } from '@boggle/shared';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
 import { GameStats } from '../components/GameStats.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
+import { Lightbulb } from '../components/icons.js';
 import { useSoloGame } from '../game/useSoloGame.js';
 import { useAppStore } from '../state/store.js';
 import { CountdownOverlay } from '../components/CountdownOverlay.js';
@@ -40,6 +41,9 @@ export function SoloGameScreen() {
     learningMode,
   });
   const { state } = game;
+
+  /** Menu della lunghezza del suggerimento (aperto dal tasto lampadina). */
+  const [hintMenuOpen, setHintMenuOpen] = useState(false);
 
   // Tick crescente negli ultimi 10 secondi del round.
   useFinalCountdown(state.timeLeftMs, state.phase === 'playing');
@@ -140,21 +144,45 @@ export function SoloGameScreen() {
       </div>
 
       {/*
-       * Modalità apprendimento: tasto suggerimento + tempo infinito. Il tasto è
-       * un cerchio flottante in basso a destra, così non compete con la griglia
-       * e resta raggiungibile col pollice.
+       * Modalità apprendimento: tasto suggerimento in basso a destra, allineato
+       * col tasto dei volumi (stessa dimensione, stesso margine dal bordo: uno a
+       * sinistra, uno a destra). Premerlo apre la scelta della LUNGHEZZA: la
+       * parola corta è un aiuto leggero, quella lunga è l'aiuto più forte.
+       * È `position: fixed`, quindi resta a portata di pollice anche scorrendo.
        */}
       {learningMode && (
-        <div className="game__learning">
-          <span className="game__learning-badge">Apprendimento · tempo infinito</span>
+        <div className={`game__hint${hintMenuOpen ? ' game__hint--open' : ''}`}>
+          {hintMenuOpen && (
+            <div className="game__hint-menu" role="group" aria-label="Lunghezza del suggerimento">
+              {([
+                { id: 'corta', label: 'Corta', hint: 'fino a 5 lettere' },
+                { id: 'media', label: 'Media', hint: '6–7 lettere' },
+                { id: 'lunga', label: 'Lunga', hint: '8+ lettere' },
+              ] as const).map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  className="game__hint-option"
+                  onClick={() => {
+                    game.requestHint(o.id);
+                    setHintMenuOpen(false);
+                  }}
+                >
+                  <strong>{o.label}</strong>
+                  <span>{o.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
-            className="game__hint-btn"
-            onClick={() => game.requestHint()}
-            title="Mostra una parola possibile"
+            className="game__hint-knob"
+            onClick={() => setHintMenuOpen((v) => !v)}
+            aria-expanded={hintMenuOpen}
+            title="Suggerisci una parola"
             aria-label="Suggerisci una parola"
           >
-            💡
+            <Lightbulb size={18} aria-hidden />
           </button>
         </div>
       )}

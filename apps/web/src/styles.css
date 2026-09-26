@@ -1256,7 +1256,12 @@ body::before {
  * `animation-fill-mode: forwards` lascia accese le celle fino alla fine.
  */
 .tile--hint {
-  animation: tile-hint 0.45s ease-out var(--hint-delay, 0ms) both;
+  /*
+   * 0.3s invece di 0.45: con il passo a 150ms una dissolvenza più lunga del
+   * passo farebbe accendere più celle insieme (si sovrapporrebbero), perdendo la
+   * lettura della sequenza.
+   */
+  animation: tile-hint 0.3s ease-out var(--hint-delay, 0ms) both;
   z-index: 1;
 }
 
@@ -6417,49 +6422,107 @@ body::before {
 /* ================================================================== */
 
 /*
- * Il tasto suggerimento (💡) e il badge "tempo infinito". Stanno in basso a
- * destra, sopra i controlli flottanti: con il pollice ci si arriva senza
- * lasciare la griglia, e non coprono le celle.
+ * Tasto suggerimento (modalità apprendimento) e menu della lunghezza.
+ *
+ * È il GEMELLO del tasto dei volumi: stessa dimensione (40px), stesso margine
+ * dal bordo (8px), stessa safe area. Uno a sinistra, uno a destra: la barra in
+ * basso resta simmetrica e il pollice arriva a entrambi. Prima era un cerchio da
+ * 56px con un'emoji e un'etichetta sopra: troppo grande e fuori allineamento.
  */
-.game__learning {
+.game__hint {
   position: fixed;
-  right: 16px;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  z-index: 30;
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
 }
 
-.game__learning-badge {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-dim);
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
+/*
+ * Menu delle lunghezze: si alza dal tasto (slide-up), come il pannello dei
+ * volumi. È sopra il tasto e allineato a destra.
+ */
+.game__hint-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 4px 10px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  animation: hint-menu-in 0.18s ease-out;
 }
 
-.game__hint-btn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 1px solid color-mix(in srgb, #e0a800 55%, var(--border));
-  background: color-mix(in srgb, #ffd54a 22%, var(--surface));
-  font-size: 1.5rem;
+@keyframes hint-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.game__hint-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 108px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 0.22);
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.game__hint-btn:hover,
-.game__hint-btn:active {
-  transform: scale(1.08);
-  box-shadow: 0 10px 26px rgb(0 0 0 / 0.3);
+.game__hint-option:hover {
+  background: color-mix(in srgb, #ffd54a 18%, var(--surface));
+  border-color: color-mix(in srgb, #e0a800 45%, var(--border));
+}
+
+.game__hint-option strong {
+  font-size: 0.85rem;
+}
+
+.game__hint-option span {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+}
+
+/* Il tasto tondo: stessa geometria e stesso peso visivo di quello dei volumi. */
+.game__hint-knob {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.game__hint-knob:hover {
+  transform: translateY(-1px);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.game__hint--open .game__hint-knob {
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* Riquadro della parola suggerita. */

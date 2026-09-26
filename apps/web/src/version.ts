@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.33.0';
+export const APP_VERSION = '0.34.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,40 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    "version": "0.34.0",
+    "date": "2026-09-26",
+    "title": "Suggerimento per lunghezza, icona minimale e celle in sequenza",
+    "promo": {
+      "emoji": "🔆",
+      "headline": "Chiedi la parola che ti serve",
+      "text": "Il tasto del suggerimento ora è piccolo e allineato con quello dei volumi, e premendolo si scegle se farsi mostrare una parola corta, media o lunga. Le lettere si accendono una alla volta, più veloci."
+    },
+    "changes": [
+      {
+        "kind": "feature",
+        "items": [
+          "**Il suggerimento si chiede per LUNGHEZZA**: premendo il tasto si scegle tra **Corta** (fino a 5 lettere), **Media** (6–7) e **Lunga** (8+). Un aiuto leggero quando serve solo una spinta, uno forte quando la griglia sembra bloccata. Se la fascia scelta è esaurita si ripiega sull’elenco completo, invece di lasciare il tasto muto."
+        ]
+      },
+      {
+        "kind": "improvement",
+        "items": [
+          "**Tasto del suggerimento minimale, in basso a destra**, allineato con quello dei volumi: stessa dimensione (40px), stesso margine, stessa safe area. Prima era un cerchio da 56px con emoji e un’etichetta sopra: sproporzionato e fuori allineamento. Ora la barra in basso è simmetrica (volume a sinistra, lampadina a destra).",
+          "**Le celle si accendono una alla volta** (era il difetto più evidente): tutte insieme, mentre le frecce seguivano la sequenza. La causa era un conflitto CSS: il ritardo d’ingresso di ogni cella sovrascriveva quello del suggerimento. Ora il percorso si legge dall’inizio alla fine.",
+          "**Animazione più veloce**: una cella ogni 150ms invece di 260 (una parola di 8 lettere si accendeva in oltre 2 secondi). Le frecce restano intercalate fra le celle, quindi l’ordine resta chiaro."
+        ]
+      },
+      {
+        "kind": "tech",
+        "items": [
+          "`animation-delay` è una sola proprietà: il ritardo d’ingresso della cella (`row + col`) e quello del suggerimento (`--hint-delay`) non possono convivere inline. Quando la cella fa parte del percorso si usa solo `--hint-delay`, letto dalla regola `.tile--hint`.",
+          "`requestHint(lunghezza)` filtra le parole per fascia (corta ≤5, media 6–7, lunga ≥8) e dentro la fascia preferisce le più lunghe.",
+          "Nuova icona `Lightbulb` in `icons.tsx` (SVG in linea, come le altre: nessuna dipendenza)."
+        ]
+      }
+    ]
+  },
   {
     "version": "0.33.0",
     "date": "2026-09-26",

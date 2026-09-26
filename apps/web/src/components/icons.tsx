@@ -137,3 +137,19 @@ export function Volume2(props: Props) {
     </svg>
   );
 }
+
+/**
+ * Lampadina: tasto del suggerimento (modalità apprendimento).
+ *
+ * Stessa geometria delle altre icone (24×24, tratto 2): è il gemello del tasto
+ * dei volumi, uno a sinistra e uno a destra della barra in basso.
+ */
+export function Lightbulb(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 18h6" />
+      <path d="M10 21h4" />
+      <path d="M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .9 1.6l.1.6h5.2l.1-.6c.1-.6.4-1.2.9-1.6A6 6 0 0 0 12 3z" />
+    </svg>
+  );
+}

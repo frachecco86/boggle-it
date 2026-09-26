@@ -72,11 +72,13 @@ function buildArrows(points: { x: number; y: number }[]): TrailArrow[] {
 /**
  * Passo dell'animazione del suggerimento, in millisecondi.
  *
- * Una cella si accende ogni `HINT_STEP_MS`. Deve coincidere con il valore usato
- * in `useSoloGame` per la durata del suggerimento (e con il passo delle frecce),
- * altrimenti le lettere e i collegamenti si sfasano.
+ * Una cella si accende ogni `HINT_STEP_MS`: 150ms tiene il percorso leggibile
+ * (si vede la sequenza) senza farlo sembrare lento — con 260ms una parola di 8
+ * lettere impiegava oltre 2 secondi solo per accendersi. Deve coincidere col
+ * passo usato in `useSoloGame` per la durata del suggerimento e con quello delle
+ * frecce, altrimenti lettere e collegamenti si sfasano.
  */
-export const HINT_STEP_MS = 260;
+export const HINT_STEP_MS = 150;
 
 /** Ritardo dell'accensione della cella in posizione `index` del percorso. */
 export function hintTileDelayMs(index: number): number {
@@ -310,11 +312,21 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
               }}
               className={`tile${selected ? ' tile--selected' : ''}${hinted ? ' tile--hint' : ''}`}
               style={{
-                animationDelay: `${(tile.row + tile.col) * 40}ms`,
+                /*
+                 * `animation-delay` è UNA proprietà: il valore d'ingresso della
+                 * cella (scaglionato per riga+colonna) e il ritardo del
+                 * suggerimento non possono convivere via stile inline — l'ultimo
+                 * vince e le celle si accendevano tutte insieme.
+                 *
+                 * Quando la cella fa parte del suggerimento si usa `--hint-delay`
+                 * (letto dalla regola `.tile--hint`, che ha la precedenza) e NON
+                 * si scrive `animationDelay`: così le celle si accendono in
+                 * sequenza, una alla volta.
+                 */
+                ...(hinted
+                  ? { ['--hint-delay' as string]: `${hintTileDelayMs(hintIndex)}ms` }
+                  : { animationDelay: `${(tile.row + tile.col) * 40}ms` }),
                 ['--order' as string]: pathIndex,
-                // Ritardo dell'animazione del suggerimento: la cella N si accende
-                // dopo N passi (vedi `--hint-delay` nel CSS).
-                ...(hinted ? { ['--hint-delay' as string]: `${hintTileDelayMs(hintIndex)}ms` } : {}),
               }}
             >
               <span className="tile__letter">{tile.display}</span>
