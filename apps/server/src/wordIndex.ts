@@ -33,6 +33,12 @@ export interface WordIndex {
    * Vuoto se `definitions.br` non è presente (build offline).
    */
   definitions: Map<string, string[]>;
+  /**
+   * Forme flesse → lemma e nota grammaticale (`mula` → "femminile di mulo").
+   * Per queste parole la definizione vera è quella del LEMMA: si mostra prima
+   * quella (se c'è) e sotto la nota, come richiesto.
+   */
+  inflections: Map<string, { lemma: string; gloss: string }>;
 }
 
 /**
@@ -48,6 +54,7 @@ export function loadWordIndex(file: string): WordIndex {
     hasEntry: new Set(),
     display: new Map(),
     definitions: new Map(),
+    inflections: new Map(),
   };
   if (!existsSync(file)) return empty;
 
@@ -81,8 +88,8 @@ export function loadWordIndex(file: string): WordIndex {
 
   // Le definizioni vivono in un file separato (`definitions.br`) e vengono
   // unite dal chiamante (`schede.ts`), così i due file si rigenerano in modo
-  // indipendente. Qui si parte da una mappa vuota.
-  return { pos, hasEntry, display, definitions: new Map() };
+  // indipendente. Qui si parte da mappe vuote.
+  return { pos, hasEntry, display, definitions: new Map(), inflections: new Map() };
 }
 
 /**
@@ -95,22 +102,36 @@ export function loadWordIndex(file: string): WordIndex {
  * Assente nel build offline: ritorna una mappa vuota e la modalità apprendimento
  * ripiega sul link a Wikizionario.
  */
-export function loadDefinitions(file: string): Map<string, string[]> {
+export function loadDefinitions(
+  file: string,
+): { definitions: Map<string, string[]>; inflections: Map<string, { lemma: string; gloss: string }> } {
   const definitions = new Map<string, string[]>();
+  const inflections = new Map<string, { lemma: string; gloss: string }>();
   if (!existsSync(file)) {
     console.warn(`⚠ Definizioni non trovate in ${file}: il pannello "?" userà il link a Wikizionario.`);
-    return definitions;
+    return { definitions, inflections };
   }
   const lines = brotliDecompressSync(readFileSync(file)).toString('utf8').split('\n');
+  /** Sezione corrente: un tag grammaticale, oppure `=` per le flessioni. */
+  let section = '';
   for (const line of lines) {
-    // Le righe `~tag` marcano l'inizio di un bucket: qui non servono (il tag lo
-    // dà già l'indice), quindi si saltano.
-    if (!line || line.startsWith('~')) continue;
+    if (!line) continue;
+    if (line.startsWith('~')) {
+      section = line.slice(1);
+      continue;
+    }
     const tab = line.indexOf('\t');
     if (tab < 0) continue;
     const word = line.slice(0, tab);
-    const senses = line.slice(tab + 1).split('; ').filter(Boolean);
-    if (word && senses.length > 0) definitions.set(word, senses);
+    if (!word) continue;
+    if (section === '=') {
+      // Formato a tre colonne: forma, lemma, nota grammaticale.
+      const [lemma = '', gloss = ''] = line.slice(tab + 1).split('\t');
+      inflections.set(word, { lemma, gloss });
+    } else {
+      const senses = line.slice(tab + 1).split('; ').filter(Boolean);
+      if (senses.length > 0) definitions.set(word, senses);
+    }
   }
-  return definitions;
+  return { definitions, inflections };
 }

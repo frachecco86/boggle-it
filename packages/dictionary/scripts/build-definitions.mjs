@@ -7,19 +7,24 @@
  * il file di OUTPUT (~1-2 MB compresso) sì, così il server ha le definizioni
  * senza dipendere dalla rete.
  *
- * COSA SI PRENDE: solo le definizioni delle voci ITALIANE che sono vertici
- * autonomi. Le flessioni (`tags: ['form-of']`, es. `amo` → "prima persona di
- * amare") vengono SCARTATE: non spiegano il significato della parola, dicono
- * solo da quale lemma deriva.
+ * COSA SI PRENDE:
+ *  - le definizioni delle voci ITALIANE autonome (il caso normale);
+ *  - per le FLESSIONI (`tags: ['form-of']`, es. `amo` → "prima persona di
+ *    amare"), il gloss E il lemma (`form_of[].word`). Non sono definizioni del
+ *    significato, ma sono un aiuto utile ("femminile di mulo") e coprono la
+ *    maggior parte delle forme flesse, che altrimenti resterebbero senza nulla.
+ *    Il client mostra prima la definizione VERA (del lemma, se disponibile) e
+ *    sotto la nota grammaticale.
  *
  * Formato dell'output (righe, per non ripetere la categoria a ogni parola):
  *   `~sost\nparola<TAB>gloss1; gloss2 …\n…`
- *   `~verb\n…`
+ *   `~=verb\nforma<TAB>lemma<TAB>gloss form-of\n…`
+ * La sezione `~=` raccoglie le flessioni: forma, lemma e la nota grammaticale.
  * Le categorie sono quelle di Wikizionario (inglesi), mappate come nell'indice.
  *
  * Uso: node scripts/build-definitions.mjs [--force] [--min N]
  */
-import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import { brotliCompressSync, constants } from 'node:zlib';
@@ -29,6 +34,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.resolve(__dirname, '../data');
 const GZ = path.join(DATA, 'itwiktionary.jsonl.gz');
+const WORDS = path.join(DATA, 'words.txt');
+const MORPH = path.join(DATA, 'morph-it_048.txt');
 const OUT = path.join(DATA, 'definitions.br');
 
 /** Stessa normalizzazione di `build-words.mjs` (deve combaciare con words.txt). */
@@ -43,6 +50,11 @@ function normalizeWord(raw) {
     .replace(/ç/g, 'c')
     .replace(/ñ/g, 'n')
     .replace(/[^a-z]/g, '');
+}
+
+/** true se la parola è giocabile (o se non abbiamo la lista per filtrarla). */
+function playableHas(playable, word) {
+  return playable === null || playable.has(word);
 }
 
 /**
@@ -82,6 +94,21 @@ function cleanGloss(text) {
     .trim();
 }
 
+/**
+ * true se il gloss è un PLACEHOLDER di Wikizionario, non una definizione.
+ *
+ * Wikizionario usa testi come "definizione mancante; se vuoi, aggiungila tu" per
+ * le voci senza contenuto: mostrarli nel gioco sarebbe peggio del vuoto (il
+ * giocatore leggerebbe un invito a scrivere su Wikimedia). Sono singoli SENSI,
+ * non voci intere: `mare` ha la definizione vera E il placeholder, quindi si
+ * scarta il singolo senso, non tutta la voce.
+ */
+function isPlaceholderGloss(text) {
+  return /definizione mancante|se vuoi, aggiungila|da controllare|da verificare|^stub$|^da fare$/i.test(
+    text,
+  );
+}
+
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return fallback;
@@ -96,8 +123,30 @@ async function main() {
   }
   const minSenses = Number(arg('min', '1'));
 
+  /*
+   * Parole GIOCABILI (`words.txt`): servono a scartare le flessioni inutili.
+   *
+   * Il dump contiene ~470.000 flessioni, ma il gioco accetta solo le parole di
+   * `words.txt` (368.000): tenere tutte porterebbe il file a quasi 4 MB e a
+   * ~43 MB in memoria all'avvio del server, per forme che nessuna griglia può
+   * comporre. Filtriamo qui, una volta sola, invece di scartarle a runtime.
+   *
+   * Se `words.txt` manca, si prosegue senza filtro (file più grande ma corretto).
+   */
+  const playable = existsSync(WORDS)
+    ? new Set(
+        readFileSync(WORDS, 'utf8')
+          .split('\n')
+          .map((w) => normalizeWord(w.trim()))
+          .filter(Boolean),
+      )
+    : null;
+  if (playable) console.log(`✓ parole giocabili: ${playable.size.toLocaleString('it-IT')}`);
+
   /** parola → { pos: tag, senses: string[] } */
   const defs = new Map();
+  /** forma → { lemma, gloss } per le flessioni (`~=`). */
+  const inflected = new Map();
   let lines = 0;
   let kept = 0;
 
@@ -121,11 +170,23 @@ async function main() {
     if (!word || word.length < 3) continue;
 
     const senses = obj.senses ?? [];
+
     /*
-     * Scarta le FLESSIONI: una voce è `form-of` quando tutte le sue analisi lo
-     * sono (`amo` → "prima persona di amare"). Il significato sta nel lemma, non
-     * qui; tenerle riempirebbe il file di rimandi inutili.
+     * FLESSIONI (`form-of`): si tiene il gloss e il lemma. Una voce è flessione
+     * quando TUTTE le sue analisi lo sono. Il gloss ("plurale di iato") è un
+     * aiuto concreto, e il lemma permette al client di mostrare anche la
+     * definizione vera (se il lemma ce l'ha).
      */
+    const formOf = senses.filter((s) => (s.tags ?? []).includes('form-of'));
+    if (formOf.length > 0 && formOf.length === senses.length) {
+      const gloss = cleanGloss(formOf[0].glosses?.[0] ?? '');
+      const lemma = normalizeWord(formOf[0].form_of?.[0]?.word ?? '');
+      if (gloss.length >= 3 && !inflected.has(word) && playableHas(playable, word)) {
+        inflected.set(word, { lemma: lemma || '', gloss });
+      }
+      continue;
+    }
+
     const glosses = [];
     for (const sense of senses) {
       if ((sense.tags ?? []).includes('form-of')) continue;
@@ -133,6 +194,7 @@ async function main() {
         const c = cleanGloss(g);
         // Scarta i gloss che, ripuliti, restano vuoti o sono solo rimandi.
         if (c.length < 3) continue;
+        if (isPlaceholderGloss(c)) continue;
         if (/^\(?\s*(vedi|cfr\.?|sin\.|variante di)\b/i.test(c)) continue;
         glosses.push(c);
       }
@@ -162,9 +224,71 @@ async function main() {
     byPos.set(key, list);
   }
 
+  /*
+   * SECONDO PASSAGGIO con Morph-it: riempie le flessioni che Wikizionario non
+   * elenca.
+   *
+   * Perché serve: Wikizionario marca `form-of` solo per alcune forme (`amo`,
+   * `iati`), ma non per tutte (`mula` → `mulo` non è nel dump). Morph-it è un
+   * analizzatore morfologico e conosce il lemma di OGNI forma flessa: usandolo
+   * come ripiego, la copertura sulle parole giocabili sale dall'85% a oltre il
+   * 90%. La nota la costruiamo dal lemma ("femminile di mulo") perché Morph-it
+   * dà la categoria grammaticale, non il testo del rapporto.
+   *
+   * Gira QUI, in locale: `morph-it_048.txt` non è nell'immagine Docker (19 MB),
+   * ma il file di output sì. Il server non ne ha bisogno.
+   */
+  let fromMorph = 0;
+  if (existsSync(MORPH)) {
+    const morph = readFileSync(MORPH, 'latin1');
+    for (const line of morph.split('\n')) {
+      const parts = line.split('\t');
+      if (parts.length < 3) continue;
+      const form = normalizeWord(parts[0]);
+      const lemma = normalizeWord(parts[1]);
+      if (!form || !lemma || form === lemma) continue;
+      if (inflected.has(form) || defs.has(form)) continue;
+      if (!playableHas(playable, form)) continue;
+      // Serve a qualcosa solo se il LEMMA ha una definizione da mostrare.
+      if (!defs.has(lemma)) continue;
+      const tag = parts[2] ?? '';
+      const nota = /^VER/.test(tag)
+        ? `forma del verbo ${lemma}`
+        : /^(NOM|ADJ)/.test(tag)
+          ? `forma di ${lemma}`
+          : `forma di ${lemma}`;
+      inflected.set(form, { lemma, gloss: nota });
+      fromMorph++;
+    }
+    console.log(`✓ +${fromMorph.toLocaleString('it-IT')} flessioni ricavate da Morph-it`);
+  } else {
+    console.warn(`⚠ ${path.basename(MORPH)} assente: le flessioni non elencate da Wikizionario resteranno scoperte.`);
+  }
+
   const parts = [];
   for (const [pos, list] of [...byPos.entries()].sort((a, b) => b[1].length - a[1].length)) {
     parts.push(`~${pos}\n${list.join('\n')}`);
+  }
+  /*
+   * Sezione `~=` delle flessioni: forma, lemma e gloss. Separata dalle categorie
+   * perché il suo formato è diverso (tre colonne). Il carattere `=` la rende
+   * impossibile da confondere con un tag grammaticale.
+   */
+  if (inflected.size > 0) {
+    /*
+     * Si tengono solo le flessioni il cui LEMMA ha una definizione.
+     *
+     * Perché: il client mostra la definizione del lemma e sotto la nota
+     * grammaticale. Se il lemma non ha definizione, la nota resta sola
+     * ("femminile di mulo") senza il significato, cioè un rimando a una parola
+     * che il dizionario non spiega. Sono ~46.000 voci: scartandole il file cala
+     * di ~4 MB decompressi senza togliere niente di utile.
+     */
+    const rows = [...inflected.entries()]
+      .filter(([, v]) => v.lemma !== '' && defs.has(v.lemma))
+      .map(([form, v]) => `${form}\t${v.lemma}\t${v.gloss}`);
+    if (rows.length > 0) parts.push(`~=\n${rows.join('\n')}`);
+    console.log(`  flessioni tenute: ${rows.length.toLocaleString('it-IT')} (il lemma ha una definizione)`);
   }
   const text = parts.join('\n') + '\n';
   const br = brotliCompressSync(Buffer.from(text, 'utf8'), {
@@ -177,6 +301,9 @@ async function main() {
 
   console.log(`✓ lette ${lines.toLocaleString('it-IT')} righe dal dump`);
   console.log(`✓ ${defs.size.toLocaleString('it-IT')} parole con definizione (${kept.toLocaleString('it-IT')} voci)`);
+  // Il conteggio EFFETTIVO (dopo il filtro "il lemma ha una definizione") è
+  // stampato sopra: `inflected.size` è quanto raccolto, non quanto scritto.
+  console.log(`✓ ${inflected.size.toLocaleString('it-IT')} flessioni raccolte (vedi "tenute" sopra)`);
   console.log(`✓ definitions.br  ${(br.length / 1024).toFixed(0)} KB  (${(text.length / 1024 / 1024).toFixed(1)} MB non compressi)`);
   for (const [pos, list] of [...byPos.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8)) {
     console.log(`    ${pos.padEnd(14)} ${list.length.toLocaleString('it-IT')}`);

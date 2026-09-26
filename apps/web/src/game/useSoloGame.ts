@@ -150,7 +150,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     [grid, selectedPath],
   );
 
-  /** Spegne il suggerimento e ferma il timer. */
+  /** Spegne il suggerimento (percorso e parola) e ferma il timer. */
   const clearHint = useCallback(() => {
     if (hintTimerRef.current !== null) {
       window.clearTimeout(hintTimerRef.current);
@@ -182,17 +182,17 @@ export function useSoloGame(options: UseSoloGameOptions) {
       if (!path) continue;
       setHintPath(path);
       setHintWord(word);
+      // La parola suggerita precedente non vale più: si spegne subito.
       if (hintTimerRef.current !== null) window.clearTimeout(hintTimerRef.current);
       /*
-       * Durata dell'animazione: si accende una cella ogni `HINT_STEP_MS` (lo
-       * stesso passo delle frecce, vedi `GridBoard`), poi resta visibile un
-       * secondo perché la parola si possa leggere (e se ne possa aprire la
-       * definizione col pulsante "?") prima che sparisca.
+       * Durata dell'ANIMAZIONE sulla griglia: si accende una cella ogni
+       * `HINT_STEP_MS` (lo stesso passo delle frecce, vedi `GridBoard`), poi le
+       * celle tornano normali. Solo il PERCORSO si spegne: la parola resta nel
+       * riquadro (vedi sotto) perché si possa leggerla e aprirne la definizione.
        */
       hintTimerRef.current = window.setTimeout(() => {
         hintTimerRef.current = null;
         setHintPath(null);
-        setHintWord(null);
       }, 1600 + path.length * HINT_STEP_MS);
       return true;
     }
@@ -429,12 +429,15 @@ export function useSoloGame(options: UseSoloGameOptions) {
     commitPath,
     setSelectedPath: (path: number[]) => {
       /*
-       * Toccare una nuova lettera spegne l'esito della parola precedente: è il
-       * gesto che dice "sto componendo un'altra parola". Se il percorso è vuoto
-       * (il giocatore ha ritirato il dito senza comporre) l'esito resta, così
-       * non si perde leggendo un undo.
+       * Toccare una nuova lettera spegne l'esito della parola precedente e il
+       * suggerimento: è il gesto che dice "sto componendo". Se il percorso è
+       * vuoto (il dito è stato ritirato senza comporre) restano, così non si
+       * perdono leggendo un undo.
        */
-      if (path.length > 0) setFeedback(null);
+      if (path.length > 0) {
+        setFeedback(null);
+        clearHint();
+      }
       setSelectedPath(path);
     },
     nextRound,

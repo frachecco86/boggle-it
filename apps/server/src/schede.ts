@@ -96,13 +96,31 @@ export class SchedaCatalog {
    * Categoria grammaticale e voce Wikizionario per le parole del dizionario.
    * Arriva da `word-index.br`; se assente la pagina Parole resta senza tag.
    */
-  private lexical: WordIndex = (() => {
-    const index = loadWordIndex(path.join(DICTIONARY_DATA_DIR, 'word-index.br'));
-    // Le definizioni stanno in un file a parte: si uniscono qui, così il resto
-    // del codice le trova nello stesso oggetto (`lexical.definitions`).
-    index.definitions = loadDefinitions(path.join(DICTIONARY_DATA_DIR, 'definitions.br'));
-    return index;
-  })();
+  private lexical: WordIndex = loadWordIndex(path.join(DICTIONARY_DATA_DIR, 'word-index.br'));
+
+  /**
+   * Definizioni e flessioni, caricate PIGRAMENTE.
+   *
+   * `definitions.br` è ~25 MB decompresso e ~365.000 voci: tenerle in memoria
+   * dall'avvio costerebbe ~170 MB di RSS che nessuno usa finché non si apre la
+   * modalità apprendimento. Si caricano alla PRIMA richiesta di definizione (una
+   * sola volta, poi restano: le richieste successive sono immediaten).
+   */
+  private definitionsLoaded = false;
+
+  /** Carica definizioni e flessioni alla prima richiesta di definizione. */
+  private ensureDefinitions(): void {
+    if (this.definitionsLoaded) return;
+    this.definitionsLoaded = true;
+    const startedAt = Date.now();
+    const extra = loadDefinitions(path.join(DICTIONARY_DATA_DIR, 'definitions.br'));
+    this.lexical.definitions = extra.definitions;
+    this.lexical.inflections = extra.inflections;
+    console.log(
+      `✓ Definizioni pronte: ${extra.definitions.size.toLocaleString('it-IT')} parole, ` +
+        `${extra.inflections.size.toLocaleString('it-IT')} flessioni in ${Date.now() - startedAt}ms`,
+    );
+  }
 
   /**
    * Sostituisce l'indice lessicale (usato dai test e dopo una rigenerazione).
@@ -228,17 +246,43 @@ export class SchedaCatalog {
   /**
    * Definizione di una parola (modalità apprendimento).
    *
-   * Normalizza l'input come il resto del gioco (`città` → `citta`) e ritorna
-   * `senses: []` quando non c'è: il client in quel caso mostra il link a
-   * Wikizionario, quindi `null` non serve.
+   * Normalizza l'input come il resto del gioco (`città` → `citta`).
+   *
+   * Ordine di risoluzione (dal più utile al meno):
+   *  1. definizioni della parola stessa (parole piene: `casa`, `amare`);
+   *  2. se è una FORMA FLESSA (`mula`, `amo`), la definizione del suo LEMMA più
+   *     la nota grammaticale ("femminile di mulo"). La definizione vera va
+   *     PRIMA: è il significato, la nota è morfologia.
+   *
+   * Quando non c'è nulla, `senses: []`: il client mostra il link a Wikizionario.
+   * Resta scoperto il ~7% delle parole (sigle e forestierismi come `fair`, `trip`).
    */
-  definition(word: string): { word: string; pos: string; senses: string[] } {
+  definition(word: string): {
+    word: string;
+    pos: string;
+    senses: string[];
+    /** Nota grammaticale, quando la parola è una forma flessa. */
+    note?: string;
+  } {
+    this.ensureDefinitions();
     const w = normalizeWord(word);
-    return {
-      word: w,
-      pos: this.lexical.pos.get(w) ?? 'n.c.',
-      senses: this.lexical.definitions.get(w) ?? [],
-    };
+    const pos = this.lexical.pos.get(w) ?? 'n.c.';
+    const own = this.lexical.definitions.get(w);
+    if (own && own.length > 0) return { word: w, pos, senses: own };
+
+    // Forma flessa: si mostrano le definizioni del lemma e la nota su come deriva.
+    const inf = this.lexical.inflections.get(w);
+    if (inf) {
+      const lemmaSenses = inf.lemma ? (this.lexical.definitions.get(inf.lemma) ?? []) : [];
+      return {
+        word: w,
+        pos,
+        senses: lemmaSenses,
+        note: inf.gloss || (inf.lemma ? `forma di ${inf.lemma}` : undefined),
+      };
+    }
+
+    return { word: w, pos, senses: [] };
   }
 
   wordCatalog(query: WordCatalogQuery): WordCatalogResponse {

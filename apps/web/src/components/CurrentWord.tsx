@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { lengthBucket } from '../game/lengthBucket.js';
-import { DefinitionBack, useWordDefinition } from './WordDefinition.js';
+import { DefinitionPanel, useWordDefinition } from './WordDefinition.js';
 
 export interface CurrentWordFeedback {
   kind: 'valid' | 'invalid' | 'duplicate';
@@ -39,16 +39,12 @@ interface CurrentWordProps {
  * schermo, lontano da dove si guarda: il punteggio si leggeva con la coda
  * dell'occhio mentre la griglia è al centro.
  *
- * LA DEFINIZIONE RUOTA IL RIQUADRO (non apre una nuvoletta): il tasto "?" fa
- * girare la carta di 180° sull'asse orizzontale, e il retro mostra le
- * definizioni. Prima la definizione compariva in un pannello sovrapposto, che
- * copriva la griglia ed era un secondo elemento da chiudere; ora lo stesso
- * riquadro cambia faccia, quindi non si aggiunge nulla allo schermo e la
- * griglia resta visibile. Riaprire/chiudere è lo stesso gesto del "?".
- *
- * ALTEZZA COSTANTE: il contenitore ha altezza fissa in CSS e il fronte non va
- * mai a capo. Il retro, invece, può scorrere in verticale (una definizione lunga
- * non entra in 64px): è l'unica parte che scrolla, e solo quando è girata.
+ * LA DEFINIZIONE SCORRE DENTRO IL RIQUADRO: il tasto "?" fa entrare un pannello
+ * dal basso (slide), che copre il riquadro. Non è un flip (ruotava la carta, ma
+ * il testo arrivava "al contrario" durante la rotazione) e non è una nuvoletta
+ * sovrapposta (copriva la griglia). Il contenitore resta FISSO a 64px: la griglia
+ * sotto non si muove mai. Il pannello ha lo stesso font del gioco, solo più
+ * piccolo, e scorre in verticale se la definizione è lunga.
  */
 export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
   // Soglie progressive: oltre le 8 lettere il testo si rimpicciolisce, oltre le
@@ -57,21 +53,33 @@ export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
     word.length > 12 ? ' current-word-banner--xlong' : word.length >= 8 ? ' current-word-banner--long' : '';
 
   /**
-   * Parola di cui si sta mostrando la definizione (retro della carta), o `null`.
+   * Parola di cui si sta mostrando la definizione (pannello aperto), o `null`.
    * Una sola per volta: aprire una definizione nuova sostituisce la precedente.
    */
   const [defWord, setDefWord] = useState<string | null>(null);
 
   // La parola "corrente" del fronte: composizione, esito valido o suggerimento.
   const frontWord = word.length > 0 ? word : (feedback?.word ?? hintWord ?? null);
-  // Se cambia la parola sul fronte (nuova composizione, nuovo esito) la
-  // definizione aperta non è più pertinente: si gira indietro da sola.
+
+  /*
+   * Il pannello si chiude quando il fronte cambia verso una parola DIVERSA.
+   *
+   * NON si chiude quando il suggerimento scade (`hintWord` → null) mentre lo si
+   * sta leggendo: la durata riguarda l'animazione, non la lettura. Prima
+   * spariva dopo ~4 secondi proprio mentre si leggeva la definizione.
+   */
   useEffect(() => {
-    setDefWord(null);
+    setDefWord((current) => {
+      if (current === null) return null;
+      // Stessa parola (o fronte svuotato dal solo suggerimento scaduto): resta.
+      if (frontWord === null || frontWord === current) return current;
+      // Parola diversa (nuova composizione o nuovo esito): si chiude.
+      return null;
+    });
   }, [frontWord]);
 
-  const flipped = defWord !== null;
-  const { def, loading } = useWordDefinition(defWord ?? '', flipped);
+  const open = defWord !== null;
+  const { def, loading } = useWordDefinition(defWord ?? '', open);
 
   // La composizione ha la precedenza: se il dito è già sulla griglia, quello che
   // interessa è la parola nuova, non l'esito di quella precedente.
@@ -83,80 +91,77 @@ export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
   const canDefine = showFeedback ? feedback!.kind === 'valid' : showHint;
 
   return (
-    <div
-      className={`current-word-card${flipped ? ' current-word-card--flipped' : ''}`}
-      aria-live="polite"
-      aria-atomic="true"
-    >
-      <div className="current-word-card__inner">
-        {/* FRONTE: parola in composizione, esito o suggerimento. */}
-        <div
-          className={`current-word-banner${word.length > 0 ? ` current-word-banner--active${sizeClass}` : ''}${
-            showFeedback
-              ? ` current-word-banner--feedback current-word-banner--${feedback!.kind}${
-                  feedback!.kind === 'valid' ? ' current-word-banner--scored' : ''
-                }`
-              : ''
-          }${showHint ? ' current-word-banner--hint' : ''}`}
-          data-len={length}
-          aria-hidden={flipped}
-        >
-          {word.length > 0 ? (
-            [...word].map((letter, i) => (
-              <span key={`${i}-${letter}`} className="current-word-banner__letter">
-                {letter.toUpperCase()}
-              </span>
-            ))
-          ) : showFeedback ? (
-            <>
-              <span className="current-word-banner__word">{feedback!.word.toUpperCase()}</span>
-              {feedback!.kind === 'valid' && feedback!.points !== undefined ? (
-                <span className="current-word-banner__points">+{feedback!.points}</span>
-              ) : (
-                <span className="current-word-banner__reason">{feedback!.reason}</span>
-              )}
-            </>
-          ) : showHint ? (
-            <>
-              <span className="current-word-banner__hint-icon" aria-hidden>
-                💡
-              </span>
-              <span className="current-word-banner__word">{hintWord!.toUpperCase()}</span>
-            </>
-          ) : (
-            <span className="current-word-banner__placeholder">Componi una parola…</span>
-          )}
+    <div className="current-word-wrap" aria-live="polite" aria-atomic="true">
+      <div
+        className={`current-word-banner${word.length > 0 ? ` current-word-banner--active${sizeClass}` : ''}${
+          showFeedback
+            ? ` current-word-banner--feedback current-word-banner--${feedback!.kind}${
+                feedback!.kind === 'valid' ? ' current-word-banner--scored' : ''
+              }`
+            : ''
+        }${showHint ? ' current-word-banner--hint' : ''}`}
+        data-len={length}
+        aria-hidden={open}
+      >
+        {word.length > 0 ? (
+          [...word].map((letter, i) => (
+            <span key={`${i}-${letter}`} className="current-word-banner__letter">
+              {letter.toUpperCase()}
+            </span>
+          ))
+        ) : showFeedback ? (
+          <>
+            <span className="current-word-banner__word">{feedback!.word.toUpperCase()}</span>
+            {feedback!.kind === 'valid' && feedback!.points !== undefined ? (
+              <span className="current-word-banner__points">+{feedback!.points}</span>
+            ) : (
+              <span className="current-word-banner__reason">{feedback!.reason}</span>
+            )}
+          </>
+        ) : showHint ? (
+          <>
+            <span className="current-word-banner__hint-icon" aria-hidden>
+              💡
+            </span>
+            <span className="current-word-banner__word">{hintWord!.toUpperCase()}</span>
+          </>
+        ) : (
+          <span className="current-word-banner__placeholder">Componi una parola…</span>
+        )}
 
-          {/*
-           * Pulsante "?": fa GIRARE la carta e mostra la definizione sul retro.
-           * È dentro il fronte, così ruota via con esso.
-           */}
-          {canDefine && (
-            <button
-              type="button"
-              className="current-word-card__flip"
-              onClick={() => setDefWord(frontWord)}
-              aria-label={`Definizione di ${frontWord}`}
-              title="Che parola è?"
-            >
-              ?
-            </button>
-          )}
-        </div>
-
-        {/* RETRO: definizione della parola, con il tasto per tornare indietro. */}
-        <div className="current-word-card__back" aria-hidden={!flipped}>
-          {defWord && <DefinitionBack word={defWord} def={def} loading={loading} />}
+        {/*
+         * Pulsante "?": fa entrare il pannello della definizione dal basso.
+         * È dentro il riquadro, così resta dove l'occhio è puntato.
+         */}
+        {canDefine && (
           <button
             type="button"
-            className="current-word-card__flip current-word-card__flip--back"
-            onClick={() => setDefWord(null)}
-            aria-label="Torna alla parola"
-            title="Torna alla parola"
+            className="current-word-banner__flip"
+            onClick={() => setDefWord(frontWord)}
+            aria-label={`Definizione di ${frontWord}`}
+            title="Che parola è?"
           >
-            ✕
+            ?
           </button>
-        </div>
+        )}
+      </div>
+
+      {/*
+       * Pannello della definizione: SCORRE dal basso dentro il riquadro (fisso,
+       * 64px). `aria-hidden` quando è chiuso, così non viene letto dagli screen
+       * reader una definizione che non è visibile.
+       */}
+      <div className={`current-word-panel${open ? ' current-word-panel--open' : ''}`} aria-hidden={!open}>
+        {defWord && <DefinitionPanel word={defWord} def={def} loading={loading} />}
+        <button
+          type="button"
+          className="current-word-banner__flip current-word-banner__flip--close"
+          onClick={() => setDefWord(null)}
+          aria-label="Torna alla parola"
+          title="Torna alla parola"
+        >
+          ✕
+        </button>
       </div>
     </div>
   );

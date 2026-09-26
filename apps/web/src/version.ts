@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.32.0';
+export const APP_VERSION = '0.33.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,42 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    "version": "0.33.0",
+    "date": "2026-09-26",
+    "title": "Definizioni per il 92% delle parole, pannello a scorrimento e “Gioca subito”",
+    "promo": {
+      "emoji": "📖",
+      "headline": "Quasi ogni parola ha il suo significato",
+      "text": "Prima solo il 43% delle parole trovabili aveva una definizione: ora sono il 92%, perché il gioco risale alla parola da cui deriva ogni forma. E il pannello della definizione scorre dentro il riquadro, senza spostare la griglia."
+    },
+    "changes": [
+      {
+        "kind": "improvement",
+        "items": [
+          "**Copertura delle definizioni dal 43% al 92%.** Molte parole trovabili sono forme flesse (`mula`, `amo`, `iati`) che il dizionario non spiega direttamente. Ora il gioco risale alla parola da cui derivano: mostra il **significato del lemma** (`mulo`, `amare`, `iato`) e sotto, in tono attenuato, la **nota grammaticale** (\"femminile di mulo\", \"prima persona di amare\"). Il significato viene prima: è quello che serve per imparare.",
+          "**La definizione scorre dentro il riquadro** invece di ruotarlo. L’animazione precedente (flip) mostrava il testo rimpicciolito e \"al contrario\" durante la rotazione, e allargava il riquadro da 64 a 200px spostando la griglia proprio mentre si leggeva. Ora il pannello **entra dal basso** e il contenitore resta **fisso a 64px**: la griglia non si muove mai.",
+          "**Stesso font del gioco**, solo più piccolo: il pannello è un contenuto del riquadro, non una finestra a sé.",
+          "**Il pannello resta aperto finché non lo si chiude.** Prima si chiudeva da solo quando il suggerimento scadeva, cioè dopo pochi secondi, proprio mentre lo si leggeva: il suggerimento ha una durata, la lettura no.",
+          "**“Gioca subito” nel foglio delle impostazioni** (single player): avvia la partita con le scelte appena fatte. Prima bisognava chiudere con \"Fatto\" e poi premere \"Gioca da solo\" in home — due gesti per la stessa intenzione."
+        ]
+      },
+      {
+        "kind": "fix",
+        "items": [
+          "**Rimosse le definizioni \"segnaposto\"** di Wikizionario (\"definizione mancante; se vuoi, aggiungila tu\"): erano 8.173 sensi che nel gioco invitavano il giocatore a scrivere su Wikimedia. Ora si scartano per singolo senso, quindi una voce come `mare` mantiene le definizioni vere e perde solo il segnaposto."
+        ]
+      },
+      {
+        "kind": "tech",
+        "items": [
+          "`definitions.br` ora contiene anche le flessioni (forma → lemma + nota): 231.920 voci, generate unendo i gloss `form-of` di Wikizionario e, per le forme che il dump non elenca, il lemma di Morph-it. Solo le flessioni il cui lemma ha una definizione, così la nota non resta sola.",
+          "**Definizioni caricate pigramente**: ~25 MB in memoria che nessuno usa finché non si apre l’apprendimento. Il server parte a ~212 MB (prima 400) e li carica in ~500 ms alla prima richiesta, restando a ~348 MB. Il tetto di memoria del container sale a 640 MB per coprire il caso.",
+          "`GET /words/:word/definition` restituisce ora anche `note` (la nota grammaticale) oltre a `senses`."
+        ]
+      }
+    ]
+  },
   {
     "version": "0.32.0",
     "date": "2026-09-26",

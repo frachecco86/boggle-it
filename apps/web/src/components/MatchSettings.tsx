@@ -29,6 +29,12 @@ interface MatchSettingsProps {
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
   onVariant: (v: SchedaVariant) => void;
+  /**
+   * Avvio immediato della partita (tasto "Gioca subito" nel foglio). Presente
+   * solo in single player: in stanza si crea prima il codice e si aspetta chi
+   * entra, quindi non c'è nulla da avviare "subito".
+   */
+  onPlayNow?: () => void;
   onClose: () => void;
 }
 
@@ -58,6 +64,7 @@ export function MatchSettings({
   onRounds,
   onDuration,
   onVariant,
+  onPlayNow,
   onClose,
 }: MatchSettingsProps) {
   return (
@@ -197,7 +204,19 @@ export function MatchSettings({
         <RulesPanel />
 
         <div className="sheet__actions">
-          <button type="button" className="btn btn--primary" onClick={onClose}>
+          {/*
+           * "Gioca subito": chiude il foglio e avvia la partita con le scelte
+           * appena fatte. Prima bisognava chiudere con "Fatto" e poi premere
+           * "Gioca da solo" in home: due gesti per la stessa intenzione, e chi
+           * apriva le impostazioni dall'apprendimento non capiva che doveva
+           * chiudere per iniziare.
+           */}
+          {onPlayNow && (
+            <button type="button" className="btn btn--primary" onClick={onPlayNow}>
+              Gioca subito
+            </button>
+          )}
+          <button type="button" className={onPlayNow ? 'btn btn--ghost' : 'btn btn--primary'} onClick={onClose}>
             Fatto
           </button>
         </div>

@@ -338,6 +338,12 @@ export function HomeScreen() {
           durationMs={hostDurationMs}
           variant={schedaVariant}
           learningMode={learningMode}
+          /**
+           * "Gioca subito" solo in single player: avvia la partita con le
+           * impostazioni appena scelte. In multiplayer non c'è nulla da avviare:
+           * si crea il codice e si aspetta chi entra.
+           */
+          onPlayNow={mode === 'solo' && !busy ? handlePlaySolo : undefined}
           onSize={setHostGridSize}
           onDifficulty={setHostDifficulty}
           onRounds={setHostRounds}

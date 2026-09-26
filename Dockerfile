@@ -116,8 +116,13 @@ ENV DATA_DIR=/app/data
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
 ENV PORT=3001
-# Il picco misurato è ~211 MB: 448 MB lascia margine ampio senza rischiare l'OOM.
-ENV NODE_OPTIONS=--max-old-space-size=448
+#
+# Il picco sale a ~370 MB quando si aprono le DEFINIZIONI (modalità
+# apprendimento): `definitions.br` è caricato pigramente e resta in memoria.
+# Senza apprendimento il server resta sui ~220 MB. 640 MB lascia margine per
+# entrambi i casi senza esagerare (un tetto troppo alto rischia l'OOM del
+# container, che di solito ne ha meno).
+ENV NODE_OPTIONS=--max-old-space-size=640
 
 EXPOSE 3001
 
