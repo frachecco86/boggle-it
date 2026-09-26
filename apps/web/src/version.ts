@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.25.2';
+export const APP_VERSION = '0.26.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,49 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.26.0',
+    date: '2026-09-26',
+    title: 'La griglia prende tutto lo spazio, il punteggio arriva dove guardi',
+    promo: {
+      emoji: '🔠',
+      headline: 'Più griglia, meno contorno',
+      text: 'La griglia delle lettere ora riempie lo spazio disponibile: niente più riquadro con il bordo intorno e niente scorrimento durante la partita. Il punteggio della parola trovata compare nel rettangolo «Componi una parola», colorato in base a quanto era lunga, e in multiplayer gli avatar in fondo mostrano chi segna e quanto.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**La griglia riempie lo spazio**: il lato delle celle si calcola su larghezza E altezza disponibili e si prende il minore, quindi la griglia è la più grande possibile in ogni formato — telefono in verticale, tablet, desktop, finestra bassa. Prima c\'era una formula fissa sul viewport, con ~230 px di spazio riservato "a stima".',
+          '**Via il riquadro**: il contenitore della griglia non ha più bordo, sfondo, ombra, angoli e 12 px di padding. Restano solo i quadrati delle lettere, con 4 px fra le celle e 4 px dal bordo dello schermo.',
+          '**Punteggio nel rettangolo «Componi una parola»**: quando la parola è valida, al posto delle lettere compare `PAROLA +2` per un secondo. Il colore dipende dalla lunghezza (3 lettere giallo, 4 verde, 5 azzurro, 6 viola, 7+ rosa) e l\'effetto d\'ingresso cambia con la difficoltà (sale, salta, lampo). Anche «già trovata» e «non valida» si leggono lì: la nuvoletta in fondo allo schermo è stata eliminata.',
+          '**Barra dei giocatori in multiplayer**: in fondo compaiono gli avatar tondi di tutti, con il punteggio sotto e il "+N" che si sovrappone all\'avatar di chi ha appena segnato (stesso colore per lunghezza del single player). Sostituisce l\'elenco «Classifica» che scorreva fuori schermo e le notifiche in basso: si vede a colpo d\'occhio chi sta andando forte.',
+          '**Home con interruttore Solo/Multiplayer**: due pulsanti con icona scelgono la modalità, poi c\'è il tasto che serve (`Gioca da solo` oppure `Crea la stanza`, con codice e invito solo in multiplayer). Le impostazioni della partita valgono per entrambe e si vedono in una riga sotto il tasto.',
+          '**Volumi subito in home**: effetti, musica e chat vocale hanno il loro cursore, sempre visibili e senza etichette (icona + cursore), con un tasto on/off per effetti e musica. In partita un tasto tondo in basso a sinistra apre lo stesso mixer con uno slide verso l\'alto.',
+          '**Voce di vittoria**: alla fine della partita, se hai vinto, una voce femminile italiana annuncia la vittoria con una frase presa a caso fra 22 ("Complimenti {nome}, hai vinto la partita!"), con tono entusiasta. Rispetta il muto degli effetti.',
+          '**Temi più colorati**: ogni difficoltà ha ora il suo fondo anche in tema scuro (notte blu, viola, prugna con aloni del colore del livello) e le superfici si tingono del colore della difficoltà. Prima il tema scuro era un\'unica sovrapposizione nera: lo stesso fondo piatto per tutti i livelli.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Niente scorrimento in partita**: la schermata di gioco è alta esattamente quanto il viewport (con `svh`, così le barre del browser non tagliano l\'ultima riga). I due riquadri sotto la griglia (punti e parole trovate) sono spariti: gli stessi numeri stanno nella barra in alto, piccoli, con un\'icona al posto dell\'etichetta e allineati a destra alla stessa altezza del timer.',
+          '**Countdown centrato dal primo istante**: l\'animazione di ingresso della schermata usava una traslazione, che rende il contenitore il riferimento dei discendenti `fixed`. Il countdown compariva quindi in alto per un attimo e saltava al centro a fine animazione: ora l\'ingresso è in sola opacità.',
+          '**Fine dello scorrimento orizzontale nel foglio delle impostazioni**: la riga delle difficoltà usava tre colonne non comprimibili e poteva superare la larghezza del pannello di qualche pixel. Le colonne ora possono restringersi (`minmax(0, 1fr)`), su schermi stretti l\'etichetta va sopra le scelte, e il pannello non scorre mai in orizzontale.',
+          '**Esultanze dimezzate**: il suono della propria parola suona a metà volume e quello degli avversari a un quarto del valore originale (resta il rapporto 1:2 fra i due, così si distinguono).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La griglia usa `container-type: size` sul proprio contenitore e calcola il lato di cella in `min(100cqw, 100cqh)` con il numero di celle e lo spazio fra loro: le lettere sono una frazione esatta della cella (`--tile-ratio`), quindi la stessa proporzione su ogni schermo. Il ripiego per i browser senza unità di container resta una formula sul viewport.',
+          '`GameStats`, `AvatarScoreBar`, `VolumeSliders` e `lengthBucket` sono nuovi; `FoundCounter` e `OpponentFeed` sono stati **rimossi** insieme alle loro regole CSS e al toast: il codice che non serve più non va mantenuto.',
+          'La voce di vittoria (`audio/victorySpeech.ts`) usa la sintesi vocale del browser e sceglie la voce italiana femminile migliore fra quelle installate, con un ripiego sulla voce predefinita se non ce ne sono. Le frasi stanno in un elenco esportato e `victorySpeech.test.ts` verifica che siano almeno 20, tutte con il segnaposto del nome e senza duplicati.',
+          '`AudioSettings` ha un terzo volume, `voiceVolume`, applicato al guadagno dedicato delle voci di stanza. Le preferenze salvate da versioni precedenti non ce l\'hanno: la fusione dello stato persistito e la sanificazione dei numeri nel motore audio evitano che un valore mancante porti il guadagno a `NaN` (audio muto).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.25.2',
     date: '2026-09-25',

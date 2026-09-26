@@ -71,6 +71,8 @@ export function App() {
     const theme = difficultyMeta(difficulty).theme;
     const root = document.documentElement;
     root.style.setProperty('--difficulty-bg', theme.background);
+    // Sfondo scuro: un gradiente per difficoltà (vedi `difficulty.ts`).
+    root.style.setProperty('--difficulty-bg-dark', theme.backgroundDark);
     root.style.setProperty('--difficulty-surface', theme.surface);
     root.style.setProperty('--primary', theme.accent);
     root.style.setProperty('--primary-soft', theme.accentSoft);

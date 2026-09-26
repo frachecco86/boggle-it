@@ -1,66 +1,19 @@
-import { useState } from 'react';
-import { useAppStore } from '../state/store.js';
+import { VolumeSliders } from './VolumeSliders.js';
 
-/** Pannello impostazioni audio: effetti, musica e volumi. */
+/**
+ * Audio della home: i tre volumi (effetti, musica, chat vocale) SUBITO visibili.
+ *
+ * Prima erano dentro un pannello che si apriva toccando "Audio": per alzare la
+ * musica bisognava aprire un menù. Ora il blocco è sempre aperto, compatto (una
+ * riga per volume, icona + cursore, senza scritte) e sta in alto nella home.
+ *
+ * I volumi fini stanno qui; in partita lo stesso mixer si alza dal tasto tondo
+ * in basso a sinistra (vedi `FloatingControls`), così non serve tornare in home.
+ */
 export function AudioSettings() {
-  const { audioSettings, setAudioSettings } = useAppStore();
-  const [open, setOpen] = useState(false);
-
   return (
-    <section className="audio-settings">
-      <button className="audio-settings__toggle" onClick={() => setOpen((v) => !v)}>
-        <span className="audio-settings__icon" aria-hidden>
-          {audioSettings.sfxEnabled || audioSettings.musicEnabled ? '🔊' : '🔇'}
-        </span>
-        Audio
-        <span className={`audio-settings__chevron${open ? ' audio-settings__chevron--open' : ''}`}>⌄</span>
-      </button>
-
-      {open && (
-        <div className="audio-settings__panel">
-          <label className="audio-settings__row">
-            <input
-              type="checkbox"
-              checked={audioSettings.sfxEnabled}
-              onChange={(e) => setAudioSettings({ sfxEnabled: e.target.checked })}
-            />
-            <span>Effetti sonori</span>
-          </label>
-          <label className="audio-settings__row audio-settings__row--slider">
-            <span>Volume effetti</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={audioSettings.sfxVolume}
-              disabled={!audioSettings.sfxEnabled}
-              onChange={(e) => setAudioSettings({ sfxVolume: Number(e.target.value) })}
-            />
-          </label>
-
-          <label className="audio-settings__row">
-            <input
-              type="checkbox"
-              checked={audioSettings.musicEnabled}
-              onChange={(e) => setAudioSettings({ musicEnabled: e.target.checked })}
-            />
-            <span>Musica di sottofondo</span>
-          </label>
-          <label className="audio-settings__row audio-settings__row--slider">
-            <span>Volume musica</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={audioSettings.musicVolume}
-              disabled={!audioSettings.musicEnabled}
-              onChange={(e) => setAudioSettings({ musicVolume: Number(e.target.value) })}
-            />
-          </label>
-        </div>
-      )}
+    <section className="audio-settings audio-settings--compact" aria-label="Volumi audio">
+      <VolumeSliders compact />
     </section>
   );
 }

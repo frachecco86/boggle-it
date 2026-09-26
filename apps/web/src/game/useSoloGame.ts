@@ -23,6 +23,15 @@ export type WordFeedback =
   /** Parola corretta ma gia' trovata: feedback e suono diversi. */
   | { kind: 'duplicate'; word: string; reason: string };
 
+/**
+ * Quanto resta l'esito della parola nel rettangolo sopra la griglia.
+ *
+ * Un secondo: si legge il punteggio e si torna subito a "Componi una parola".
+ * Prima l'esito era una nuvoletta in fondo allo schermo che restava 2,6 secondi:
+ * durava più del necessario e copriva la parte bassa della griglia.
+ */
+export const FEEDBACK_VISIBLE_MS = 1000;
+
 interface UseSoloGameOptions {
   gridSize: GridSize;
   difficulty: Difficulty;
@@ -108,6 +117,14 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'anonymous' | 'saving' | 'saved' | 'failed'>('idle');
 
   const score = useMemo(() => found.reduce((sum, f) => sum + f.points, 0), [found]);
+
+  // L'esito della parola si spegne da solo: il rettangolo torna a "Componi".
+  useEffect(() => {
+    if (!feedback) return;
+    const id = window.setTimeout(() => setFeedback(null), FEEDBACK_VISIBLE_MS);
+    return () => window.clearTimeout(id);
+  }, [feedback]);
+
   const currentWord = useMemo(
     () => (grid ? wordFromPath(grid, selectedPath) : ''),
     [grid, selectedPath],

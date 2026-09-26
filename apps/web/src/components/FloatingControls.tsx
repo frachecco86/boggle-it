@@ -1,52 +1,51 @@
+import { useState } from 'react';
 import { useAppStore } from '../state/store.js';
+import { Volume2 } from './icons.js';
+import { VolumeSliders } from './VolumeSliders.js';
 
 /**
- * Controlli audio rapidi, sempre visibili in basso a sinistra.
+ * Tasto dei volumi, in basso a sinistra, sempre visibile.
  *
- * Tre icone:
- *  - 🔊/🔇 effetti sonori (on/off)
- *  - 🎵/🔕 musica (on/off)
- *  - ⏭ traccia successiva (se la musica era spenta, la riattiva)
+ * Prima era una pillola con tre tasti (effetti, musica, traccia successiva) alta
+ * ~50px: occupava spazio in ogni schermata e durante la partita copriva l'angolo
+ * della griglia. Ora è un tasto TONDO piccolo e, toccandolo, un pannello si ALZA
+ * con l'effetto slide e contiene tutti i volumi (effetti, musica, chat vocale) e
+ * il salto di traccia.
  *
- * Perché sempre visibili e non dentro un pannello: durante una partita non si
- * vuole aprire un menu per zittire la musica. I volumi fini restano nel pannello
- * Audio della home.
+ * Perché resta in basso a sinistra: durante una partita non si vuole aprire un
+ * menu per zittire la musica, ma il pollice arriva lì senza coprire la griglia.
  */
 export function FloatingControls() {
-  const { audioSettings, setAudioSettings, nextMusicTrack } = useAppStore();
+  const { audioSettings, nextMusicTrack } = useAppStore();
+  const [open, setOpen] = useState(false);
+
+  const muted = !audioSettings.sfxEnabled && !audioSettings.musicEnabled;
 
   return (
-    <div className="floating-controls" role="group" aria-label="Controlli audio rapidi">
-      <button
-        type="button"
-        className={`floating-controls__btn${audioSettings.sfxEnabled ? '' : ' floating-controls__btn--off'}`}
-        onClick={() => setAudioSettings({ sfxEnabled: !audioSettings.sfxEnabled })}
-        title={audioSettings.sfxEnabled ? 'Disattiva gli effetti sonori' : 'Attiva gli effetti sonori'}
-        aria-label={audioSettings.sfxEnabled ? 'Disattiva gli effetti sonori' : 'Attiva gli effetti sonori'}
-        aria-pressed={audioSettings.sfxEnabled}
-      >
-        <span aria-hidden>{audioSettings.sfxEnabled ? '🔊' : '🔇'}</span>
-      </button>
+    <div className={`floating-controls${open ? ' floating-controls--open' : ''}`}>
+      {open && (
+        <div className="volume-panel" role="group" aria-label="Volumi">
+          <VolumeSliders compact />
+          <button
+            type="button"
+            className="volume-panel__next"
+            onClick={() => nextMusicTrack()}
+            aria-label="Passa alla traccia successiva"
+          >
+            <span aria-hidden>⏭</span> Traccia successiva
+          </button>
+        </div>
+      )}
 
       <button
         type="button"
-        className={`floating-controls__btn${audioSettings.musicEnabled ? '' : ' floating-controls__btn--off'}`}
-        onClick={() => setAudioSettings({ musicEnabled: !audioSettings.musicEnabled })}
-        title={audioSettings.musicEnabled ? 'Disattiva la musica' : 'Attiva la musica'}
-        aria-label={audioSettings.musicEnabled ? 'Disattiva la musica' : 'Attiva la musica'}
-        aria-pressed={audioSettings.musicEnabled}
+        className={`floating-controls__knob${muted ? ' floating-controls__knob--off' : ''}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? 'Chiudi i volumi' : 'Apri i volumi'}
+        title="Volumi"
       >
-        <span aria-hidden>{audioSettings.musicEnabled ? '🎵' : '🎵'}</span>
-      </button>
-
-      <button
-        type="button"
-        className="floating-controls__btn"
-        onClick={() => nextMusicTrack()}
-        title="Traccia successiva"
-        aria-label="Passa alla traccia successiva"
-      >
-        <span aria-hidden>⏭</span>
+        <Volume2 size={18} aria-hidden />
       </button>
     </div>
   );

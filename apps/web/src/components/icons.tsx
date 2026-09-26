@@ -85,3 +85,55 @@ export function Share2(props: Props) {
     </svg>
   );
 }
+
+/** Stella: i PUNTI della partita (barra compatta e pannello volumi). */
+export function Star(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M11.53 2.3a.53.53 0 0 1 .94 0l2.31 4.68a2.12 2.12 0 0 0 1.6 1.16l5.16.75a.53.53 0 0 1 .3.91l-3.74 3.64a2.12 2.12 0 0 0-.61 1.88l.88 5.14a.53.53 0 0 1-.77.56l-4.62-2.43a2.12 2.12 0 0 0-1.97 0l-4.62 2.43a.53.53 0 0 1-.77-.56l.88-5.14a2.12 2.12 0 0 0-.61-1.88L2.16 9.8a.53.53 0 0 1 .3-.9l5.16-.76a2.12 2.12 0 0 0 1.6-1.16z" />
+    </svg>
+  );
+}
+
+/** Segno di spunta in un cerchio: le PAROLE trovate. */
+export function CheckCircle(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </svg>
+  );
+}
+
+/** Una persona: modalità single player. */
+export function User(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+/** Più persone: modalità multiplayer. */
+export function Users(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+/** Altoparlante con onde: pannello dei volumi. */
+export function Volume2(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6a1.4 1.4 0 0 1-1 .4H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z" />
+      <path d="M16 9a5 5 0 0 1 0 6" />
+      <path d="M19.36 18.36a9 9 0 0 0 0-12.73" />
+    </svg>
+  );
+}

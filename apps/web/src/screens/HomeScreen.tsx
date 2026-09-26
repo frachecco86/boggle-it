@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { type Difficulty, type GridSize } from '@boggle/shared';
+import { DIFFICULTIES, type Difficulty, type GridSize } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
 import { loadCatalog } from '../game/schedeLoader.js';
 import { consumeRoomCodeFromUrl } from '../net/roomLink.js';
 import { AudioSettings } from '../components/AudioSettings.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { MatchSettings } from '../components/MatchSettings.js';
+import { User, Users } from '../components/icons.js';
+
+/** Modalità scelta nell'interruttore in cima alla home. */
+type HomeMode = 'solo' | 'multi';
 
 /** Schermata iniziale: profilo, modalità di gioco, impostazioni partita e audio. */
 export function HomeScreen() {
@@ -28,6 +32,15 @@ export function HomeScreen() {
   } = useAppStore();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  /**
+   * Single player o multiplayer.
+   *
+   * Un solo interruttore con due icone al posto di due pulsanti separati: la
+   * modalità decide COSA fa il tasto principale e quali comandi servono (in
+   * multiplayer compaiono il codice stanza e l'invito), mentre le impostazioni
+   * della partita sono le stesse per entrambe.
+   */
+  const [mode, setMode] = useState<HomeMode>('solo');
   /** Foglio delle impostazioni partita (griglia, difficoltà, durata, round). */
   const [showSettings, setShowSettings] = useState(false);
   /** Codice arrivato da un link di invito (`?stanza=CODICE`). */
@@ -76,6 +89,12 @@ export function HomeScreen() {
     setBusy(true);
     clearError();
     try {
+      /*
+       * Le impostazioni scelte restano anche come preferenza del dispositivo: le
+       * due modalità condividono lo stesso menù, quindi non ha senso che la
+       * scelta fatta per la stanza si perda tornando in home.
+       */
+      setSoloSetup(hostGridSize, hostDifficulty, hostRounds, hostDurationMs);
       await createRoom(hostGridSize, hostDifficulty, hostRounds, hostDurationMs);
     } catch {
       /* errore mostrato dallo store */
@@ -165,42 +184,86 @@ export function HomeScreen() {
 
       {errorMessage && <div className="banner banner--error">{errorMessage}</div>}
 
-      <div className="home__actions">
-        <button className="btn btn--primary btn--big" disabled={busy} onClick={handlePlaySolo}>
-          Gioca da solo
+      {/* Interruttore di modalità: icone e due sole voci. */}
+      <div className="home__mode" role="group" aria-label="Modalità di gioco">
+        <button
+          type="button"
+          className={`home__mode-btn${mode === 'solo' ? ' home__mode-btn--active' : ''}`}
+          aria-pressed={mode === 'solo'}
+          onClick={() => setMode('solo')}
+        >
+          <User size={17} aria-hidden />
+          Da solo
         </button>
+        <button
+          type="button"
+          className={`home__mode-btn${mode === 'multi' ? ' home__mode-btn--active' : ''}`}
+          aria-pressed={mode === 'multi'}
+          onClick={() => setMode('multi')}
+        >
+          <Users size={17} aria-hidden />
+          Multiplayer
+        </button>
+      </div>
+
+      <div className="home__actions">
+        {/* Un solo tasto principale: cambia con la modalità scelta. */}
+        {mode === 'solo' ? (
+          <button className="btn btn--primary btn--big" disabled={busy} onClick={handlePlaySolo}>
+            Gioca da solo
+          </button>
+        ) : (
+          <button className="btn btn--primary btn--big" disabled={busy} onClick={handleCreate}>
+            Crea la stanza
+          </button>
+        )}
 
         <button
-          className="btn btn--secondary btn--big"
+          className="btn btn--secondary"
           disabled={busy}
           onClick={() => setShowSettings(true)}
         >
           Impostazioni partita
         </button>
 
-        {inviteCode && (
-          <p className="join__invite" role="status">
-            <span aria-hidden>🔗</span>
-            <span>
-              Invito per la stanza <strong>{inviteCode}</strong>: premi Entra per giocare.
-            </span>
-          </p>
-        )}
+        {/* Le impostazioni in vigore, in chiaro: valgono per entrambe le modalità. */}
+        <p className="home__setup">
+          {hostGridSize}×{hostGridSize} · {DIFFICULTIES[hostDifficulty].label} ·{' '}
+          {Math.round(hostDurationMs / 1000)}s · {hostRounds} round
+        </p>
 
-        <div className="join">
-          <input
-            className="field__input join__input"
-            value={code}
-            placeholder="CODICE"
-            maxLength={6}
-            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-          />
-          <button className="btn btn--secondary" disabled={busy || code.length < 4} onClick={handleJoin}>
-            Entra
-          </button>
-        </div>
+        {mode === 'multi' && (
+          <>
+            {inviteCode && (
+              <p className="join__invite" role="status">
+                <span aria-hidden>🔗</span>
+                <span>
+                  Invito per la stanza <strong>{inviteCode}</strong>: premi Entra per giocare.
+                </span>
+              </p>
+            )}
+
+            <div className="join">
+              <input
+                className="field__input join__input"
+                value={code}
+                placeholder="CODICE"
+                maxLength={6}
+                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              />
+              <button
+                className="btn btn--secondary"
+                disabled={busy || code.length < 4}
+                onClick={handleJoin}
+              >
+                Entra
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
+      {/* I tre volumi sono qui, sempre visibili e compatti: nessun menù da aprire. */}
       <AudioSettings />
 
       <div className="home__links">
@@ -241,12 +304,6 @@ export function HomeScreen() {
           onDifficulty={setHostDifficulty}
           onRounds={setHostRounds}
           onDuration={setHostDurationMs}
-          onSolo={handlePlaySolo}
-          onCreate={() => {
-            setSoloSetup(hostGridSize, hostDifficulty, hostRounds, hostDurationMs);
-            void handleCreate();
-          }}
-          busy={busy}
           onClose={() => setShowSettings(false)}
         />
       )}

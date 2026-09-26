@@ -134,14 +134,22 @@ body {
   animation: screen-in 0.35s ease-out;
 }
 
+/*
+ * Comparsa della schermata: SOLO opacità, nessuna traslazione.
+ *
+ * Perché non uno slide: un `transform` sul contenitore lo rende "containing
+ * block" dei discendenti `position: fixed`. Il countdown di inizio partita
+ * (fixed, centrato sul viewport) veniva quindi posizionato rispetto alla
+ * schermata per i primi 0,35s dell'animazione: si vedeva comparire in ALTO e
+ * saltare al centro appena l'animazione finiva. Senza transform, il countdown è
+ * centrato dal primo frame.
+ */
 @keyframes screen-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
@@ -470,14 +478,52 @@ body {
   font-size: 1rem;
 }
 
-/* Riga audio: solo l'apertura del pannello, quindi va tenuta bassa. */
+/* Riga audio: sempre visibile, quindi solo un filo di margine. */
 .home .audio-settings {
   margin-top: 0;
 }
 
-.home .audio-settings__toggle {
-  padding: 8px 12px;
-  font-size: 0.86rem;
+.home__mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.home__mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 9px 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.home__mode-btn--active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 32%, transparent);
+}
+
+/* Riga "4×4 · Normale · 180s · 3 round": le impostazioni in vigore, in chiaro. */
+.home__setup {
+  margin: 0;
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-dim);
 }
 
 /* Voci in fondo: pulsanti piccoli, non tre pulsanti grandi. */
@@ -570,10 +616,6 @@ body {
 
   .home .field__input {
     padding: 7px 10px;
-  }
-
-  .home .audio-settings__toggle {
-    padding: 6px 10px;
   }
 
   .home__footer {
@@ -764,75 +806,185 @@ body {
 
 /* ---------- Griglia e tile ---------- */
 
+/*
+ * Partita: UNA sola schermata, senza scorrimento.
+ *
+ * La schermata occupa esattamente l'altezza del viewport e le parti si dividono
+ * lo spazio: barra in alto (auto), griglia (1fr), barra avatar in multiplayer
+ * (auto). `overflow: hidden` è la garanzia che non compaia mai una barra di
+ * scorrimento durante il gioco: se qualcosa non entrasse verrebbe tagliato,
+ * quindi ogni parte ha una dimensione contenuta (le lettere si rimpiccioliscono
+ * con la griglia, che a sua volta si adatta allo spazio).
+ */
+.screen.game {
+  flex: 1 1 auto;
+  /*
+   * Altezza DEFINITA, presa dal viewport "piccolo" (`svh`): con le barre del
+   * browser aperte non si perde l'ultima riga. Serve anche al calcolo della
+   * griglia: il lato di cella usa `cqh` (altezza del contenitore), che senza
+   * un'altezza definita varrebbe 0 e la griglia collasserebbe.
+   * La riga `100%` è il ripiego per i browser senza `svh`.
+   */
+  height: 100%;
+  height: 100svh;
+  min-height: 0;
+  overflow: hidden;
+  /* Padding minimo: solo quel tanto che separa la griglia dal bordo del vetro. */
+  padding-left: 4px;
+  padding-right: 4px;
+  padding-bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  gap: 6px;
+}
+
 .game__topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+/*
+ * Il timer cede spazio per primo: la barra di avanzamento si accorcia mentre il
+ * tempo resta leggibile alla stessa altezza. Senza questo, aggiungendo i due
+ * numeri a destra la riga sarebbe andata a capo su un telefono.
+ */
+.screen.game .timer {
+  flex: 1 1 40px;
+  min-width: 40px;
 }
 
 .game__round {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
   color: var(--text-dim);
-  font-size: 0.92rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
-.game__main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 18px;
-  align-items: start;
+.game__round-num {
+  font-weight: 800;
+  color: var(--text);
 }
 
-/* L'anteprima della parola occupa tutta la riga sopra griglia e pannello. */
-.game__main > .current-word-banner {
-  grid-column: 1 / -1;
+.game__round-diff,
+.game__round-room {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
 }
 
-@media (max-width: 820px) {
-  .game__main {
-    grid-template-columns: 1fr;
+/* Sui telefoni stretti escono difficoltà e codice stanza: restano i numeri. */
+@media (max-width: 470px) {
+  .game__round-diff,
+  .game__round-room {
+    display: none;
   }
 }
 
+/*
+ * I due numeri della partita: icona + valore, compatti, allineati a destra alla
+ * stessa altezza del timer. Nessuna etichetta scritta: l'icona dice cos'è il
+ * numero (vedi `GameStats`).
+ */
+.game-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+.game-stats__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.game-stats__value {
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+  /* Cifre a larghezza fissa: il numero che cresce non sposta la barra. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Anteprima parola e griglia: la griglia prende tutto lo spazio che avanza. */
+.game__main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*
+ * Contenitore della griglia: NESSUN riquadro.
+ *
+ * Prima era una card (bordo, sfondo, ombra, 12px di padding) che faceva da
+ * cornice: mangiava spazio utile e rendeva la griglia più piccola. Ora è un
+ * contenitore invisibile che riempie lo spazio disponibile e ci centra dentro il
+ * quadrato più grande che ci sta.
+ *
+ * `--cell` è il lato di cella: si calcola su ENTRAMBE le dimensioni (container
+ * query) e si prende il minore. Così la griglia riempie lo spazio in ogni
+ * formato — telefono in verticale, tablet, desktop, finestra bassa — invece di
+ * dipendere da una formula sul viewport.
+ */
 .grid-board {
   position: relative;
   touch-action: none;
-  background: color-mix(in srgb, var(--surface) 65%, transparent);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 12px;
-  box-shadow: var(--shadow);
   user-select: none;
-  /*
-   * La griglia è un quadrato: limitare la LARGHEZZA limita anche l'altezza.
-   *
-   * Perché serve: su uno schermo largo la colonna della griglia era più larga
-   * che alta, quindi il quadrato (celle 1fr + `aspect-ratio: 1`) usciva sotto il
-   * bordo dello schermo e l'ultima riga si vedeva solo scorrendo — proprio
-   * mentre si gioca. Qui la griglia prende il minore fra lo spazio in larghezza e
-   * quello in altezza (~230px fra barra, timer, anteprima parola e margini), e
-   * resta interamente visibile. Sui telefoni il limite non morde (la larghezza è
-   * già il vincolo) e `svh` tiene conto delle barre del browser.
-   */
-  width: min(100%, calc(100svh - 230px));
-  margin-inline: auto;
-  /*
-   * Da qui in poi le misure dei caratteri sono in `cqw` (percentuale della
-   * larghezza di questo riquadro): la lettera è una frazione ESATTA della cella,
-   * quindi riempie il quadrato allo stesso modo in ogni formato e su ogni
-   * schermo. Prima la dimensione veniva da una formula sul viewport, che non
-   * sapeva quanto fosse grande la cella: su desktop le lettere occupavano il 36%
-   * della cella (celle grandi e vuote) e su telefono il 51%.
-   */
-  container-type: inline-size;
-  --grid-gap: 8px;
-  --tile-ratio: 0.64;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  container-type: size;
+  --grid-size: 4;
+  /* Spazio fra le celle: il minimo che rende leggibile la separazione. */
+  --grid-gap: 4px;
+  --tile-ratio: 0.66;
+  /* Ripiego per i browser senza unità di container: quadrato sulla larghezza. */
+  --cell-w: calc(min(92vw, 560px) / var(--grid-size));
+  --cell-h: calc(min(92vw, 560px) / var(--grid-size));
+  --cell: min(var(--cell-w), var(--cell-h));
 }
 
+@supports (container-type: size) {
+  .grid-board {
+    --cell-w: calc((100cqw - (var(--grid-size) - 1) * var(--grid-gap)) / var(--grid-size));
+    --cell-h: calc((100cqh - (var(--grid-size) - 1) * var(--grid-gap)) / var(--grid-size));
+  }
+}
+
+/*
+ * Nelle griglie più grandi le celle sono più piccole: la lettera occupa una
+ * frazione leggermente maggiore, così le parole corte (e il "Qu") restano
+ * leggibili anche su 6×6.
+ */
+.grid-board[style*='--grid-size: 5'] {
+  --tile-ratio: 0.68;
+}
+
+.grid-board[style*='--grid-size: 6'] {
+  --tile-ratio: 0.7;
+}
+
+/* Il trail copre tutto il board (non c'è più padding da compensare). */
 .grid-trail {
   position: absolute;
-  inset: 12px;
+  inset: 0;
   pointer-events: none;
   overflow: visible;
   z-index: 2;
@@ -841,7 +993,8 @@ body {
 .grid-trail__line {
   fill: none;
   stroke: var(--primary);
-  stroke-width: 3;
+  /* Spessore proporzionato alla cella: su celle grandi una linea da 3px spariva. */
+  stroke-width: clamp(2.5px, calc(var(--cell) * 0.05), 5px);
   stroke-linecap: round;
   stroke-linejoin: round;
   filter: drop-shadow(0 0 5px rgba(124, 92, 255, 0.85));
@@ -849,8 +1002,8 @@ body {
 
 .grid-trail__glow {
   fill: none;
-  stroke: rgba(124, 92, 255, 0.28);
-  stroke-width: 10;
+  stroke: color-mix(in srgb, var(--primary) 28%, transparent);
+  stroke-width: clamp(7px, calc(var(--cell) * 0.14), 14px);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -864,7 +1017,9 @@ body {
 
 .grid-cells {
   display: grid;
-  gap: var(--grid-gap, 8px);
+  gap: var(--grid-gap);
+  grid-template-columns: repeat(var(--grid-size), var(--cell));
+  grid-auto-rows: var(--cell);
   position: relative;
   z-index: 1;
 }
@@ -885,14 +1040,11 @@ body {
   border-radius: clamp(9px, 9%, 18px);
   box-shadow: 0 2px 6px rgba(45, 60, 110, 0.07);
   /*
-   * Prima riga: ripiego per i browser senza container queries (la vecchia
-   * formula sul viewport). La seconda la sostituisce dove `cqw` è supportato.
+   * La lettera è una frazione ESATTA della cella (`--cell`), quindi riempie il
+   * quadrato allo stesso modo in ogni formato e su ogni schermo: la dimensione
+   * non dipende più dal viewport ma da quanto è grande la cella.
    */
-  font-size: calc(min(64vw, 420px) / var(--grid-size, 4) * 0.62);
-  font-size: calc(
-    var(--tile-ratio, 0.64) * (100cqw - (var(--grid-size, 4) - 1) * var(--grid-gap, 8px)) /
-      var(--grid-size, 4)
-  );
+  font-size: calc(var(--tile-ratio) * var(--cell));
   line-height: 0.9;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -913,19 +1065,6 @@ body {
   overflow: hidden;
   color: var(--text);
   text-shadow: none;
-}
-
-/*
- * Nelle griglie più grandi le celle sono più piccole: la lettera occupa una
- * frazione leggermente maggiore, così le parole corte (e il "Qu") restano
- * leggibili anche su 6×6.
- */
-.grid-board[style*='--grid-size: 5'] {
-  --tile-ratio: 0.66;
-}
-
-.grid-board[style*='--grid-size: 6'] {
-  --tile-ratio: 0.68;
 }
 
 @keyframes tile-in {
@@ -959,13 +1098,13 @@ body {
 
 @keyframes error-flash {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.55), var(--shadow);
+    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.5);
   }
   45% {
-    box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.28), var(--shadow);
+    box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.25);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0), var(--shadow);
+    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0);
   }
 }
 
@@ -1003,134 +1142,6 @@ body {
 
 .timer--urgent .timer__bar-fill {
   background: linear-gradient(90deg, var(--danger), #ff9a3c);
-}
-
-/* ---------- Pannello parole ---------- */
-
-.game__side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.score-chip {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 14px 18px;
-  display: flex;
-  flex-direction: column;
-}
-
-.score-chip__value {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.score-chip__label {
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-
-/*
- * Contatore parole (durante la partita).
- *
- * Altezza FISSA e contenuto che non va a capo: la vecchia card delle parole
- * cresceva a ogni parola trovata, allungando la pagina. Il risultato era uno
- * spostamento della finestra (scrollbar che compare/scompare) proprio mentre si
- * gioca, che distrae e fa perdere il segno sulla griglia.
- */
-.found-counter {
-  height: 96px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  overflow: hidden;
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.found-counter__value {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.found-counter__label {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  white-space: nowrap;
-}
-
-
-
-
-
-
-/* ---------- Toast ---------- */
-
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  padding: 12px 22px;
-  border-radius: 999px;
-  font-weight: 700;
-  z-index: 50;
-  /*
-   * Slide up + down: entra dal basso, resta, esce verso il basso. Prima era
-   * solo un pop di 0.3s; ora dura ~2.6s e si vede senza fretta.
-   */
-  animation: toast-slide 2.6s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  box-shadow: var(--shadow);
-  pointer-events: none;
-}
-
-.toast--valid {
-  background: var(--success);
-  color: #ffffff;
-}
-
-.toast--invalid {
-  background: var(--danger);
-  color: #ffffff;
-}
-
-/* Parola corretta ma già trovata: colore distinto (ambra), non è un errore. */
-.toast--duplicate {
-  background: var(--warning);
-  color: #ffffff;
-}
-
-@keyframes toast-slide {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 32px) scale(0.96);
-  }
-  12% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-  84% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, 32px) scale(0.96);
-  }
 }
 
 /* ---------- Anteprima parola in composizione (sopra la griglia) ---------- */
@@ -1204,6 +1215,185 @@ body {
   letter-spacing: 1px;
 }
 
+/*
+ * Esito della parola inviata: "PAROLA +2", "già trovata", "non valida".
+ *
+ * Prende il posto della nuvoletta che compariva in fondo allo schermo: qui sta
+ * dove l'occhio è già puntato (sopra la griglia), dura ~1 secondo e non copre il
+ * gioco. Il colore dice SUBITO quanto ha reso la parola: giallo 3 lettere, verde
+ * 4, azzurro 5, viola 6, rosa da 7 in su.
+ */
+.current-word-banner--feedback {
+  gap: 10px;
+  color: #fff;
+  border-style: solid;
+  border-color: transparent;
+}
+
+.current-word-banner__word {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  opacity: 0.92;
+}
+
+.current-word-banner__points {
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.current-word-banner__reason {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+/* Scala di colori per LUNGHEZZA della parola (più lunga = più preziosa). */
+.current-word-banner--scored {
+  background: linear-gradient(150deg, #eab308, #facc15);
+  box-shadow: 0 8px 24px rgba(234, 179, 8, 0.35);
+}
+
+.current-word-banner--scored[data-len='4'] {
+  background: linear-gradient(150deg, #16a34a, #4ade80);
+  box-shadow: 0 8px 24px rgba(22, 163, 74, 0.35);
+}
+
+.current-word-banner--scored[data-len='5'] {
+  background: linear-gradient(150deg, #2563eb, #60a5fa);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
+}
+
+.current-word-banner--scored[data-len='6'] {
+  background: linear-gradient(150deg, #7c3aed, #a78bfa);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.35);
+}
+
+.current-word-banner--scored[data-len='7'] {
+  background: linear-gradient(150deg, #db2777, #f472b6);
+  box-shadow: 0 8px 24px rgba(219, 39, 119, 0.4);
+}
+
+/* Parola corretta ma già trovata: ambra, non è un errore. */
+.current-word-banner--duplicate {
+  background: linear-gradient(150deg, #d97706, #fbbf24);
+  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.32);
+}
+
+/* Parola rifiutata: rosso, con un lampo breve. */
+.current-word-banner--invalid {
+  background: linear-gradient(150deg, #dc2626, #f87171);
+  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.32);
+}
+
+/*
+ * Effetto DIVERSO per difficoltà: il punteggio non entra sempre allo stesso
+ * modo. Facile = sale piano; Normale = piccolo salto; Difficile = lampo secco.
+ * Il colore, invece, dipende dalla lunghezza della parola (vedi sopra): sono due
+ * informazioni diverse e si leggono insieme.
+ */
+/* Base (prima che `data-difficulty` sia applicato): piccolo salto. */
+.current-word-banner--scored {
+  animation: score-bounce 1s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+[data-difficulty='facile'] .current-word-banner--scored {
+  animation: score-rise 1s ease-out;
+}
+
+[data-difficulty='normale'] .current-word-banner--scored {
+  animation: score-bounce 1s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+[data-difficulty='difficile'] .current-word-banner--scored {
+  animation: score-flash 1s ease-out;
+}
+
+.current-word-banner--duplicate,
+.current-word-banner--invalid {
+  animation: score-nudge 0.5s ease-out;
+}
+
+@keyframes score-rise {
+  0% {
+    opacity: 0.2;
+    transform: translateY(10px) scale(0.96);
+  }
+  30% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes score-bounce {
+  0% {
+    opacity: 0.3;
+    transform: scale(0.72);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  65% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes score-flash {
+  0% {
+    opacity: 0.2;
+    filter: brightness(1.8);
+    transform: scale(1.06);
+  }
+  25% {
+    opacity: 1;
+    filter: brightness(1.15);
+    transform: scale(1) translateX(-3px);
+  }
+  40% {
+    transform: scale(1) translateX(3px);
+  }
+  55% {
+    transform: none;
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+@keyframes score-nudge {
+  0% {
+    opacity: 0.4;
+    transform: translateX(-4px);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-difficulty] .current-word-banner--scored,
+  .current-word-banner--duplicate,
+  .current-word-banner--invalid {
+    animation: none;
+  }
+}
+
 .current-word-banner__letter {
   animation: letter-in 0.24s ease-out both;
 }
@@ -1223,51 +1413,327 @@ body {
 
 
 
+/* ---------- Barra dei giocatori (multiplayer) ---------- */
+
+/*
+ * In fondo alla schermata di gioco: avatar tondi, punteggio sotto, "+N" sopra
+ * l'avatar di chi ha appena segnato.
+ *
+ * Sta nel flusso (ultima riga della schermata, che non scorre): è "fissa" in
+ * fondo senza `position: fixed`, quindi non copre mai la griglia e non richiede
+ * margini di compensazione.
+ */
+.avatar-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.avatar-bar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(6px, 2.6vw, 18px);
+  flex-wrap: nowrap;
+  max-width: 100%;
+}
+
+.avatar-bar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: clamp(34px, 10.5vw, 46px);
+  min-width: 0;
+}
+
+.avatar-bar__avatar {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  font-size: clamp(0.95rem, 3.4vw, 1.4rem);
+  line-height: 1;
+  box-shadow: 0 3px 10px rgba(45, 60, 110, 0.14);
+}
+
+.avatar-bar__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Il proprio avatar è riconoscibile: anello nel colore della difficoltà. */
+.avatar-bar__item--you .avatar-bar__avatar {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent), 0 3px 10px rgba(45, 60, 110, 0.14);
+}
+
+.avatar-bar__item--off .avatar-bar__avatar {
+  opacity: 0.45;
+}
+
+.avatar-bar__avatar--speaking {
+  border-color: var(--success);
+}
+
+.avatar-bar__score {
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.avatar-bar__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+}
+
+.avatar-bar__hint {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* Le barrette "sta parlando" in piccolo, sull'angolo dell'avatar. */
+.avatar-bar__speaking {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(20, 26, 50, 0.25);
+  transform: scale(0.62);
+}
+
+/*
+ * Il "+N": si SOVRAPPONE all'avatar per un attimo. È il momento in cui si vede
+ * chi ha segnato e quanto ha guadagnato, senza guardare i totali.
+ */
+.avatar-bar__pop {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(150deg, #eab308, #facc15);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface) 70%, transparent);
+  animation: avatar-pop 1.6s cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
+  pointer-events: none;
+}
+
+/* Stessa scala di colori del single player: per lunghezza della parola. */
+.avatar-bar__pop[data-len='4'] {
+  background: linear-gradient(150deg, #16a34a, #4ade80);
+}
+.avatar-bar__pop[data-len='5'] {
+  background: linear-gradient(150deg, #2563eb, #60a5fa);
+}
+.avatar-bar__pop[data-len='6'] {
+  background: linear-gradient(150deg, #7c3aed, #a78bfa);
+}
+.avatar-bar__pop[data-len='7'] {
+  background: linear-gradient(150deg, #db2777, #f472b6);
+}
+
+@keyframes avatar-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  32% {
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1) translateY(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-bar__pop {
+    animation: none;
+  }
+}
+
 /* ---------- Controlli audio rapidi (in basso a sinistra) ---------- */
 
+/*
+ * Contenitore del tasto volumi. Non ha più una pillola con tre tasti: è solo un
+ * punto d'ancoraggio in basso a sinistra per il tasto tondo e per il pannello
+ * che si alza sopra di lui.
+ */
 .floating-controls {
   position: fixed;
-  left: 12px;
+  left: 8px;
   /*
    * In basso a sinistra, ma sopra la safe area dei telefoni con gesture bar.
    * `env(safe-area-inset-bottom)` evita che finisca sotto la barra di sistema.
    */
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   z-index: 60;
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(6px);
 }
 
-.floating-controls__btn {
-  width: 38px;
-  height: 38px;
+.floating-controls__knob {
+  width: 40px;
+  height: 40px;
   display: grid;
   place-content: center;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  font-size: 1.05rem;
-  line-height: 1;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  color: var(--text);
   cursor: pointer;
-  transition: background 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+  transition: transform 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.floating-controls__btn:hover {
-  background: color-mix(in srgb, var(--primary) 16%, transparent);
+.floating-controls__knob:hover {
+  transform: translateY(-1px);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
-.floating-controls__btn:active {
-  transform: scale(0.92);
+.floating-controls__knob--off {
+  color: var(--text-dim);
+  opacity: 0.7;
 }
 
-.floating-controls__btn--off {
-  opacity: 0.45;
+/*
+ * Pannello dei volumi: si ALZA dal tasto (slide-up) e resta ancorato sopra di
+ * lui. Sta sopra la griglia ma è piccolo (230px) e si chiude con lo stesso tasto.
+ */
+.volume-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(230px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  animation: volume-slide-up 0.22s cubic-bezier(0.2, 1, 0.4, 1);
+  transform-origin: bottom left;
+}
+
+@keyframes volume-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.volume-panel__next {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.volume-panel__next:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ------------------------------------------------------------------ */
+/* Regolatori dei volumi (home + pannello in partita)                */
+/* ------------------------------------------------------------------ */
+
+.volume-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.volume-slider {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+}
+
+.volume-slider__icon {
+  font-size: 1rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.volume-slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--primary);
+}
+
+.volume-slider input[type='range']:disabled {
+  opacity: 0.4;
+}
+
+.volume-slider__toggle {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 3px 0;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+
+.volume-slider__toggle[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1389,13 +1855,11 @@ body {
 }
 
 /*
- * Nella partita il riquadro dei comandi è più alto della barra audio: si riserva
- * spazio in fondo alla pagina perché l'ultima riga della classifica non resti
- * coperta (la pagina scorre, ma non si deve "indovinare" che c'è altro sotto).
+ * In partita la pagina NON scorre (vedi `.screen.game` nella sezione griglia):
+ * si riserva solo la striscia in fondo dove vive il tasto tondo dei volumi (40px
+ * + 8px di margine). Prima erano 150px "a stima" per la nuvoletta e per la
+ * vecchia pillola dei comandi audio: spazio tolto alla griglia.
  */
-.screen.game {
-  padding-bottom: 150px;
-}
 
 /* ---------- "Sta parlando" ---------- */
 
@@ -1756,18 +2220,6 @@ body {
     opacity: 1;
     transform: none;
   }
-}
-
-.scoreboard {
-  background: var(--bg-soft);
-  border-radius: var(--radius-lg);
-  padding: 14px;
-}
-
-.scoreboard__hint {
-  margin: 8px 0 0;
-  font-size: 0.8rem;
-  color: var(--text-dim);
 }
 
 /* ---------- Riepiloghi ---------- */
@@ -2280,129 +2732,22 @@ body {
   animation: screen-in 0.25s ease-out;
 }
 
+/*
+ * Audio della home: sempre aperto e compatto (icona + cursore per ogni volume).
+ * Il pannello a scomparsa non c'è più: i volumi si regolano a vista.
+ */
 .audio-settings {
-  width: min(420px, 100%);
-  margin: 6px auto 0;
-}
-
-.audio-settings__toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: transparent;
+  width: min(360px, 100%);
+  margin: 0 auto;
+  padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: var(--text-dim);
-  padding: 10px 14px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.9rem;
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.audio-settings__toggle:hover {
-  color: var(--text);
-  border-color: var(--primary-soft);
-}
-
-.audio-settings__icon {
-  font-size: 1rem;
-}
-
-.audio-settings__chevron {
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.audio-settings__chevron--open {
-  transform: rotate(180deg);
-}
-
-.audio-settings__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  margin-top: 8px;
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  animation: screen-in 0.22s ease-out;
-}
-
-.audio-settings__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.audio-settings__row input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--primary);
-  cursor: pointer;
-}
-
-.audio-settings__row--slider {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  color: var(--text-dim);
-  font-size: 0.82rem;
-}
-
-.audio-settings__row--slider input[type='range'] {
-  width: 100%;
-  accent-color: var(--primary);
-  cursor: pointer;
-}
-
-.audio-settings__row--slider input[type='range']:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
 }
 
 /* ------------------------------------------------------------------ */
-/* Badge "+N" accanto al nome avversario                              */
+/* Badge "+N": ora vive sopra l'avatar, nella barra dei giocatori        */
 /* ------------------------------------------------------------------ */
-
-.score-pop {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  font-weight: 800;
-  color: #fff;
-  background: var(--success);
-  animation: score-pop 2.6s cubic-bezier(0.2, 1.3, 0.4, 1) forwards;
-  vertical-align: middle;
-}
-
-@keyframes score-pop {
-  0% {
-    opacity: 0;
-    transform: translateY(6px) scale(0.6);
-  }
-  12% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1.12);
-  }
-  22% {
-    transform: translateY(0) scale(1);
-  }
-  78% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.9);
-  }
-}
 
 /* ------------------------------------------------------------------ */
 /* Avatar picker                                                      */
@@ -4466,8 +4811,10 @@ body {
  * adattano da soli, senza modifiche puntuali.
  *
  * Nota: gli sfondi per difficoltà arrivano da `difficulty.ts` e vengono applicati
- * inline da App.tsx come `--difficulty-bg`. Per il tema scuro usiamo una
- * sovrapposizione scura (vedi `.app` sotto) invece di riscrivere ogni gradiente.
+ * inline da App.tsx come `--difficulty-bg` (chiaro) e `--difficulty-bg-dark`
+ * (scuro). Ogni difficoltà ha il suo fondo in entrambi i temi: prima il tema
+ * scuro era un'unica sovrapposizione nera su un gradiente pastello, cioè lo
+ * stesso fondo piatto per tutti e tre i livelli ("monotono").
  */
 [data-theme='dark'] {
   --bg: #12131c;
@@ -4485,27 +4832,31 @@ body {
   --shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
-/* I gradienti pastello per difficoltà sono pensati per il chiaro: in scuro li
-   scuriamo con una sovrapposizione, mantenendo la tinta della difficoltà. */
-[data-theme='dark'] .app::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: linear-gradient(
-    rgba(10, 11, 18, 0.86),
-    rgba(10, 11, 18, 0.94)
-  );
-  pointer-events: none;
-}
-
+/*
+ * In tema scuro il fondo è il gradiente SCURO della difficoltà (vedi
+ * `difficulty.ts`): ogni livello ha la sua notte colorata (blu, viola, prugna)
+ * invece di un nero piatto uguale per tutti.
+ */
 [data-theme='dark'] body {
-  background: var(--bg);
+  background: var(--difficulty-bg-dark, var(--bg));
 }
 
-/* Le celle della griglia: in scuro serve un bordo piu' marcato per staccarle. */
+/*
+ * Le celle della griglia: in scuro serve un bordo piu' marcato per staccarle e
+ * una punta del colore della difficoltà nella superficie, così la griglia non è
+ * un grigio neutro uguale per tutti i livelli.
+ */
 [data-theme='dark'] .tile {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+}
+
+/* Superfici secondarie: una velatura del colore della difficoltà. */
+[data-theme='dark'] .pill,
+[data-theme='dark'] .audio-settings,
+[data-theme='dark'] .home__mode {
+  background: color-mix(in srgb, var(--primary) 10%, var(--bg-soft));
 }
 
 /* Il velo del countdown in scuro. */
@@ -4914,119 +5265,6 @@ body {
 
   .history-row__words {
     display: none;
-  }
-}
-
-/* ---------- Notifiche avversari (in basso durante il multiplayer) ---------- */
-
-.opponent-feed {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  /*
-   * Sopra al bordo inferiore ma sotto ai controlli audio, e sopra la safe area
-   * dei telefoni con gesture bar. Il toast delle proprie parole sta più in basso:
-   * così i due non si sovrappongono mai.
-   */
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  z-index: 45;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  pointer-events: none;
-  width: min(340px, calc(100vw - 170px));
-}
-
-.opponent-feed__card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(6px);
-  /* Entra scivolando dal basso e sfuma verso l'alto. */
-  animation: opponent-slide 3.2s cubic-bezier(0.22, 0.61, 0.36, 1) both;
-}
-
-@keyframes opponent-slide {
-  0% {
-    opacity: 0;
-    transform: translateY(18px) scale(0.96);
-  }
-  12% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  80% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.98);
-  }
-}
-
-.opponent-feed__avatar {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  display: grid;
-  place-content: center;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--surface-2);
-  font-size: 1.05rem;
-  line-height: 1;
-}
-
-.opponent-feed__avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.opponent-feed__body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.opponent-feed__name {
-  font-weight: 700;
-  font-size: 0.86rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.opponent-feed__detail {
-  font-size: 0.68rem;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.opponent-feed__points {
-  font-weight: 900;
-  font-size: 0.95rem;
-  color: var(--success);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .opponent-feed__card {
-    animation: opponent-fade 3.2s ease both;
-  }
-  @keyframes opponent-fade {
-    0%, 100% { opacity: 0; }
-    10%, 85% { opacity: 1; }
   }
 }
 
@@ -5625,6 +5863,13 @@ body {
   width: min(520px, 100%);
   max-height: calc(100svh - 40px);
   overflow-y: auto;
+  /*
+   * Niente scorrimento ORIZZONTALE: con le tre difficoltà su una riga il
+   * contenuto poteva superare la larghezza del pannello di qualche pixel, e sul
+   * telefono compariva una barra orizzontale che spostava tutto. Le righe qui
+   * sotto sono state rese comprimibili (minmax(0, 1fr)); questo è la garanzia.
+   */
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -5680,11 +5925,47 @@ body {
   border-color: var(--danger);
 }
 
-/* Etichetta e scelte sulla STESSA riga: quattro righe invece di otto. */
+/*
+ * Etichetta e scelte sulla STESSA riga: quattro righe invece di otto.
+ *
+ * La seconda colonna è `minmax(0, 1fr)`: può COMPRIMERSI sotto il contenuto
+ * minimo dei pulsanti interni. Con `1fr` (minimo automatico = min-content) la
+ * riga delle difficoltà spingeva il pannello più largo dello schermo e nasceva
+ * lo scorrimento orizzontale.
+ */
 .sheet__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
+}
+
+.sheet__row > * {
+  min-width: 0;
+}
+
+/* Le tre difficoltà devono stare nella colonna anche quando è stretta. */
+.sheet__row .difficulty-options--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sheet__row .difficulty-option--compact {
+  padding: 10px 6px;
+  gap: 5px;
+}
+
+.sheet__row .difficulty-option__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Telefoni stretti: l'etichetta va sopra le scelte, che restano larghe. */
+@media (max-width: 430px) {
+  .sheet__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
 }
 
 .sheet__label {

@@ -908,6 +908,22 @@ export const useAppStore = create<AppState>()(
       // preferenze salvate (nickname, avatar, difficoltà, audio) e va mantenuta per non
       // azzerarle a chi ha già giocato. Non è visibile all'utente.
       name: 'boggle-it',
+      /*
+       * Fusione con le preferenze salvate.
+       *
+       * `audioSettings` viene fuso campo per campo: le preferenze scritte da una
+       * versione precedente non hanno `voiceVolume` (aggiunto dopo) e senza
+       * questo riempimento il cursore del volume della chat vocale partirebbe
+       * senza valore.
+       */
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<typeof current>;
+        return {
+          ...current,
+          ...saved,
+          audioSettings: { ...current.audioSettings, ...(saved.audioSettings ?? {}) },
+        };
+      },
       partialize: (s) => ({
         nickname: s.nickname,
         avatar: s.avatar,

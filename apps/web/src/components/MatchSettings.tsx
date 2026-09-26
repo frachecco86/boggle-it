@@ -16,11 +16,6 @@ interface MatchSettingsProps {
   onDifficulty: (d: Difficulty) => void;
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
-  /** Avvia la partita singola con queste impostazioni. */
-  onSolo: () => void;
-  /** Crea la stanza multiplayer con queste impostazioni. */
-  onCreate: () => void;
-  busy: boolean;
   onClose: () => void;
 }
 
@@ -33,10 +28,10 @@ interface MatchSettingsProps {
  * mentre si sceglieva. Qui il foglio si apre sopra la home, quindi la home resta
  * della stessa altezza e il menù sta **tutto in una schermata**.
  *
- * Le stesse impostazioni valgono per le due modalità: `Gioca da solo` parte con
- * queste, `Crea la stanza` le porta nella stanza multiplayer. Prima il single
- * player aveva una **seconda schermata** che richiedeva le stesse cose: due
- * schermate per una sola partita.
+ * Le stesse impostazioni valgono per le due modalità (`Gioca da solo` e `Crea la
+ * stanza` sono i tasti della home, sotto l'interruttore di modalità): qui si
+ * sceglie e si chiude. Prima ogni modalità aveva il suo tasto dentro al foglio,
+ * per cui la stessa scelta si poteva fare in due punti diversi.
  */
 export function MatchSettings({
   size,
@@ -47,9 +42,6 @@ export function MatchSettings({
   onDifficulty,
   onRounds,
   onDuration,
-  onSolo,
-  onCreate,
-  busy,
   onClose,
 }: MatchSettingsProps) {
   return (
@@ -140,11 +132,8 @@ export function MatchSettings({
         <RulesPanel />
 
         <div className="sheet__actions">
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={onSolo}>
-            Gioca da solo
-          </button>
-          <button type="button" className="btn btn--secondary" disabled={busy} onClick={onCreate}>
-            Crea la stanza
+          <button type="button" className="btn btn--primary" onClick={onClose}>
+            Fatto
           </button>
         </div>
       </div>

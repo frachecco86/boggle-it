@@ -107,7 +107,7 @@ function loudest(items: number[]): number {
 }
 
 describe('AudioEngine — volume delle esultanze', () => {
-  it('la propria parola suona a volume pieno, quella dell\'avversario più bassa', async () => {
+  it('la propria parola suona a volume pieno, quella dell\u2019avversario più bassa', async () => {
     const engine = await makeEngine();
 
     peaks = [];
@@ -126,11 +126,16 @@ describe('AudioEngine — volume delle esultanze', () => {
      * Mezzo volume (0.5) è il compromesso scelto: la parola dell'altro si sente
      * chiaramente ma resta distinta dalla propria, anche con una clip registrata
      * al posto del motivo sintetizzato.
+     *
+     * ENTRAMBI i valori sono stati dimezzati rispetto alle origini (le esultanze
+     * erano troppo invadenti): la propria è a metà, quella dell'avversario a un
+     * quarto del volume originale. Il rapporto 1:2 resta quello che conta.
      */
     expect(opponent).toBeLessThan(own);
     expect(opponent / own).toBeCloseTo(0.5, 2);
-    // Verifica che il volume assoluto sia udibile, non solo "più basso".
-    expect(opponent).toBeGreaterThan(0.05);
+    // La propria resta ben udibile; quella dell'avversario è sommessa ma c'è.
+    expect(own).toBeGreaterThan(0.08);
+    expect(opponent).toBeGreaterThan(0.03);
   });
 
   it('la differenza vale per tutte le lunghezze di parola', async () => {

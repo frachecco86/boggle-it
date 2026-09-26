@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { GridBoard } from '../components/GridBoard.js';
 import { Timer } from '../components/Timer.js';
-import { FoundCounter } from '../components/FoundCounter.js';
+import { GameStats } from '../components/GameStats.js';
 import { CurrentWord } from '../components/CurrentWord.js';
 import { BackHome } from '../components/BackHome.js';
 import { useSoloGame } from '../game/useSoloGame.js';
@@ -95,26 +95,37 @@ export function SoloGameScreen() {
   }
 
   const feedback = state.feedback;
-  const toastClass =
-    feedback?.kind === 'valid'
-      ? 'toast--valid'
-      : feedback?.kind === 'duplicate'
-        ? 'toast--duplicate'
-        : 'toast--invalid';
 
   return (
     <div className="screen game">
+      {/*
+       * Barra in alto su UNA riga: home, timer, informazioni del round e i due
+       * numeri della partita (punti e parole) in forma compatta, allineati a
+       * destra alla stessa altezza del timer.
+       *
+       * I due riquadri che stavano sotto la griglia (punteggio e conteggio
+       * parole) sono spariti da lì: occupavano l'altezza che serve alla griglia.
+       */}
       <div className="game__topbar">
         <BackHome confirm />
         <Timer timeLeftMs={state.timeLeftMs} totalMs={soloRoundDurationMs} />
         <div className="game__round">
-          Round {state.round}/{soloRounds} · {soloDifficulty}
+          <span className="game__round-num">
+            R{state.round}/{soloRounds}
+          </span>
+          <span className="game__round-diff">{soloDifficulty}</span>
         </div>
+        {/* I due numeri per ULTIMI: sono allineati al bordo destro. */}
+        <GameStats points={game.totalScore} words={state.found.length} />
       </div>
 
+      {/*
+       * Griglia e anteprima parola: nient'altro. La schermata non scorre
+       * (l'altezza è esattamente quella del viewport) e la griglia prende tutto
+       * lo spazio che avanza.
+       */}
       <div className="game__main">
-        {/* Anteprima della parola in composizione, sopra la griglia (stile Boggle). */}
-        <CurrentWord word={state.currentWord} />
+        <CurrentWord word={state.currentWord} feedback={feedback} />
         <GridBoard
           grid={state.grid!}
           selectedPath={state.selectedPath}
@@ -122,28 +133,7 @@ export function SoloGameScreen() {
           onCommit={game.commitPath}
           flashError={feedback?.kind === 'invalid'}
         />
-        <aside className="game__side">
-          <div className="score-chip">
-            <span className="score-chip__value">{game.totalScore}</span>
-            <span className="score-chip__label">punti</span>
-          </div>
-          {/* Solo il NUMERO di parole trovate: l'elenco rivelerebbe le soluzioni.
-              Altezza fissa, così non sposta nulla mentre si gioca. */}
-          <FoundCounter count={state.found.length} />
-        </aside>
       </div>
-
-      {feedback && (
-        <div
-          className={`toast ${toastClass}`}
-          onAnimationEnd={game.clearFeedback}
-          key={feedback.word + feedback.kind}
-        >
-          {feedback.kind === 'valid' && `✓ ${feedback.word.toUpperCase()} +${feedback.points}`}
-          {feedback.kind === 'duplicate' && `• ${feedback.word.toUpperCase()} — ${feedback.reason}`}
-          {feedback.kind === 'invalid' && `✗ ${feedback.word.toUpperCase()} — ${feedback.reason}`}
-        </div>
-      )}
     </div>
   );
 }

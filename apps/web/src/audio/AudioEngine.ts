@@ -43,6 +43,14 @@ export interface AudioSettings {
   sfxVolume: number;
   musicVolume: number;
   /**
+   * Volume delle VOCI della stanza (multiplayer).
+   *
+   * Separato dagli altri due: le voci non devono essere zittite dal muto degli
+   * effetti e nemmeno seguire il volume della musica. Sta sotto il master, così
+   * resta un solo volume generale.
+   */
+  voiceVolume: number;
+  /**
    * Traccia musicale attiva: id di una traccia del catalogo, oppure `'none'`.
    * Gli id non sono più solo quelli inclusi nel bundle: l'admin può aggiungere
    * tracce a runtime, quindi è una stringa.
@@ -55,6 +63,7 @@ const DEFAULT_SETTINGS: AudioSettings = {
   musicEnabled: true,
   sfxVolume: 0.6,
   musicVolume: 0.28,
+  voiceVolume: 1,
   musicTrack: DEFAULT_MUSIC_ID,
 };
 
@@ -106,13 +115,21 @@ export class AudioEngine {
    */
   private readonly opponentSfx = new Map<string, PersonalSfx>();
   /**
-   * Volume con cui si sentono le esultanze degli AVVERSARI: metà del proprio.
+   * Volume delle esultanze proprie (parola trovata).
+   *
+   * 0.5 = metà di quanto suonavano prima: le esultanze dei giocatori erano
+   * troppo invadenti, soprattutto in multiplayer dove se ne sommano molte.
+   */
+  private static readonly CELEBRATION_VOLUME_SCALE = 0.5;
+  /**
+   * Volume con cui si sentono le esultanze degli AVVERSARI: metà della metà.
    *
    * Si applica sia alla clip registrata dall'avversario sia al motivo
    * sintetizzato quando l'avversario non ha registrato quella fascia. Così le
-   * parole degli altri si distinguono a colpo d'orecchio dalle proprie.
+   * parole degli altri si distinguono a colpo d'orecchio dalle proprie e non
+   * coprono la propria partita.
    */
-  private static readonly OPPONENT_VOLUME_SCALE = 0.5;
+  private static readonly OPPONENT_VOLUME_SCALE = 0.25;
   /** Traccia attualmente caricata (per capire quando cambiarla). */
   private loadedTrack: MusicChoice | null = null;
   /** Catalogo corrente: tracce incluse + quelle caricate dall'admin. */
@@ -141,7 +158,7 @@ export class AudioEngine {
       this.musicGain.connect(this.masterGain);
 
       this.voiceGain = this.ctx.createGain();
-      this.voiceGain.gain.value = 1;
+      this.voiceGain.gain.value = this.settings.voiceVolume;
       this.voiceGain.connect(this.masterGain);
 
       this.unlocked = true;
@@ -219,13 +236,30 @@ export class AudioEngine {
   }
 
   setSettings(next: Partial<AudioSettings>): void {
-    this.settings = { ...this.settings, ...next };
+    /*
+     * Igiene dei numeri: le preferenze salvate da una versione precedente del
+     * gioco non hanno `voiceVolume`. Senza questo controllo il valore sarebbe
+     * `undefined` e `setTargetAtTime(undefined)` porterebbe il guadagno a NaN
+     * (audio muto e non più recuperabile senza ricaricare la pagina).
+     */
+    const merged = { ...this.settings, ...next };
+    const num = (v: number | undefined, fallback: number) =>
+      typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+    this.settings = {
+      ...merged,
+      sfxVolume: num(merged.sfxVolume, DEFAULT_SETTINGS.sfxVolume),
+      musicVolume: num(merged.musicVolume, DEFAULT_SETTINGS.musicVolume),
+      voiceVolume: num(merged.voiceVolume, DEFAULT_SETTINGS.voiceVolume),
+    };
     if (this.sfxGain && this.ctx) {
       this.sfxGain.gain.setTargetAtTime(this.settings.sfxVolume, this.ctx.currentTime, 0.05);
     }
     if (this.musicGain && this.ctx) {
       const target = this.settings.musicEnabled ? this.settings.musicVolume : 0;
       this.musicGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.4);
+    }
+    if (this.voiceGain && this.ctx) {
+      this.voiceGain.gain.setTargetAtTime(this.settings.voiceVolume, this.ctx.currentTime, 0.05);
     }
     if (this.settings.musicEnabled && this.unlocked) this.startMusic();
   }
@@ -356,8 +390,9 @@ export class AudioEngine {
       navigator.vibrate?.(30);
     }
     const slot = slotForLength(length);
-    if (this.personalSfx.play(slot, this.settings.sfxVolume)) return;
-    this.playSuccessMotif(length, 1);
+    const scale = AudioEngine.CELEBRATION_VOLUME_SCALE;
+    if (this.personalSfx.play(slot, this.settings.sfxVolume * scale)) return;
+    this.playSuccessMotif(length, scale, true);
   }
 
   /**
@@ -382,14 +417,14 @@ export class AudioEngine {
       // motivo sintetizzato, sempre a volume ridotto.
       if (bank?.play(slot, this.settings.sfxVolume * scale)) return;
     }
-    this.playSuccessMotif(length, scale);
+    this.playSuccessMotif(length, scale, false);
   }
 
   /**
    * Motivo sintetizzato per una parola trovata, per fascia di lunghezza.
    * `volumeScale` riduce il volume (0.5 per le parole degli avversari).
    */
-  private playSuccessMotif(length: number, volumeScale: number): void {
+  private playSuccessMotif(length: number, volumeScale: number, sparkle = false): void {
     // I motivi sono per lunghezza: si sceglie quello e si scala il volume.
     const motif =
       length >= 7
@@ -403,7 +438,7 @@ export class AudioEngine {
               : SUCCESS_MOTIFS['word-3'];
     if (!this.unlocked || !this.ctx) return;
     // Lo sparkle finale (parole da 7+ lettere) solo per le parole proprie.
-    this.playSuccess(motif, length >= 7 && volumeScale === 1, volumeScale);
+    this.playSuccess(motif, sparkle && length >= 7, volumeScale);
   }
 
   /** Nota singola breve: selezione di una lettera. */

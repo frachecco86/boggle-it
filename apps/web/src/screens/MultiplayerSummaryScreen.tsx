@@ -1,18 +1,46 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppStore } from '../state/store.js';
 import { BackHome } from '../components/BackHome.js';
 import { Podium } from '../components/Podium.js';
 import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
 import { RoundReplay } from '../components/RoundReplay.js';
+import { speakVictory } from '../audio/victorySpeech.js';
 
 /** Riepilogo multiplayer: classifica finale o di round + parole per giocatore. */
 export function MultiplayerSummaryScreen() {
-  const { roundResults, finalScores, missedWords, room, playerId, startRoom, leaveRoom } = useAppStore();
+  const {
+    roundResults,
+    finalScores,
+    missedWords,
+    room,
+    playerId,
+    startRoom,
+    leaveRoom,
+    nickname,
+    profile,
+    audioSettings,
+  } = useAppStore();
   const isFinal = Boolean(finalScores);
   const results = finalScores ?? roundResults ?? [];
   const isHost = room?.hostId === playerId;
   const isLastRound = room ? room.currentRound >= room.rounds : false;
   const sortedWords = [...missedWords].sort((a, b) => b.length - a.length);
+  /** La frase di vittoria si dice UNA volta sola (il riepilogo può ri-renderizzare). */
+  const spokenRef = useRef(false);
+
+  /*
+   * A fine partita, se ho vinto, una voce femminile entusiasta lo dice a voce
+   * alta con una frase presa a caso (vedi `victorySpeech`). Rispetta il muto
+   * degli effetti: chi ha zittito il gioco non si ritrova la voce addosso.
+   */
+  useEffect(() => {
+    if (!isFinal || spokenRef.current) return;
+    const winner = results[0];
+    if (!winner || !playerId || winner.playerId !== playerId) return;
+    spokenRef.current = true;
+    if (!audioSettings.sfxEnabled) return;
+    speakVictory((profile?.nickname ?? nickname) || 'campione');
+  }, [isFinal, results, playerId, profile, nickname, audioSettings.sfxEnabled]);
 
   /*
    * Replay "arcade" a fine round: appare UNA volta per round, poi si può passare
