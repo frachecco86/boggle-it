@@ -39,7 +39,8 @@ nessuna persistenza su database, nessuna PWA.
 
 ### 3.1 Scheda (griglia pre-generata)
 - N×N (`N ∈ {4,5,6}`) con **composizione controllata** per difficoltà:
-  un numero esatto di vocali, un limite di lettere rare (z k w x y j), il resto consonanti comuni.
+  un numero esatto di vocali, un limite di lettere rare **italiane** (solo `z`), il resto
+  consonanti comuni. Le lettere **non italiane** (`k w x y j`) non entrano mai in griglia.
 - La faccia `q` rappresenta il digramma **"Qu"** (Q+U inseparabili, come nel Boggle ufficiale).
 - La difficoltà agisce sulla composizione, non sulla dimensione (scelta separata).
 - Modello derivato empiricamente: le lettere rare sono il fattore dominante sul numero di
@@ -76,8 +77,9 @@ Requisiti di qualità (imposti in generazione, con rigenerazione finché non è 
 
 | | `standard` | `full` ("full criteria") |
 |---|---|---|
-| Composizione | modello storico: vocali 40–52% / 27–38% / 16–27%, rare ≤3% / ≤12% / ≤22% | rapporto vocali/consonanti per livello: **40–45% / 30–35% / <30%**, lettere rare solo nel difficile (almeno una obbligatoria) |
+| Composizione | modello storico: vocali 40–52% / 27–38% / 16–27%, `z` ≤3% / ≤12% / ≤12%, mai lettere non italiane | rapporto vocali/consonanti per livello: **40–45% / 30–35% / <30%**, almeno una `z` obbligatoria nel difficile, mai lettere non italiane |
 | Frequenza delle lettere | consonanti comuni | pool di consonanti per livello (alta frequenza → consonanti medie → lettere rare) |
+| Lettere non italiane | mai in griglia | mai in griglia |
 | Numero di parole | bande misurate (46–200 / 25–120 / 10–60 su 4×4) | dai criteri **+ il lato mancante misurato**: >120 e tetto 170 (4×4 facile), <45 e minimo 25 (4×4 difficile), ecc. |
 | Parole ancora | almeno 1 parola lunga | più parole lunghe: 2–4 da 6+ (4×4 facile), multiple da 7+ (5×5 facile), 8+ (6×6 facile) |
 | Lunghezza media | — | bande misurate (4,4 / 4,1 / 3,8 su 4×4) |

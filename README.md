@@ -12,7 +12,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
 ## Caratteristiche v0.1
 
-- **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare).
+- **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare **italiane**: `z`). Le lettere non italiane (`k w x y j`, quasi solo prestiti) non entrano mai in griglia.
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
 - **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**
