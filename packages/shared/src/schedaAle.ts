@@ -199,6 +199,43 @@ export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   noForeign: true,
 };
 
+/**
+ * Contatori della generazione: servono al report (`pnpm report:ale`) per dire
+ * quanti candidati sono stati scartati e perché.
+ *
+ * Un CAMPIONE può violare più di una regola insieme, quindi la somma di
+ * `railRejections` può superare `sampled`.
+ */
+export interface AleGenerationStats {
+  /** Griglie campionate, compresi i tentativi interni dei guard rails. */
+  sampled: number;
+  /** Campioni RESPINTI dai guard rails (almeno una regola violata). */
+  rejected: number;
+  /** Scarti per motivo dei guard rails (chiave = motivo, valore = conteggio). */
+  railRejections: Record<string, number>;
+  /** Tentativi esterni in cui i guard rails non hanno prodotto nessuna griglia. */
+  noGrid: number;
+  /** Candidati scartati perché fuori dall'intervallo di parole calibrato. */
+  wordCountOut: number;
+  /** Candidati scartati perché la difficoltà non è quella della fascia. */
+  difficultyOut: number;
+  /** Numero del tentativo che ha prodotto una scheda valida (`null` = ripiego). */
+  acceptedAttempt: number | null;
+}
+
+/** Contatori azzerati, pronti da passare a `generateAleGrid`/`generateAleScheda`. */
+export function newAleGenerationStats(): AleGenerationStats {
+  return {
+    sampled: 0,
+    rejected: 0,
+    railRejections: {},
+    noGrid: 0,
+    wordCountOut: 0,
+    difficultyOut: 0,
+    acceptedAttempt: null,
+  };
+}
+
 /** PRNG deterministico (mulberry32): stesso seme → stessa sequenza. */
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -298,11 +335,20 @@ export function generateAleGrid(
   rng: () => number,
   rails: AleGuardRails = DEFAULT_ALE_GUARD_RAILS,
   maxTries = 200,
+  stats?: AleGenerationStats,
 ): Grid | null {
   const total = size * size;
   for (let attempt = 0; attempt < maxTries; attempt++) {
     const tokens = sampleTokens(freq, total, rng);
-    if (guardRailIssues(tokens, size, rails).length === 0) return buildAleGrid(size, tokens);
+    const issues = guardRailIssues(tokens, size, rails);
+    if (stats) {
+      stats.sampled++;
+      if (issues.length > 0) stats.rejected++;
+      for (const issue of issues) {
+        stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
+      }
+    }
+    if (issues.length === 0) return buildAleGrid(size, tokens);
   }
   return null;
 }
@@ -553,6 +599,8 @@ export interface GenerateAleOptions {
   idIndex?: number;
   maxAttempts?: number;
   rails?: AleGuardRails;
+  /** Contatori della generazione (per il report): vedi `AleGenerationStats`. */
+  stats?: AleGenerationStats;
 }
 
 /**
@@ -581,6 +629,7 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
     idIndex = 0,
     maxAttempts = 500,
     rails = DEFAULT_ALE_GUARD_RAILS,
+    stats,
   } = options;
 
   const tier = calibration.tiers.find((t) => t.difficulty === difficulty) ?? calibration.tiers[1]!;
@@ -588,33 +637,43 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const rng = mulberry32((seed + attempt) >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails);
-    if (!grid) continue;
-    const stats = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
+    const grid = generateAleGrid(size, freq, rng, rails, 200, stats);
+    if (!grid) {
+      if (stats) stats.noGrid++;
+      continue;
+    }
+    const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
 
-    const inRange = stats.wordCount >= calibration.wordRange.lo && stats.wordCount <= calibration.wordRange.hi;
+    const inRange = stats_.wordCount >= calibration.wordRange.lo && stats_.wordCount <= calibration.wordRange.hi;
     const targetDifficulty = tier.targetDifficulty;
     const distance =
-      Math.abs(stats.wordCount - (calibration.wordRange.lo + calibration.wordRange.hi) / 2) /
+      Math.abs(stats_.wordCount - (calibration.wordRange.lo + calibration.wordRange.hi) / 2) /
         Math.max(1, calibration.wordRange.hi) +
-      Math.abs(stats.difficulty - targetDifficulty);
+      Math.abs(stats_.difficulty - targetDifficulty);
 
-    if (!best || distance < best.distance) best = { stats, grid, distance };
+    if (!best || distance < best.distance) best = { stats: stats_, grid, distance };
 
-    if (!inRange) continue;
-    const tierLabel = tierForDifficulty(stats.difficulty, calibration);
-    if (tierLabel !== difficulty) continue;
+    if (!inRange) {
+      if (stats) stats.wordCountOut++;
+      continue;
+    }
+    const tierLabel = tierForDifficulty(stats_.difficulty, calibration);
+    if (tierLabel !== difficulty) {
+      if (stats) stats.difficultyOut++;
+      continue;
+    }
 
-    return toAleScheda(size, difficulty, idPrefix, idStart, idIndex, grid, stats);
+    if (stats) stats.acceptedAttempt = attempt;
+    return toAleScheda(size, difficulty, idPrefix, idStart, idIndex, grid, stats_);
   }
 
   // Ripiego: il candidato più vicino (loggato dallo script di generazione).
   const fallback = best ?? (() => {
     // Nessun candidato utile: genera comunque una griglia valida al primo colpo.
     const rng = mulberry32(seed >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails) ?? buildAleGridFallback(size, freq, rng);
-    const stats = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
-    return { stats, grid, distance: Infinity };
+    const grid = generateAleGrid(size, freq, rng, rails, 200, stats) ?? buildAleGridFallback(size, freq, rng);
+    const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
+    return { stats: stats_, grid, distance: Infinity };
   })();
   return toAleScheda(size, difficulty, idPrefix, idStart, idIndex, fallback.grid, fallback.stats);
 }
@@ -670,12 +729,16 @@ export function sampleAleBoards(
   masterSeed = 0,
   rails: AleGuardRails = DEFAULT_ALE_GUARD_RAILS,
   lemmas?: Map<string, string>,
+  stats?: AleGenerationStats,
 ): AleBoardStats[] {
   const out: AleBoardStats[] = [];
   for (let i = 0; i < n; i++) {
     const rng = mulberry32((masterSeed + i + 1) >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails);
-    if (!grid) continue;
+    const grid = generateAleGrid(size, freq, rng, rails, 200, stats);
+    if (!grid) {
+      if (stats) stats.noGrid++;
+      continue;
+    }
     out.push(scoreAleBoard(grid, trie, common, { minLength: 3, lemmas }));
   }
   return out;

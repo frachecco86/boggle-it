@@ -13,7 +13,8 @@
     "gen:schede": "tsx scripts/gen-schede.ts",
     "gen:schede:ale": "tsx scripts/gen-schede-ale.ts",
     "verify:schede": "tsx scripts/verify-schede.ts",
-    "measure:schede": "tsx scripts/measure-schede.ts"
+    "measure:schede": "tsx scripts/measure-schede.ts",
+    "report:ale": "tsx scripts/report-ale.ts"
   },
   "dependencies": {
     "@boggle/dictionary": "workspace:*",

@@ -32,7 +32,9 @@ di formato ≤ 2, senza il campo, valgono `standard`.
 - [comune.md](./comune.md) — vocabolario, lessico, griglia, solver, formato scheda, lettere rare;
 - [standard.md](./standard.md) — l’algoritmo storico;
 - [full.md](./full.md) — i criteri completi;
-- [ale.md](./ale.md) — l’algoritmo ale (campionamento per frequenza e calibrazione).
+- [ale.md](./ale.md) — l’algoritmo ale (campionamento per frequenza e calibrazione);
+- [report/ale.md](./report/ale.md) — **numeri** della calibrazione e della prima generazione ale
+  (campioni respinti dai guard rails, fasce di difficoltà, verifica di riproduzione).
 
 In questo file: la **modalità apprendimento** (che usa le schede ale), la **taratura e
 verifica** degli algoritmi e la **verifica di fedeltà dei sorgenti**.

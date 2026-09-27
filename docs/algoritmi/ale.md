@@ -57,3 +57,7 @@ stesso file (`5-facile-016`…), per non collidere.
 
 **Stato**: 45 schede, **solo 5×5** (15 per difficoltà). La calibrazione è per
 dimensione: aggiungere altre dimensioni richiede una nuova calibrazione.
+
+**Numeri** di calibrazione e generazione (campioni respinti dai guard rails, fasce di
+difficoltà, verifica di riproduzione): [`report/ale.md`](./report/ale.md) — rigenerabili con
+`pnpm --filter @boggle/server report:ale`.
