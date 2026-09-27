@@ -8,7 +8,8 @@ chi clona il repo li trova già.
 
 | File | Versione | Note |
 |---|---|---|
-| `sbooble-0.36.2-debug.apk` | 0.36.2 | `versionCode 15` — fix: le schede Ale valgono su tutte le griglie |
+| `sbooble-0.37.0-debug.apk` | 0.37.0 | `versionCode 16` — regole e punteggi in una finestra a sé |
+| `sbooble-0.36.2-debug.apk` | 0.36.2 | `versionCode 15` — le schede Ale valgono su tutte le griglie |
 | `sbooble-0.36.0-debug.apk` | 0.36.0 | `versionCode 14` — schede Ale 4×4/5×5/6×6 e apprendimento |
 | `sbooble-0.12.1-debug.apk` | 0.12.1 | storico — `versionCode 13` |
 | `sbooble-0.6.0-debug.apk` | 0.6.0 | storico — cablato **senza** server (multiplayer non funzionante, `.env` ignorato da Vite: corretto in 0.12.1) |
@@ -21,6 +22,7 @@ Verifica integrità:
 
 ```bash
 sha256sum dist-android/*.apk
+# 71b477efe939828d779f1421e1d3c468f1428293448f7e88253bb57327ecd595  sbooble-0.37.0-debug.apk
 # edc7435a18793e48a9b828587ae9c6764701d4694f6d5421fcaeba073340a4eb  sbooble-0.36.2-debug.apk
 # 54c1a3693009bd43b1c5379396939322fa85032084d9d54def1b353f9a4bf4cc  sbooble-0.36.0-debug.apk
 # 96599dd4eb592e0a730a58e5db060a645e7c87f51bb2c2b5f381bf07933f27ba  sbooble-0.12.1-debug.apk
@@ -30,7 +32,7 @@ sha256sum dist-android/*.apk
 Installazione sul telefono:
 
 ```bash
-adb install -r dist-android/sbooble-0.36.2-debug.apk
+adb install -r dist-android/sbooble-0.37.0-debug.apk
 ```
 
 Oppure copia l'APK sul dispositivo e aprilo (richiede "Installa app da fonti

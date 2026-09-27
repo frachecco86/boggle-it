@@ -153,3 +153,35 @@ export function Lightbulb(props: Props) {
     </svg>
   );
 }
+
+/**
+ * Foglio con righe di testo: il tasto "Regole e punteggi".
+ *
+ * Perché un'icona e non l'emoji 📋 di prima: le emoji cambiano disegno da un
+ * dispositivo all'altro (Android, iOS e desktop mostrano facce diverse) e in
+ * un pulsante accanto al testo stonano. Il tratto è lo stesso delle altre icone,
+ * quindi eredita colore e tema dal pulsante che lo contiene.
+ *
+ * Un foglio con due righe (invece di una lista numerata) resta leggibile anche
+ * a 18px, dove i numeri diventerebbero una macchia.
+ */
+export function FileText(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+      <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <path d="M8 13h8" />
+      <path d="M8 17h5" />
+    </svg>
+  );
+}
+
+/** X di chiusura: intestazione dei pannelli sovrapposti. */
+export function Close(props: Props) {
+  return (
+    <svg {...base(props)}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}

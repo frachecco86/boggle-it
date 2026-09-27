@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { House, Mic, MicOff, Share2 } from './icons.js';
+import { House, Mic, MicOff, Share2, Close, FileText } from './icons.js';
 
 /** Il tratto di un'icona, così com'è nell'HTML generato. */
 const markup = (icon: (props: { size?: number }) => JSX.Element, size?: number) =>
@@ -69,5 +69,21 @@ describe('icone: i tratti sono quelli giusti', () => {
     expect(html).toContain('<circle cx="6" cy="12" r="3"');
     expect(html).toContain('<circle cx="18" cy="19" r="3"');
     expect(html.match(/<line /g)).toHaveLength(2);
+  });
+
+  it('la X di chiusura ha due tratti incrociati', () => {
+    const html = markup(Close);
+    expect(html).toContain('M18 6 6 18');
+    expect(html).toContain('m6 6 12 12');
+  });
+
+  it('il foglio con righe di testo ha angolo piegato e due righe', () => {
+    const html = markup(FileText);
+    // Angolo in alto a destra piegato: è ciò che distingue il foglio da un rettangolo.
+    expect(html).toContain('M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z');
+    expect(html).toContain('M14 2v4a2 2 0 0 0 2 2h4');
+    // Le due righe di testo, di lunghezza diversa.
+    expect(html).toContain('M8 13h8');
+    expect(html).toContain('M8 17h5');
   });
 });

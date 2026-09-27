@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.36.2';
+export const APP_VERSION = '0.37.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,42 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.37.0',
+    date: '2026-09-27',
+    title: 'Regole e punteggi in una finestra a sé, con l’icona',
+    promo: {
+      emoji: '📄',
+      headline: 'I punteggi si leggono tutti',
+      text: 'Il pannello “Regole e punteggi” si apriva dentro le impostazioni partita e finiva tagliato: la tabella dei punti si vedeva solo a metà. Ora si apre in una finestra sua, con l’icona accanto al titolo, e si legge tutta.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**La tabella dei punteggi non è più tagliata.** Il pannello si apriva *dentro* le impostazioni partita, che hanno un’altezza massima: il contenuto cresceva oltre e la parte finale — proprio l’elenco dei punti — finiva fuori. Ora si apre in una finestra sopra le impostazioni, con un solo scorrimento: si legge da “3 lettere” fino a “10 o più”.',
+          'Su schermi larghi la finestra è **centrata**, su telefono sale dal basso come le impostazioni: si vede sempre che sotto c’è il livello da cui si è arrivati.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Un’icona al posto dell’emoji** 📋: le emoji cambiano disegno da un telefono all’altro (e su Android hanno un aspetto tutto loro), un’icona disegnata resta identica ovunque. È accanto al titolo, dentro la finestra.',
+          '**Si chiude in tre modi**: la ✕ in alto a destra, il tasto *Ho capito* in fondo o toccando fuori. Con la tastiera basta *Esc*.',
+          'Il tasto nelle impostazioni è ora una **riga con bordo** e la freccia `›`, come ci si aspetta da qualcosa che apre una schermata; prima era senza bordo perché era il cappello del menù a tendina.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '*Esc* chiude il pannello **senza chiudere le impostazioni**: l’evento viene fermato prima di arrivare al foglio sotto, che ha la sua chiusura sullo stesso tasto. Senza questo, un solo *Esc* avrebbe buttato via le impostazioni appena scelte.',
+          'All’apertura il fuoco va sulla ✕, così il pannello è subito controllabile con la tastiera e i lettori di schermo annunciano il titolo.',
+          'Icone `FileText` e `Close` disegnate a mano come le altre (24×24, tratto 2), con test sui tratti esatti: nessuna dipendenza in più e l’aspetto resta coerente.',
+          'Il menù a tendina era un caso di **scorrimento annidato** (il pannello dentro il foglio, entrambi con `overflow`): la causa era strutturale, non una questione di altezze da ritoccare.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.36.2',
     date: '2026-09-27',

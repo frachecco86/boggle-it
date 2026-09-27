@@ -4889,13 +4889,13 @@ body::before {
 /* Pannello regole e punteggi                                          */
 /* ------------------------------------------------------------------ */
 
-.rules {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  overflow: hidden;
-}
-
+/*
+ * Tasto "Regole e punteggi": apre un MODAL (vedi RulesPanel.tsx).
+ *
+ * Prima era un menù a tendina che si espandeva in linea dentro il foglio delle
+ * impostazioni, che ha `overflow-y: auto`: il contenuto veniva tagliato e per
+ * leggere i punteggi serviva uno scorrimento annidato. Qui è solo il pulsante.
+ */
 .rules__toggle {
   width: 100%;
   display: flex;
@@ -4903,7 +4903,8 @@ body::before {
   gap: 10px;
   padding: 12px 16px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   color: var(--text);
   font-family: inherit;
   font-size: 0.9rem;
@@ -4917,7 +4918,9 @@ body::before {
 }
 
 .rules__icon {
-  font-size: 1rem;
+  display: grid;
+  place-content: center;
+  color: var(--text-dim);
 }
 
 .rules__title {
@@ -4925,21 +4928,130 @@ body::before {
   text-align: left;
 }
 
+/* Freccia che invita ad aprire: ruotata, indica "entra nel pannello". */
 .rules__chevron {
   color: var(--text-dim);
-  transition: transform 0.2s;
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
-.rules__chevron--open {
-  transform: rotate(180deg);
+/*
+ * MODAL delle regole.
+ *
+ * `z-index` più alto del foglio impostazioni (70): il pannello si apre SOPRA,
+ * quindi il foglio sotto resta intatto e non serve scorrere due contenitori.
+ */
+.rules-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
 }
 
-.rules__body {
+.rules-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: color-mix(in srgb, #0a0b12 45%, transparent);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+  animation: fade-in 0.2s ease-out;
+}
+
+/*
+ * Su telefono il pannello sale dal basso (come il foglio delle impostazioni) e
+ * si limita all'80% dell'altezza: si vede sempre che c'è un livello sotto, e il
+ * contenuto che avanza scorre QUI, in un contenitore solo.
+ */
+.rules-modal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(85svh, 640px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -12px 40px rgba(20, 26, 50, 0.32);
+  animation: sheet-up 0.28s cubic-bezier(0.2, 1, 0.4, 1);
+}
+
+/* Su schermi larghi è una finestra centrata, non un foglio dal basso. */
+@media (min-width: 600px) {
+  .rules-modal {
+    align-items: center;
+  }
+
+  .rules-modal__panel {
+    border-radius: var(--radius-lg);
+    max-height: min(80vh, 620px);
+  }
+}
+
+.rules-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rules-modal__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1rem;
+}
+
+.rules-modal__title-icon {
+  display: grid;
+  place-content: center;
+  color: var(--primary);
+}
+
+.rules-modal__close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.rules-modal__close:hover {
+  color: var(--danger);
+}
+
+/*
+ * UNICO punto di scorrimento del modal: l'intestazione e il piè di pagina
+ * restano fissi, quindi il titolo e il tasto di chiusura non escono mai dallo
+ * schermo mentre si legge la tabella dei punteggi.
+ */
+.rules-modal__body {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 0 16px 16px;
-  animation: screen-in 0.22s ease-out;
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rules-modal__foot {
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+}
+
+.rules-modal__foot .btn {
+  width: 100%;
 }
 
 .rules__how {
