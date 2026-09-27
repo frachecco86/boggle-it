@@ -103,10 +103,19 @@ describe('ale: guard rails', () => {
     expect(issues.some((i) => i.includes('z'))).toBe(true);
   });
 
-  it('rifiuta lettere non italiane', () => {
-    const tokens = ['j', 'a', 'x', 'a', 'e', 'i', 'a', 'e', 'i'];
-    const issues = guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS);
-    expect(issues.some((i) => i.includes('non italiani'))).toBe(true);
+  it('le lettere non italiane sono ammesse con i rail di default', () => {
+    /*
+     * La spec dice che l'alfabeto è di 26 token (QU compreso) e che si campiona
+     * da quello: `j k w x y` esistono in `Dict'` (prestiti e nomi stranieri),
+     * quindi NON vengono escluse. La regola resta disponibile per chi la vuole.
+     */
+    const tokens = ['j', 'a', 'x', 'b', 'e', 'c', 'o', 'f', 'i'];
+    expect(guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS)).toHaveLength(0);
+    expect(
+      guardRailIssues(tokens, 3, { ...DEFAULT_ALE_GUARD_RAILS, noForeign: true }).some((i) =>
+        i.includes('non italiani'),
+      ),
+    ).toBe(true);
   });
 });
 

@@ -187,7 +187,7 @@ export interface AleGuardRails {
   rareCap: boolean;
   /** Nessuna riga o colonna di sole consonanti. */
   noDeadLines: boolean;
-  /** Nessun token non italiano (J K W X Y): scelta del progetto, non della spec. */
+  /** Nessun token non italiano (J K W X Y). SPEC: opzionale; qui è spento. */
   noForeign: boolean;
 }
 
@@ -196,7 +196,20 @@ export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   vowels: { min: 0.38, max: 0.52 },
   rareCap: true,
   noDeadLines: true,
-  noForeign: true,
+  /*
+   * `noForeign: false` di proposito: la spec dice che l'alfabeto è di **26
+   * token** (`QU` compreso) e che il campionamento si fa da quello.
+   *
+   * `Freq'` NON contiene "solo lettere italiane": `Dict'` comprende i prestiti e
+   * i nomi stranieri del dizionario (`jazz`, `bowling`, `browser`, `ayatollah`,
+   * `ajaccio`…), quindi `j k w x y` hanno frequenza piccola ma non nulla
+   * (0,04–0,13% delle voci, 153–481 parole ciascuno). Campionando i 26 token,
+   * circa il 2% delle griglie contiene una di quelle lettere: con il rail attivo
+   * venivano scartate, cioè si campionava da un alfabeto più piccolo di quello
+   * dichiarato. La regola resta disponibile (`noForeign: true`) per chi vuole
+   * escluderle: è un'opzione della spec, non un requisito.
+   */
+  noForeign: false,
 };
 
 /**

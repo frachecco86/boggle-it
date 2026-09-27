@@ -46,9 +46,16 @@ Senza la radice la difficoltà era gonfiata dalla morfologia (0,80/0,85/0,89);
 con la radice scende a valori realistici (**0,51/0,57/0,64**).
 
 **Guard rails (ATTIVI, scelta di progetto):** banda vocali 38–52%, al più una tra
-`H`/`Z`/`QU`, nessuna riga o colonna di sole consonanti, nessuna lettera non
-italiana. La spec li dà opzionali: qui sono fissi e **devono essere identici in
-calibrazione e produzione** (cambiarli invalida `calibration.json`).
+`H`/`Z`/`QU`, nessuna riga o colonna di sole consonanti. La spec li dà opzionali: qui sono
+fissi e **devono essere identici in calibrazione e produzione** (cambiarli invalida
+`calibration.json`).
+
+**Lettere non italiane (`j k w x y`):** NON escluse. Fanno parte dei **26 token**
+dell'alfabeto, da cui la spec dice di campionare, e in `Dict'` hanno frequenza piccola ma non
+nulla (0,04–0,13% delle voci: `jazz`, `bowling`, `browser`, `taxi`, `yogurt`…). Il guard rail
+`noForeign` che le scartava è **spento** dal 27/09/2026: era una scelta non prevista dalla
+spec e faceva campionare da un alfabeto più piccolo di quello dichiarato. Numeri e dettagli:
+[`report/ale.md`](./report/ale.md).
 
 **Produzione**: ciclo di reiezione con seme (`seed + attempt`), 500 tentativi,
 ripiego sul candidato più vicino. Le schede hanno `words === allWords` (nessuna

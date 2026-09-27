@@ -99,6 +99,10 @@ Valgono per tutti e tre gli algoritmi: [standard](./standard.md), [full](./full.
 
 ## Appendice — Lettere rare e lettere non italiane
 
+> Riguarda le varianti **`standard` e `full`** (composizione in `grid.ts`). La variante
+> **`ale`** segue la propria spec: lì si campiona dai **26 token** e `j k w x y` sono
+> ammesse — vedi [`ale.md`](./ale.md) e [`report/ale.md`](./report/ale.md).
+
 La separazione è ora nel codice: `RARE_ITALIAN = ['z']` e
 `FOREIGN_LETTERS = ['k','w','x','y','j']` (`packages/shared/src/grid.ts`).
 
@@ -107,8 +111,8 @@ La separazione è ora nel codice: `RARE_ITALIAN = ['z']` e
 - **`k w x y j` sono quasi tutte prestiti/derivati**: k 481, x 327, y 287, w 264,
   j 153 voci; nella fascia *facile* (prime 5 000) solo 33 parole in tutto
   (`taxi`, `weekend`, `show`, `killer`, `gay`…).
-- **Scelta implementata**: `foreignMax: 0` in tutte le difficoltà — le lettere non
-  italiane **non entrano mai in griglia**. Le parole straniere restano nel
+- **Scelta implementata (standard/full)**: `foreignMax: 0` in tutte le difficoltà — le
+  lettere non italiane **non entrano mai in griglia**. Le parole straniere restano nel
   dizionario e sono accettate se componibili con altre lettere.
 - Perché la separazione:
   - `z` = rarità giocabile; `k w x y j` = lettere straniere, in gran parte "celle

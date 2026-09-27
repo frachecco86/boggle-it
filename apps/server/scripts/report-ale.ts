@@ -111,10 +111,14 @@ function main(): void {
   console.log(
     `  token più frequenti   ${freq.ordered.slice(0, 10).map((t) => `${t.token} ${(t.freq * 100).toFixed(1)}%`).join(' · ')}`,
   );
-  console.log(
-    `  guard rails           vocali ${pct(DEFAULT_ALE_GUARD_RAILS.vowels!.min)}–${pct(DEFAULT_ALE_GUARD_RAILS.vowels!.max)} · ` +
-      `tetto 1 per ${['h', 'z', 'qu'].join('/')} · nessuna riga/colonna di sole consonanti · nessuna lettera non italiana`,
-  );
+  const rails = DEFAULT_ALE_GUARD_RAILS;
+  const railText = [
+    rails.vowels ? `vocali ${pct(rails.vowels.min)}–${pct(rails.vowels.max)}` : 'vocali libere',
+    rails.rareCap ? 'tetto 1 per h/z/qu' : 'nessun tetto sui token rari',
+    rails.noDeadLines ? 'nessuna riga/colonna di sole consonanti' : 'righe/colonne libere',
+    rails.noForeign ? 'nessuna lettera non italiana' : 'lettere non italiane AMMESSE (alfabeto di 26 token)',
+  ].join(' · ');
+  console.log(`  guard rails           ${railText}`);
 
   // -------------------------------------------------------------- calibrazione
   const calStats = newAleGenerationStats();
