@@ -53,6 +53,8 @@ schede pre-calcolate** (`packages/shared/schede/`). Ogni scheda contiene la grig
 le parole trovabili. Vantaggi: partite riproducibili, soluzioni verificate, nessun solver a
 runtime, e la possibilità di **filtrare la qualità** delle schede (parole lunghe, parole comuni).
 
+Dettaglio dei tre algoritmi (standard, full, ale): **[`docs/algoritmi/`](docs/algoritmi/README.md)**.
+
 **Algoritmo di generazione** (`packages/shared/src/schedaGen.ts`): tre trie per fascia di
 **frequenza d'uso** (5.000 / 20.000 / 60.000 parole più frequenti, da `frequency-it.txt`) e
 griglia con la **composizione controllata** della difficoltà (vocali e lettere rare, misurate).

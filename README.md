@@ -166,6 +166,8 @@ pnpm gen:schede -- --size 4 --difficolta facile --n 60
 Le schede generate con i **criteri completi** portano `variant: "full"` e l’etichetta **FULL**
 nella pagina "Sfoglia le schede" (dove si possono anche filtrare).
 
+Come funzionano i tre algoritmi (con criteri e numeri misurati): **[`docs/algoritmi/`](docs/algoritmi/README.md)**.
+
 L'admin può generarne altre a runtime dal pannello `/admin` (richiede `ADMIN_TOKEN`).
 Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata).
 

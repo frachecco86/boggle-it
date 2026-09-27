@@ -20,7 +20,8 @@ export function letterValue(letter: string): string {
  *  - la quota di vocali (senza vocali non si formano sillabe)
  *  - il numero di lettere rare, che è il fattore dominante.
  *
- * ATTENZIONE, da non confondere (vedi DOCS/SCHEDE-ALGORITMO.md, Appendice):
+ * ATTENZIONE, da non confondere (vedi docs/algoritmi/comune.md, appendice "Lettere rare
+ * e lettere non italiane"):
  *  - `RARE_ITALIAN` = ['z'] è una lettera ITALIANA rara, produttiva (35k voci);
  *  - `FOREIGN_LETTERS` = ['k','w','x','y','j'] sono lettere NON italiane, quasi
  *    solo prestiti/derivati (k 481, x 327, y 287, w 264, j 153 voci): in griglia
