@@ -29,8 +29,8 @@ export function HomeScreen() {
     soloRoundDurationMs,
     setSoloSetup,
     soloRounds,
-    schedaVariant,
-    setSchedaVariant,
+    refreshAppConfig,
+    schedaVariantFor,
     learningMode,
     setLearningMode,
   } = useAppStore();
@@ -58,6 +58,15 @@ export function HomeScreen() {
   }, []);
 
   /*
+   * Configurazione globale (tipo di scheda di default): la decide l'admin e va
+   * riletta all'ingresso in home. Così una modifica fatta dal pannello si vede
+   * alla prima partita successiva, senza ricaricare la pagina.
+   */
+  useEffect(() => {
+    void refreshAppConfig();
+  }, [refreshAppConfig]);
+
+  /*
    * Link di invito: se l'indirizzo contiene `?stanza=CODICE` il codice viene
    * scritto nel campo "Entra" e si spiega cosa fare. Non si entra da soli:
    * l'invitato può scegliere prima il proprio nome o il profilo, e un ingresso
@@ -75,6 +84,9 @@ export function HomeScreen() {
   const [hostDifficulty, setHostDifficulty] = useState<Difficulty>(soloDifficulty);
   const [hostDurationMs, setHostDurationMs] = useState(soloRoundDurationMs);
   const [hostRounds, setHostRounds] = useState(soloRounds);
+
+  /** Variante in vigore per la griglia scelta (le "ale" sono solo 5×5). */
+  const schedaVariant = schedaVariantFor(hostGridSize);
 
   const handleJoin = async () => {
     if (code.trim().length < 4) return;
@@ -301,12 +313,6 @@ export function HomeScreen() {
       <AudioSettings />
 
       <div className="home__links">
-        <button
-          className="btn btn--ghost"
-          onClick={() => setScreen('scheda')}
-        >
-          Sfoglia le schede
-        </button>
         <button className="btn btn--ghost" onClick={() => setScreen('admin')}>
           Admin
         </button>
@@ -348,7 +354,6 @@ export function HomeScreen() {
           onDifficulty={setHostDifficulty}
           onRounds={setHostRounds}
           onDuration={setHostDurationMs}
-          onVariant={setSchedaVariant}
           onClose={() => setShowSettings(false)}
         />
       )}

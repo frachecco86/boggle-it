@@ -228,10 +228,10 @@ export function useSoloGame(options: UseSoloGameOptions) {
       try {
         /*
          * La scheda si pesca a caso: nessun giocatore la conosce in anticipo.
-         * I criteri (standard / full criteria) sono la scelta del giocatore,
-         * fatta in home e salvata nello store.
+         * I criteri NON sono più una scelta del giocatore: li imposta l'admin a
+         * livello globale, quindi si legge la variante in vigore per la griglia.
          */
-        const next = await loadRandomScheda(gridSize, difficulty, useAppStore.getState().schedaVariant);
+        const next = await loadRandomScheda(gridSize, difficulty, useAppStore.getState().schedaVariantFor(gridSize));
         if (!next) throw new Error('Nessuna scheda disponibile');
         setScheda(next);
         // Serve al catalogo Parole per il filtro "solo la scheda in corso".

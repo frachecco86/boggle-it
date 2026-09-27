@@ -46,6 +46,15 @@ export function App() {
   }, []);
 
   /**
+   * Configurazione globale (tipo di scheda di default), decisa dall'admin.
+   * Si legge all'avvio: senza, il single player potrebbe partire con `standard`
+   * mentre il server ha un default diverso.
+   */
+  useEffect(() => {
+    void useAppStore.getState().refreshAppConfig();
+  }, []);
+
+  /**
    * Idrata il profilo attivo all'avvio.
    *
    * Senza questo, dopo un reload lo store partiva con `sfxUrls` vuoto e `profile`

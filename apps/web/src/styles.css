@@ -885,6 +885,21 @@ body::before {
   font-weight: 600;
 }
 
+/*
+ * `pill--label`: una pill NON interattiva.
+ *
+ * Serve dove un valore è deciso altrove (il tipo di scheda lo imposta l'admin) e
+ * va solo mostrato: stesso aspetto delle pill selezionabili, ma senza cursore a
+ * mano né effetto al passaggio, così non sembra cliccabile.
+ */
+.pill--label {
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* ---------- Griglia e tile ---------- */
 
 /*
@@ -2362,6 +2377,12 @@ body::before {
   color: var(--text-dim);
 }
 
+/* Variante in linea: l'etichetta del tipo di scheda accanto, non su riga propria. */
+.settings-readonly--inline {
+  align-items: center;
+  min-height: 36px;
+}
+
 .lobby__waiting {
   text-align: center;
   color: var(--text-dim);
@@ -3390,6 +3411,27 @@ body::before {
 
 .admin__section {
   margin-bottom: 26px;
+}
+
+/* Titolo di sezione con un comando a destra (es. "Sfoglia le schede"). */
+.admin__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/*
+ * Sezione pericolosa (cancellazione): bordo di avviso.
+ * Non cambia il colore del testo — l'errore è già chiaro dal pulsante — ma
+ * separa visivamente l'area irreversibile dal resto del pannello.
+ */
+.admin__section--danger {
+  border: 1px solid color-mix(in srgb, #c0392b 45%, var(--border));
+  border-radius: 12px;
+  padding: 16px;
+  background: color-mix(in srgb, #c0392b 6%, transparent);
 }
 
 .admin__form {

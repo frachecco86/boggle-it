@@ -6,7 +6,6 @@ import {
   ROUND_DURATIONS_SEC,
   SCHEDA_VARIANT_HINTS,
   SCHEDA_VARIANT_LABELS,
-  SCHEDA_VARIANTS,
   type GridSize,
 } from '@boggle/shared';
 import { useAppStore } from '../state/store.js';
@@ -260,36 +259,19 @@ export function LobbyScreen() {
               ))}
             </div>
 
-            {/* Criteri delle schede: cambia l'insieme da cui si pesca la scheda.
-                Le "Ale" esistono solo su 5×5, quindi sceglierle imposta anche la
-                griglia (altrimenti non troverebbero schede). */}
+            {/*
+             * Criteri delle schede: ETICHETTA, non un selettore.
+             *
+             * La variante la imposta l'admin a livello globale: l'host non può
+             * cambiarla. Resta visibile qui perché in lobby si vede cosa si sta
+             * per giocare (e il server la applica comunque).
+             */}
             <span className="field__label">Schede</span>
-            <div className="rounds-options">
-              {SCHEDA_VARIANTS.map((v) => (
-                <button
-                  key={v}
-                  className={`pill${variant === v ? ' pill--active' : ''}`}
-                  title={SCHEDA_VARIANT_HINTS[v]}
-                  onClick={() =>
-                    configureRoom(
-                      v === 'ale' ? 5 : room.gridSize,
-                      room.difficulty,
-                      room.rounds,
-                      room.roundDurationMs,
-                      room.musicId,
-                      room.maxPlayers,
-                      v,
-                    )
-                  }
-                >
-                  {SCHEDA_VARIANT_LABELS[v]}
-                </button>
-              ))}
+            <div className="settings-readonly settings-readonly--inline">
+              <span title={SCHEDA_VARIANT_HINTS[variant]}>{SCHEDA_VARIANT_LABELS[variant]}</span>
             </div>
             <p className="settings-host__hint">
-              {variant === 'ale'
-                ? 'Le schede Ale richiedono la griglia 5×5: sceglierle la imposta automaticamente.'
-                : SCHEDA_VARIANT_HINTS[variant]}
+              Il tipo di scheda è impostato dall'amministratore e vale per tutte le partite.
             </p>
 
             <MusicPicker

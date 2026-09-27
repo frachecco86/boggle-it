@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
   resolveSchedaVariant,
+  type AppConfig,
   type Difficulty,
   type Grid,
   type GridSize,
@@ -221,13 +222,13 @@ interface AppState {
   soloRoundDurationMs: number;
   soloRounds: number;
   /**
-   * Insieme di criteri delle schede da giocare (`standard` o `full`).
+   * Configurazione globale decisa dall'admin (tipo di scheda di default).
    *
-   * Vale sia per il single player sia per le stanze create da questo dispositivo:
-   * è una scelta del giocatore, non della partita. La stanza la espone in
-   * `RoomState.schedaVariant` perché tutti giochino le stesse schede.
+   * NON è una preferenza del giocatore: arriva dal server (`GET /config`) e si
+   * applica a single player e stanze. Prima il giocatore sceglieva i criteri in
+   * home e in lobby; ora li decide solo l'amministratore.
    */
-  schedaVariant: SchedaVariant;
+  appConfig: AppConfig;
   /**
    * Modalità apprendimento (single player): suggerimento animato sulla board e
    * definizione della parola appena trovata. Attiva il tempo infinito.
@@ -315,8 +316,17 @@ interface AppState {
   setNickname: (n: string) => void;
   setAvatar: (a: Avatar) => void;
   setSoloSetup: (gridSize: GridSize, difficulty: Difficulty, rounds: number, roundDurationMs: number) => void;
-  /** Cambia l'insieme di criteri delle schede (standard / full criteria). */
-  setSchedaVariant: (variant: SchedaVariant) => void;
+  /**
+   * Ricarica la configurazione globale dal server. Chiamata all'avvio e quando
+   * l'admin la modifica: le partite in corso continuano con la variante già
+   * assegnata alla stanza.
+   */
+  refreshAppConfig: () => Promise<void>;
+  /**
+   * Variante delle schede in vigore: quella decisa dall'admin, con la
+   * compatibilità di dimensione (le "ale" sono solo 5×5).
+   */
+  schedaVariantFor: (size: GridSize) => SchedaVariant;
   setLearningMode: (on: boolean) => void;
   setAudioSettings: (next: Partial<AudioSettings>) => void;
   createRoom: (
@@ -337,7 +347,6 @@ interface AppState {
     roundDurationMs: number,
     musicId?: MusicChoice,
     maxPlayers?: number,
-    schedaVariant?: SchedaVariant,
   ) => void;
   submitWord: (word: string, path: number[]) => Promise<{ accepted: boolean; reason?: string; points?: number; unique?: boolean }>;
   leaveRoom: () => void;
@@ -354,7 +363,7 @@ export const useAppStore = create<AppState>()(
       soloDifficulty: 'normale',
       soloRoundDurationMs: 180_000,
       soloRounds: 3,
-      schedaVariant: 'standard',
+      appConfig: { defaultSchedaVariant: 'standard' },
       learningMode: false,
       audioSettings: audio.getSettings(),
       roomCode: null,
@@ -779,9 +788,29 @@ export const useAppStore = create<AppState>()(
         set({ audioSettings: audio.getSettings() });
       },
 
-      setSchedaVariant: (variant) => set({ schedaVariant: resolveSchedaVariant(variant) }),
-      setLearningMode: (on) => set({ learningMode: on }),
+      refreshAppConfig: async () => {
+        /*
+         * Configurazione globale: se il server non risponde si tiene quella
+         * corrente (default `standard`). Non è un errore da mostrare all'utente:
+         * la partita deve poter iniziare comunque, con un default sensato.
+         */
+        try {
+          const res = await fetch(`${SERVER_BASE}/config`);
+          if (!res.ok) return;
+          const body = (await res.json()) as Partial<AppConfig>;
+          set({ appConfig: { defaultSchedaVariant: resolveSchedaVariant(body.defaultSchedaVariant) } });
+        } catch {
+          /* server non raggiungibile: si mantiene la configurazione corrente */
+        }
+      },
 
+      schedaVariantFor: (size) => {
+        const variant = get().appConfig.defaultSchedaVariant;
+        // Le schede "ale" esistono solo su 5×5: altrove si usa `standard`.
+        return variant === 'ale' && size !== 5 ? 'standard' : variant;
+      },
+
+      setLearningMode: (on) => set({ learningMode: on }),
       createRoom: async (gridSize, difficulty, rounds, roundDurationMs, maxPlayers) => {
         const socket = getSocket();
         const nickname = get().nickname || 'Host';
@@ -797,8 +826,11 @@ export const useAppStore = create<AppState>()(
               rounds,
               roundDurationMs,
               maxPlayers,
-              // Criteri delle schede scelti in home: valgono per tutta la stanza.
-              schedaVariant: get().schedaVariant,
+              /*
+               * I criteri delle schede li decide l'admin: NON si mandano più dal
+               * client. Il server li impone comunque (ignora questo campo),
+               * quindi non serve tenerlo sincronizzato qui.
+               */
               token: activeToken() ?? undefined,
             },
             (res) => {
@@ -858,7 +890,7 @@ export const useAppStore = create<AppState>()(
         getSocket().emit('room:shuffleScheda', { code });
       },
 
-      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers, schedaVariant) => {
+      configureRoom: (gridSize, difficulty, rounds, roundDurationMs, musicId, maxPlayers) => {
         const code = get().roomCode;
         if (!code) return;
         getSocket().emit('room:config', {
@@ -870,8 +902,11 @@ export const useAppStore = create<AppState>()(
           musicId,
           // Se non specificato manteniamo quello attuale della stanza.
           maxPlayers: maxPlayers ?? get().room?.maxPlayers ?? 8,
-          // Idem per i criteri delle schede: senza il parametro non si toccano.
-          schedaVariant: schedaVariant ?? get().room?.schedaVariant ?? 'standard',
+          /*
+           * La variante delle schede NON si manda: la impone il server con il
+           * default deciso dall'admin. Il campo è opzionale nel payload, quindi
+           * ometterlo è corretto anche per i client aggiornati.
+           */
         });
       },
 
@@ -959,7 +994,6 @@ export const useAppStore = create<AppState>()(
         soloDifficulty: s.soloDifficulty,
         soloRounds: s.soloRounds,
         soloRoundDurationMs: s.soloRoundDurationMs,
-        schedaVariant: s.schedaVariant,
         audioSettings: s.audioSettings,
         playerIds: s.playerIds,
         adminToken: s.adminToken,

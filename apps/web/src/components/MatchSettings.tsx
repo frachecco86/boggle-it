@@ -4,7 +4,6 @@ import {
   ROUND_DURATIONS_SEC,
   SCHEDA_VARIANT_HINTS,
   SCHEDA_VARIANT_LABELS,
-  SCHEDA_VARIANTS,
   type Difficulty,
   type GridSize,
   type SchedaVariant,
@@ -16,7 +15,11 @@ interface MatchSettingsProps {
   difficulty: Difficulty;
   rounds: number;
   durationMs: number;
-  /** Insieme di criteri delle schede da giocare. */
+  /**
+   * Criteri delle schede in vigore, decisi dall'admin. Qui sono SOLO un'etichetta:
+   * il giocatore non può cambiarli, quindi la riga mostra il valore e la sua
+   * spiegazione, senza pulsanti.
+   */
   variant: SchedaVariant;
   /**
    * Modalità apprendimento attiva (si attiva dal tasto in home, non da qui).
@@ -28,7 +31,6 @@ interface MatchSettingsProps {
   onDifficulty: (d: Difficulty) => void;
   onRounds: (r: number) => void;
   onDuration: (ms: number) => void;
-  onVariant: (v: SchedaVariant) => void;
   /**
    * Avvio immediato della partita (tasto "Gioca subito" nel foglio). Presente
    * solo in single player: in stanza si crea prima il codice e si aspetta chi
@@ -63,7 +65,6 @@ export function MatchSettings({
   onDifficulty,
   onRounds,
   onDuration,
-  onVariant,
   onPlayNow,
   onClose,
 }: MatchSettingsProps) {
@@ -151,38 +152,20 @@ export function MatchSettings({
         </div>
 
         {/*
-         * Criteri delle schede: tre cataloghi diversi, non tre difficoltà.
+         * Criteri delle schede: ETICHETTA, non un selettore.
          *
-         * Le schede "Ale" esistono SOLO sulla griglia 5×5 (la calibrazione è per
-         * dimensione e il catalogo è concentrato lì). Invece di disabilitare il
-         * tasto — che lasciava l'utente senza spiegazione e senza modo di
-         * arrivarci — scegleire "Ale" PORTA la griglia a 5×5. Simmetricamente,
-         * scegleire un'altra griglia mentre "Ale" è attivo riporta a Standard:
-         * altrimenti resterebbe una variante senza schede per quella dimensione.
+         * Il tipo di scheda lo scegle l'admin (pannello di amministrazione) e vale
+         * per tutti: single player e stanze. Qui il giocatore lo vede soltanto,
+         * così sa con che criteri si gioca senza poterli cambiare.
          */}
         <div className="sheet__row">
           <span className="sheet__label">Schede</span>
-          <div className="rounds-options">
-            {SCHEDA_VARIANTS.map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={`pill${variant === v ? ' pill--active' : ''}`}
-                title={SCHEDA_VARIANT_HINTS[v]}
-                onClick={() => {
-                  onVariant(v);
-                  if (v === 'ale' && size !== 5) onSize(5);
-                }}
-              >
-                {SCHEDA_VARIANT_LABELS[v]}
-              </button>
-            ))}
-          </div>
+          <span className="pill pill--label" title={SCHEDA_VARIANT_HINTS[variant]}>
+            {SCHEDA_VARIANT_LABELS[variant]}
+          </span>
         </div>
         <p className="sheet__note">
-          {variant === 'ale'
-            ? 'Le schede Ale sono disponibili solo sulla griglia 5×5: sceglierle imposta la griglia a 5×5.'
-            : SCHEDA_VARIANT_HINTS[variant]}
+          {SCHEDA_VARIANT_HINTS[variant]} Il tipo di scheda è impostato dall'amministratore.
         </p>
 
         {/*
