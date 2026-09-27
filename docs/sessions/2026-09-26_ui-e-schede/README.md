@@ -1,8 +1,12 @@
 # Sessione pi — 26–27 settembre 2026 (`ui-e-schede`)
 
-Esportazione della sessione di lavoro che ha prodotto le modifiche da `be1d8e2` a `5c908d6`:
+Esportazione della sessione di lavoro che ha prodotto le modifiche da `be1d8e2` a `26b28bb`:
 griglia a tutto schermo e barra dei giocatori, poi il lavoro sulle **schede** (fasce di
 frequenza, catalogo "full criteria", algoritmo `ale` e relativi report).
+
+**Aggiornata il 27/09/2026 alle 11:26** (snapshot): copre anche la correzione del
+campionamento dei 26 token in `ale` e l'esportazione stessa. Il log cresce a ogni turno,
+quindi la copia nel repository va rinfrescata con il comando qui sotto.
 
 | | |
 | --- | --- |
@@ -10,10 +14,10 @@ frequenza, catalogo "full criteria", algoritmo `ale` e relativi report).
 | intervallo | 26/09/2026 07:22 → 27/09/2026 (UTC) |
 | cartella di lavoro | `/home/userland/boggle-it` |
 | modello | `deepseek/deepseek-flash` (thinking: high) |
-| turni dell'utente | 27 |
-| messaggi | 1.308 (assistente 630, risultati di strumenti 651) |
-| chiamate a strumenti | 760 — `bash` 428, `edit` 146, `read` 51, `write` 22, `ask_user_question` 6, `fetch_content` 4 |
-| log originale | 3,3 MB → `session.jsonl.br` (557 KB) |
+| turni dell'utente | 29 |
+| messaggi | 1.329 (assistente 640, risultati di strumenti 660) |
+| chiamate a strumenti | 667 — `bash` 433, `edit` 146, `read` 51, `write` 23, `ask_user_question` 6, `fetch_content` 4 |
+| log originale | 3,5 MB → `session.jsonl.br` (562 KB) |
 
 ## File in questa cartella
 
@@ -67,6 +71,7 @@ node tools/export-session.mjs <file.jsonl> <cartella-di-destinazione>
 | `f4708fd` | documentazione: una cartella con un file per ogni algoritmo |
 | `4edba67` | report sui numeri dell'algoritmo `ale` |
 | `5c908d6` | `ale`: campionamento dei 26 token (guard rail `noForeign` spento) |
+| `26b28bb` | esportazione della sessione in `docs/sessions/` e strumento `export-session.mjs` |
 
 Nel mezzo è stato integrato il lavoro arrivato da remoto (`90e017c`…`b17f417`): algoritmo
 `ale`, definizioni delle parole, modalità apprendimento, amministrazione musica e profili.
