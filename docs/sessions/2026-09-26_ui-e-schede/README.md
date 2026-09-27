@@ -24,6 +24,9 @@ quindi la copia nel repository va rinfrescata con il comando qui sotto.
 - **`transcript.md`** — la conversazione leggibile: messaggi e risposte per intero, il
   ragionamento e gli esiti degli strumenti in blocchi richiudibili (gli output lunghi sono
   troncati, con il conteggio dei caratteri mancanti).
+- **`session.html`** — l'esportazione HTML di pi (5,1 MB): un file autonomo che si apre nel
+  browser (dati della sessione in base64 + visualizzatore, ricerca e filtri inclusi). È
+  l'esportazione generata da pi, copiata qui dal repository.
 - **`session.jsonl.br`** — il log originale della sessione, compresso (brotli): è la fonte
   completa, il transcript è una sua resa leggibile. Si decomprime con
   `brotli -d session.jsonl.br` (o `node -e "require('zlib')"`).
