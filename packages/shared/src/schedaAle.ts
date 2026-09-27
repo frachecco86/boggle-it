@@ -15,14 +15,18 @@
  * configurazione produce le stesse griglie. La generazione del catalogo avviene
  * offline (`apps/server/scripts/gen-schede.ts --variant ale`).
  *
- * Guard rails (opzionali nella spec, qui ATTIVI): banda vocali, al più una tra
- * H/Z/QU, nessuna riga o colonna di sole consonanti. Sono applicati sia in
- * calibrazione sia in produzione con gli stessi valori: cambiarli invalida la
- * calibrazione, come richiede la spec.
+ * Guard rails (ATTIVI): banda vocali 30–60%, al più tre token rari H/Z/QU in
+ * totale, nessuna riga o colonna che non sia attraversata da almeno una
+ * soluzione. Sono applicati sia in calibrazione sia in produzione con gli stessi
+ * valori: cambiarli invalida la calibrazione, come richiede la spec.
+ *
+ * La difficoltà di una griglia NON è più la sola quota di parole fuori dal
+ * comune: è `0.25·R + 0.75·S`, dove `R` è quella quota (rarità) e `S` è la
+ * SCARSITÀ di parole dentro l'intervallo calibrato. Vedi `compositeDifficulty`.
  */
 import type { Difficulty } from './difficulty.js';
 import { gridToRows, type Scheda } from './scheda.js';
-import { solveGrid, type TrieNode } from './solver.js';
+import { solveGrid, solveGridCoverage, type TrieNode } from './solver.js';
 import type { Grid, GridSize, Tile } from './types.js';
 
 /** Token dell'alfabeto "ale": 26 simboli, `QU` al posto della `Q`. */
@@ -34,11 +38,8 @@ export const ALE_TOKENS = [
 /** Token che contano come vocale (l'U dentro QU è incluso, come da spec). */
 const ALE_VOWEL_TOKENS = new Set(['a', 'e', 'i', 'o', 'u', 'qu']);
 
-/** Token con tetto a 1 per griglia (guard rail della spec). */
+/** Token con tetto complessivo per griglia (guard rail della spec): H/Z/QU. */
 const ALE_RARE_TOKENS = new Set(['h', 'z', 'qu']);
-
-/** Lettere non italiane: la spec le ammette, questo progetto no. */
-const ALE_FOREIGN_TOKENS = new Set(['j', 'k', 'w', 'x', 'y']);
 
 /* ------------------------------------------------------------------ */
 /* Pre-processing                                                      */
@@ -183,33 +184,27 @@ export function isAleCommon(
 export interface AleGuardRails {
   /** Banda della quota di vocali (0–1). `null` = disattivato. */
   vowels: { min: number; max: number } | null;
-  /** Al più 1 token per ciascuno di H/Z/QU. */
-  rareCap: boolean;
-  /** Nessuna riga o colonna di sole consonanti. */
-  noDeadLines: boolean;
-  /** Nessun token non italiano (J K W X Y). SPEC: opzionale; qui è spento. */
-  noForeign: boolean;
+  /**
+   * Numero massimo di token rari (`h`, `z`, `qu`) IN TOTALE nella griglia.
+   * `null` = disattivato. Non è un tetto per singolo token: "al più tre tra
+   * H/Z/QU" vuol dire che la somma dei tre non supera `rareCap`.
+   */
+  rareCap: number | null;
+  /**
+   * Nessuna riga o colonna senza alcuna soluzione.
+   *
+   * Non è una proprietà dei token (una riga di consonanti può comunque essere
+   * attraversata da parole): serve RISOLVERE la griglia e verificarne la
+   * copertura. Vedi `coverageIssues` e `solveGridCoverage`.
+   */
+  noUncoveredLines: boolean;
 }
 
 /** Guard rails ATTIVI, come concordato per il catalogo. */
 export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
-  vowels: { min: 0.38, max: 0.52 },
-  rareCap: true,
-  noDeadLines: true,
-  /*
-   * `noForeign: false` di proposito: la spec dice che l'alfabeto è di **26
-   * token** (`QU` compreso) e che il campionamento si fa da quello.
-   *
-   * `Freq'` NON contiene "solo lettere italiane": `Dict'` comprende i prestiti e
-   * i nomi stranieri del dizionario (`jazz`, `bowling`, `browser`, `ayatollah`,
-   * `ajaccio`…), quindi `j k w x y` hanno frequenza piccola ma non nulla
-   * (0,04–0,13% delle voci, 153–481 parole ciascuno). Campionando i 26 token,
-   * circa il 2% delle griglie contiene una di quelle lettere: con il rail attivo
-   * venivano scartate, cioè si campionava da un alfabeto più piccolo di quello
-   * dichiarato. La regola resta disponibile (`noForeign: true`) per chi vuole
-   * escluderle: è un'opzione della spec, non un requisito.
-   */
-  noForeign: false,
+  vowels: { min: 0.3, max: 0.6 },
+  rareCap: 3,
+  noUncoveredLines: true,
 };
 
 /**
@@ -280,8 +275,13 @@ export function sampleTokens(freq: AleFrequency, count: number, rng: () => numbe
   return tokens;
 }
 
-/** Verifica i guard rails su una lista di token (ordine riga per riga). */
-export function guardRailIssues(tokens: string[], size: number, rails: AleGuardRails): string[] {
+/**
+ * Verifica i guard rail SUI TOKEN (vocali e token rari), nell'ordine riga per riga.
+ *
+ * La copertura di righe/colonne NON è qui: dipende dal dizionario e richiede
+ * una risoluzione. Vedi `coverageIssues`.
+ */
+export function tokenGuardRailIssues(tokens: string[], size: number, rails: AleGuardRails): string[] {
   const issues: string[] = [];
   const total = tokens.length;
   if (total !== size * size) return ['numero di token errato'];
@@ -294,33 +294,37 @@ export function guardRailIssues(tokens: string[], size: number, rails: AleGuardR
     }
   }
 
-  if (rails.rareCap) {
-    const counts = new Map<string, number>();
-    for (const t of tokens) if (ALE_RARE_TOKENS.has(t)) counts.set(t, (counts.get(t) ?? 0) + 1);
-    for (const [t, n] of counts) if (n > 1) issues.push(`${n} token "${t}" (max 1)`);
+  if (rails.rareCap !== null) {
+    const rare = tokens.filter((t) => ALE_RARE_TOKENS.has(t)).length;
+    if (rare > rails.rareCap) issues.push(`${rare} token rari H/Z/QU (max ${rails.rareCap})`);
   }
 
-  if (rails.noForeign) {
-    const foreign = tokens.filter((t) => ALE_FOREIGN_TOKENS.has(t)).length;
-    if (foreign > 0) issues.push(`${foreign} token non italiani`);
-  }
+  return issues;
+}
 
-  if (rails.noDeadLines) {
-    const isVowel = (t: string) => ALE_VOWEL_TOKENS.has(t);
-    let dead = 0;
-    for (let r = 0; r < size; r++) {
-      let vowels = 0;
-      for (let c = 0; c < size; c++) if (isVowel(tokens[r * size + c]!)) vowels++;
-      if (vowels === 0) dead++;
-    }
-    for (let c = 0; c < size; c++) {
-      let vowels = 0;
-      for (let r = 0; r < size; r++) if (isVowel(tokens[r * size + c]!)) vowels++;
-      if (vowels === 0) dead++;
-    }
-    if (dead > 0) issues.push(`${dead} righe/colonne di sole consonanti`);
+/**
+ * Righe e colonne attraversate da almeno una soluzione.
+ *
+ * `used[i]` dice se la cella `i` fa parte di qualche parola trovata. Una riga o
+ * colonna con tutte le celle inutilizzate è "morta": non contribuisce a nessuna
+ * parola e va scartata. `size` è il lato della griglia.
+ */
+export function coverageIssues(used: boolean[], size: number): string[] {
+  const issues: string[] = [];
+  let deadRows = 0;
+  let deadCols = 0;
+  for (let r = 0; r < size; r++) {
+    let covered = false;
+    for (let c = 0; c < size; c++) if (used[r * size + c]) covered = true;
+    if (!covered) deadRows++;
   }
-
+  for (let c = 0; c < size; c++) {
+    let covered = false;
+    for (let r = 0; r < size; r++) if (used[r * size + c]) covered = true;
+    if (!covered) deadCols++;
+  }
+  if (deadRows > 0) issues.push(`${deadRows} righe senza soluzioni`);
+  if (deadCols > 0) issues.push(`${deadCols} colonne senza soluzioni`);
   return issues;
 }
 
@@ -339,13 +343,22 @@ function buildAleGrid(size: GridSize, tokens: string[]): Grid {
 }
 
 /**
- * Genera una griglia "ale" campionando token per frequenza e applicando i guard
- * rails (con retry limitato). Ritorna `null` se nessun tentativo li soddisfa.
+ * Genera una griglia "ale" campionando token per frequenza e applicando TUTTI i
+ * guard rails (token + copertura delle righe/colonne), con retry limitato.
+ *
+ * Il `trie` serve al guard rail di COPERTURA: una riga o colonna è valida solo
+ * se è attraversata da almeno una soluzione, e questo dipende dal dizionario.
+ * Ritorna `null` se nessun tentativo li soddisfa.
+ *
+ * `maxTries` vale per i tentativi che superano i rail sui TOKEN (economici); la
+ * copertura richiede una risoluzione, quindi non allunga il ciclo oltre il
+ * necessario.
  */
 export function generateAleGrid(
   size: GridSize,
   freq: AleFrequency,
   rng: () => number,
+  trie: TrieNode,
   rails: AleGuardRails = DEFAULT_ALE_GUARD_RAILS,
   maxTries = 200,
   stats?: AleGenerationStats,
@@ -353,7 +366,7 @@ export function generateAleGrid(
   const total = size * size;
   for (let attempt = 0; attempt < maxTries; attempt++) {
     const tokens = sampleTokens(freq, total, rng);
-    const issues = guardRailIssues(tokens, size, rails);
+    const issues = tokenGuardRailIssues(tokens, size, rails);
     if (stats) {
       stats.sampled++;
       if (issues.length > 0) stats.rejected++;
@@ -361,7 +374,31 @@ export function generateAleGrid(
         stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
       }
     }
-    if (issues.length === 0) return buildAleGrid(size, tokens);
+    if (issues.length > 0) continue;
+
+    const grid = buildAleGrid(size, tokens);
+
+    /*
+     * Copertura: si risolve la griglia SOLO se i rail sui token sono passati,
+     * così la risoluzione (costosa) avviene sul numero minore di candidati.
+     * Il guard rail è disattivabile: senza copertura richiesta il candidato
+     * viene accettato subito, come prima.
+     */
+    if (rails.noUncoveredLines) {
+      const coverage = coverageIssues(
+        solveGridCoverage(grid, trie, { minLength: 3, limit: 100_000 }).used,
+        size,
+      );
+      if (coverage.length > 0) {
+        if (stats) {
+          stats.rejected++;
+          for (const issue of coverage) stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
+        }
+        continue;
+      }
+    }
+
+    return grid;
   }
   return null;
 }
@@ -374,10 +411,59 @@ export interface AleBoardStats {
   words: string[];
   wordCount: number;
   commonCount: number;
-  /** Quota di parole fuori da `Common` (0–1). */
-  difficulty: number;
+  /**
+   * Rarità: quota di parole fuori da `Common` (0–1). È la "vecchia" difficoltà,
+   * usata come componente `R` di `compositeDifficulty`.
+   */
+  rarity: number;
   score: number;
   longest: number;
+}
+
+/*
+ * Pesi della difficoltà composita.
+ *
+ * La difficoltà di una griglia non dipende più solo da QUANTO sono rare le
+ * parole (R), ma anche da QUANTE ce ne sono (S): una griglia con poche parole è
+ * difficile anche se le poche che ci sono sono comuni, e una fitta di parole
+ * rare resta comunque giocabile. I pesi 0.25/0.75 danno più peso alla scarsità.
+ *
+ * Sono costanti ESPLICITE: cambiarle cambia i confini delle fasce, quindi
+ * invalida `calibration.json` (che li registra in `provenance`).
+ */
+export const ALE_DIFFICULTY_WEIGHTS = { rarity: 0.25, scarcity: 0.75 } as const;
+
+/**
+ * Scarsità `S` di parole dentro l'intervallo calibrato `[lo, hi]`.
+ *
+ * `S = 0` se la griglia ha il MASSIMO di parole dell'intervallo (`hi`), `S = 1`
+ * se ne ha il minimo (`lo`), lineare in mezzo. Il risultato è limitato a
+ * `[0, 1]`: una griglia fuori dall'intervallo (sotto `lo` o sopra `hi`) è
+ * rispettivamente "il massimo di difficile" o "il massimo di facile", invece di
+ * estrapolare a valori negativi o > 1. In produzione conta solo per le griglie
+ * DENTRO l'intervallo (le altre vengono scartate), ma cosi la metrica resta
+ * ben definita e leggibile nel report.
+ */
+export function scarcityFor(wordCount: number, wordRange: { lo: number; hi: number }): number {
+  const span = wordRange.hi - wordRange.lo;
+  if (span <= 0) return 0;
+  const raw = 1 - (wordCount - wordRange.lo) / span;
+  return Math.min(1, Math.max(0, raw));
+}
+
+/**
+ * Difficoltà composita: `wR · R + wS · S`.
+ *
+ * `R` è la rarità (`1 − quota parole comuni`), `S` la scarsità di parole
+ * nell'intervallo calibrato. Vedi `ALE_DIFFICULTY_WEIGHTS`.
+ */
+export function compositeDifficulty(
+  rarity: number,
+  wordCount: number,
+  wordRange: { lo: number; hi: number },
+  weights: { rarity: number; scarcity: number } = ALE_DIFFICULTY_WEIGHTS,
+): number {
+  return weights.rarity * rarity + weights.scarcity * scarcityFor(wordCount, wordRange);
 }
 
 /** Punteggio Boggle: `lunghezza − 2` (QU conta due lettere). */
@@ -409,7 +495,7 @@ export function scoreAleBoard(
     words,
     wordCount: words.length,
     commonCount,
-    difficulty: words.length > 0 ? 1 - commonCount / words.length : 0,
+    rarity: words.length > 0 ? 1 - commonCount / words.length : 0,
     score,
     longest,
   };
@@ -435,7 +521,7 @@ export interface AleCalibration {
   /** Le tre fasce, con il centro di difficoltà e i confini di ciascuna. */
   tiers: {
     difficulty: Difficulty;
-    /** Centro del cluster (quota di parole fuori dal comune). */
+    /** Centro del cluster (difficoltà COMPOSITA, vedi `compositeDifficulty`). */
     targetDifficulty: number;
     range: { min: number; max: number };
   }[];
@@ -447,6 +533,8 @@ export interface AleCalibration {
     commonSize: number;
     wordCount: { min: number; q1: number; median: number; q3: number; max: number };
     rho: number;
+    /** Pesi della difficoltà composita usati per la calibrazione. */
+    weights: { rarity: number; scarcity: number };
     /** true se i cluster k-means sono stati usati; false = fallback ai tertili. */
     usedKmeans: boolean;
   };
@@ -506,9 +594,16 @@ function kmeans1d(values: number[], k = 3, iterations = 100): number[] {
  */
 export function calibrateAle(
   samples: AleBoardStats[],
-  provenance: { guardRails: AleGuardRails; dictSize: number; commonSize: number; rho?: number },
+  provenance: {
+    guardRails: AleGuardRails;
+    dictSize: number;
+    commonSize: number;
+    rho?: number;
+    weights?: { rarity: number; scarcity: number };
+  },
 ): AleCalibration {
   const rho = provenance.rho ?? 0.6;
+  const weights = provenance.weights ?? ALE_DIFFICULTY_WEIGHTS;
   const counts = samples.map((s) => s.wordCount).sort((a, b) => a - b);
   const q1 = percentile(counts, 25);
   const median = percentile(counts, 50);
@@ -520,15 +615,23 @@ export function calibrateAle(
   const tukeyHi = q3 + 1.5 * iqr;
   const lo = Math.max(1, Math.round(median - (median - tukeyLo) * rho));
   const hi = Math.round(median + (tukeyHi - median) * rho);
+  const wordRange = { lo, hi };
 
   const survivors = samples.filter((s) => s.wordCount >= lo && s.wordCount <= hi && s.wordCount > 0);
 
-  const difficultyValues = [...survivors].map((s) => s.difficulty).sort((a, b) => a - b);
+  /*
+   * Difficoltà COMPOSITA dei superstiti: `0.25·R + 0.75·S`. Serve l'intervallo
+   * già calibrato (S dipende da lo/hi), quindi si calcola QUI e non in
+   * `scoreAleBoard`.
+   */
+  const difficultyValues = survivors
+    .map((s) => compositeDifficulty(s.rarity, s.wordCount, wordRange, weights))
+    .sort((a, b) => a - b);
   let centroids = kmeans1d(difficultyValues, 3);
   // Validazione k=3: ogni cluster deve avere ≥ max(15, 10%). Altrimenti tertili.
   const minCluster = Math.max(15, Math.ceil(survivors.length * 0.1));
   const clusterSizes = centroids.map(
-    (c) => survivors.filter((s) => nearestCentroid(s.difficulty, centroids) === c).length,
+    (c) => difficultyValues.filter((v) => nearestCentroid(v, centroids) === c).length,
   );
   const usedKmeans = clusterSizes.every((n) => n >= minCluster) && survivors.length >= 30;
   if (!usedKmeans) {
@@ -547,7 +650,7 @@ export function calibrateAle(
   });
 
   return {
-    wordRange: { lo, hi },
+    wordRange,
     tiers,
     provenance: {
       samples: samples.length,
@@ -562,6 +665,7 @@ export function calibrateAle(
         max: counts[counts.length - 1] ?? 0,
       },
       rho,
+      weights,
       usedKmeans,
     },
   };
@@ -650,7 +754,7 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const rng = mulberry32((seed + attempt) >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails, 200, stats);
+    const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats);
     if (!grid) {
       if (stats) stats.noGrid++;
       continue;
@@ -658,11 +762,12 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
     const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
 
     const inRange = stats_.wordCount >= calibration.wordRange.lo && stats_.wordCount <= calibration.wordRange.hi;
-    const targetDifficulty = tier.targetDifficulty;
+    // Difficoltà COMPOSITA: rarità + scarsità di parole (vedi `compositeDifficulty`).
+    const boardDifficulty = compositeDifficulty(stats_.rarity, stats_.wordCount, calibration.wordRange);
     const distance =
       Math.abs(stats_.wordCount - (calibration.wordRange.lo + calibration.wordRange.hi) / 2) /
         Math.max(1, calibration.wordRange.hi) +
-      Math.abs(stats_.difficulty - targetDifficulty);
+      Math.abs(boardDifficulty - tier.targetDifficulty);
 
     if (!best || distance < best.distance) best = { stats: stats_, grid, distance };
 
@@ -670,7 +775,7 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
       if (stats) stats.wordCountOut++;
       continue;
     }
-    const tierLabel = tierForDifficulty(stats_.difficulty, calibration);
+    const tierLabel = tierForDifficulty(boardDifficulty, calibration);
     if (tierLabel !== difficulty) {
       if (stats) stats.difficultyOut++;
       continue;
@@ -684,7 +789,7 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
   const fallback = best ?? (() => {
     // Nessun candidato utile: genera comunque una griglia valida al primo colpo.
     const rng = mulberry32(seed >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails, 200, stats) ?? buildAleGridFallback(size, freq, rng);
+    const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats) ?? buildAleGridFallback(size, freq, rng);
     const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
     return { stats: stats_, grid, distance: Infinity };
   })();
@@ -747,7 +852,7 @@ export function sampleAleBoards(
   const out: AleBoardStats[] = [];
   for (let i = 0; i < n; i++) {
     const rng = mulberry32((masterSeed + i + 1) >>> 0);
-    const grid = generateAleGrid(size, freq, rng, rails, 200, stats);
+    const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats);
     if (!grid) {
       if (stats) stats.noGrid++;
       continue;

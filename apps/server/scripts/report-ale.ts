@@ -6,6 +6,7 @@
  *   pnpm --filter @boggle/server report:ale                    # 5×5, 500 campioni, 15 schede per fascia
  *   pnpm --filter @boggle/server report:ale -- --samples 2000
  *   pnpm --filter @boggle/server report:ale -- --size 4 --n 5
+ *   pnpm --filter @boggle/server report:ale -- --all-sizes     # tutte e tre le dimensioni
  *
  * Perché esiste: la calibrazione e le regole di scarto vivono nel codice
  * (`schedaAle.ts`) e i loro numeri finiscono in `docs/algoritmi/report/ale.md`.
@@ -17,6 +18,7 @@
  */
 import {
   calibrateAle,
+  compositeDifficulty,
   DEFAULT_ALE_GUARD_RAILS,
   DIFFICULTY_ORDER,
   generateAleScheda,
@@ -40,15 +42,15 @@ import { CALIB_PATH, loadAleInputs, OUT_DIR } from './ale-inputs.js';
 /**
  * Raggruppa i motivi di scarto dei guard rails per REGOLA.
  *
- * I messaggi di `guardRailIssues` contengono la misura (`vocali 36% fuori
- * banda`, `2 righe/colonne di sole consonanti`), quindi presi alla lettera sono
- * decine di chiavi diverse. Per il report servono le regole.
+ * I messaggi di `coverageIssues`/`tokenGuardRailIssues` contengono la misura
+ * (`vocali 36% fuori banda`, `2 righe senza soluzioni`), quindi presi alla
+ * lettera sono decine di chiavi diverse. Per il report servono le regole.
  */
 function railRule(issue: string): string {
-  if (issue.startsWith('vocali')) return 'vocali fuori banda (38–52%)';
-  if (issue.includes('righe/colonne')) return 'righe/colonne di sole consonanti';
-  if (issue.includes('non italiani')) return 'lettere non italiane';
-  if (issue.includes('(max 1)')) return 'token raro ripetuto (h/z/qu)';
+  if (issue.startsWith('vocali')) return 'vocali fuori banda (30–60%)';
+  if (issue.includes('token rari')) return 'token rari H/Z/QU (>3)';
+  if (issue.includes('righe')) return 'righe senza soluzioni';
+  if (issue.includes('colonne')) return 'colonne senza soluzioni';
   return issue;
 }
 
@@ -58,6 +60,7 @@ function arg(name: string, fallback?: string): string | undefined {
   const value = process.argv[i + 1];
   return value && !value.startsWith('--') ? value : fallback;
 }
+const hasFlag = (name: string) => process.argv.includes(`--${name}`);
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
@@ -90,19 +93,24 @@ function loadCatalogAle(size: GridSize, difficulty: Difficulty): Scheda[] {
   return (parsed.schede ?? []).filter((s) => (s.variant ?? 'standard') === 'ale');
 }
 
-function main(): void {
-  const size = Number(arg('size', '5')) as GridSize;
-  const samples = Number(arg('samples', '500'));
-  const count = Number(arg('n', '15'));
-  const seed = Number(arg('seed', '1'));
-  const maxAttempts = Number(arg('attempts', '500'));
+/** Difficoltà composita di una griglia (R e S ricavati dai suoi dati). */
+function boardDifficulty(board: AleBoardStats, wordRange: { lo: number; hi: number }): number {
+  return compositeDifficulty(board.rarity, board.wordCount, wordRange);
+}
 
-  console.log(`# Report algoritmo ale — ${size}×${size}, ${samples} campioni, ${count} schede per fascia, seed ${seed}\n`);
-
-  // ------------------------------------------------------------------ ingressi
-  const inputs = loadAleInputs();
+function reportForSize(
+  size: GridSize,
+  inputs: ReturnType<typeof loadAleInputs>,
+  samples: number,
+  count: number,
+  seed: number,
+  maxAttempts: number,
+): void {
   const { freq, trie, common, lemmas, dictPrime } = inputs;
 
+  console.log(`\n\n# Report algoritmo ale — ${size}×${size}, ${samples} campioni, ${count} schede per fascia, seed ${seed}\n`);
+
+  // ------------------------------------------------------------------ ingressi
   console.log('\n## Ingressi');
   console.log(`  Dict'                 ${dictPrime.length.toLocaleString('it-IT')} parole`);
   console.log(`  Common (NVdB ∩ Dict') ${common.size.toLocaleString('it-IT')} (${pct(common.size / dictPrime.length)} di Dict')`);
@@ -114,9 +122,8 @@ function main(): void {
   const rails = DEFAULT_ALE_GUARD_RAILS;
   const railText = [
     rails.vowels ? `vocali ${pct(rails.vowels.min)}–${pct(rails.vowels.max)}` : 'vocali libere',
-    rails.rareCap ? 'tetto 1 per h/z/qu' : 'nessun tetto sui token rari',
-    rails.noDeadLines ? 'nessuna riga/colonna di sole consonanti' : 'righe/colonne libere',
-    rails.noForeign ? 'nessuna lettera non italiana' : 'lettere non italiane AMMESSE (alfabeto di 26 token)',
+    rails.rareCap !== null ? `al più ${rails.rareCap} token rari H/Z/QU in totale` : 'nessun tetto sui token rari',
+    rails.noUncoveredLines ? 'nessuna riga/colonna senza soluzioni' : 'righe/colonne libere',
   ].join(' · ');
   console.log(`  guard rails           ${railText}`);
 
@@ -131,16 +138,18 @@ function main(): void {
   });
 
   const counts = boards.map((b) => b.wordCount).sort((a, b) => a - b);
-  const diffs = boards.map((b) => b.difficulty).sort((a, b) => a - b);
+  const rarities = boards.map((b) => b.rarity).sort((a, b) => a - b);
+  const comq = boards.map((b) => boardDifficulty(b, calibration.wordRange)).sort((a, b) => a - b);
   const { mean: meanWords } = meanSd(boards.map((b) => b.wordCount));
-  const { mean: meanDiff, sd: sdDiff } = meanSd(boards.map((b) => b.difficulty));
+  const { mean: meanRarity, sd: sdRarity } = meanSd(boards.map((b) => b.rarity));
+  const { mean: meanComq, sd: sdComq } = meanSd(comq);
 
   console.log('\n## Calibrazione');
   console.log(
     `  griglie campionate    ${calStats.sampled.toLocaleString('it-IT')} campioni → ${boards.length} griglie valide, ` +
       `${calStats.rejected.toLocaleString('it-IT')} respinte dai guard rails ` +
       `(${pct(calStats.rejected / Math.max(1, calStats.sampled))}), ` +
-      `${calStats.noGrid} senza griglia dopo 200 tentativi interni`,
+      `${calStats.noGrid} senza griglia dopo i tentativi interni`,
   );
   console.log(
     `  scarti guard rails    ${Object.entries(calStats.railRejections)
@@ -157,50 +166,65 @@ function main(): void {
       `(Tukey su q1/q3, ristretto verso la mediana con rho=${calibration.provenance.rho})`,
   );
   console.log(
-    `  difficoltà (quota fuori dal comune)  min ${diffs[0]?.toFixed(3)} · mediana ${percentile(diffs, 50).toFixed(3)} · ` +
-      `max ${diffs[diffs.length - 1]?.toFixed(3)} (media ${meanDiff.toFixed(3)} ± ${sdDiff.toFixed(3)})`,
+    `  rarità R              min ${rarities[0]?.toFixed(3)} · mediana ${percentile(rarities, 50).toFixed(3)} · ` +
+      `max ${rarities[rarities.length - 1]?.toFixed(3)} (media ${meanRarity.toFixed(3)} ± ${sdRarity.toFixed(3)})`,
+  );
+  console.log(
+    `  difficoltà composita  min ${comq[0]?.toFixed(3)} · mediana ${percentile(comq, 50).toFixed(3)} · ` +
+      `max ${comq[comq.length - 1]?.toFixed(3)} (media ${meanComq.toFixed(3)} ± ${sdComq.toFixed(3)})`,
+  );
+  console.log(
+    `  pesi usati            0.25·R + 0.75·S (R rarità, S scarsità nell'intervallo)`,
   );
   console.log(`  k-means k=3 usato: ${calibration.provenance.usedKmeans ? 'sì' : 'no (fallback ai tertili)'}`);
   for (const tier of calibration.tiers) {
-    const inTier = boards.filter((b) => tierForDifficulty(b.difficulty, calibration) === tier.difficulty).length;
+    const inTier = boards.filter((b) => tierForDifficulty(boardDifficulty(b, calibration.wordRange), calibration) === tier.difficulty).length;
     console.log(
       `    ${tier.difficulty.padEnd(9)} centro ${tier.targetDifficulty.toFixed(3)} · intervallo ` +
-        `[${tier.range.min.toFixed(3)}, ${tier.range.max.toFixed(3)}] · ${inTier} griglie del campione (${pct(inTier / boards.length)})`,
+        `[${tier.range.min.toFixed(3)}, ${tier.range.max.toFixed(3)}] · ${inTier} griglie del campione (${pct(inTier / Math.max(1, boards.length))})`,
     );
   }
   const inRange = boards.filter(
     (b) => b.wordCount >= calibration.wordRange.lo && b.wordCount <= calibration.wordRange.hi,
   ).length;
   console.log(
-    `  griglie dentro l'intervallo di parole: ${inRange}/${boards.length} (${pct(inRange / boards.length)})`,
+    `  griglie dentro l'intervallo di parole: ${inRange}/${boards.length} (${pct(inRange / Math.max(1, boards.length))})`,
   );
 
   // ------------------------------------------------------- prima generazione
   /*
-   * La PRIMA generazione (le 45 schede committate il 26/09) ha usato la
-   * `calibration.json` del repository, non una ricalcolata. Il report quindi
-   * misura con QUELLA calibrazione, e mostra a fianco la differenza con quella
-   * ricalcolata oggi (il dizionario è cambiato nel frattempo).
+   * La PRIMA generazione usa la `calibration.json`. Se c'è (e ha gli stessi
+   * guard rails) il report misura con QUELLA, e mostra a fianco la differenza con
+   * quella ricalcolata oggi; altrimenti usa quella appena calcolata.
    */
   const committed = loadCommittedCalibration(size);
-  const generationCalibration = committed?.calibration ?? calibration;
+  const useCommitted =
+    committed !== null &&
+    JSON.stringify(committed.calibration.provenance.guardRails) === JSON.stringify(DEFAULT_ALE_GUARD_RAILS);
+  const generationCalibration = useCommitted ? committed!.calibration : calibration;
   console.log('\n## Prima generazione');
   if (committed) {
-    console.log(
-      `  calibrazione usata     ${path.basename(CALIB_PATH)} (${committed.generatedAt}, seed ${committed.seed}, ` +
-        `Dict' ${committed.calibration.provenance.dictSize.toLocaleString('it-IT')})`,
-    );
-    const fresh = calibration;
-    const c = committed.calibration;
-    console.log(
-      `  deriva vs oggi         intervallo parole [${c.wordRange.lo}, ${c.wordRange.hi}] → ` +
-        `[${fresh.wordRange.lo}, ${fresh.wordRange.hi}] · ` +
-        `confini fasce ${c.tiers.map((t) => t.range.max.toFixed(3)).join('/')} → ` +
-        `${fresh.tiers.map((t) => t.range.max.toFixed(3)).join('/')}`,
-    );
+    if (useCommitted) {
+      console.log(
+        `  calibrazione usata     ${path.basename(CALIB_PATH)} (${committed.generatedAt}, seed ${committed.seed}, ` +
+          `Dict' ${committed.calibration.provenance.dictSize.toLocaleString('it-IT')})`,
+      );
+      const fresh = calibration;
+      const c = committed.calibration;
+      console.log(
+        `  deriva vs oggi         intervallo parole [${c.wordRange.lo}, ${c.wordRange.hi}] → ` +
+          `[${fresh.wordRange.lo}, ${fresh.wordRange.hi}] · ` +
+          `confini fasce ${c.tiers.map((t) => t.range.max.toFixed(3)).join('/')} → ` +
+          `${fresh.tiers.map((t) => t.range.max.toFixed(3)).join('/')}`,
+      );
+    } else {
+      console.log('  calibrazione usata     ricalcolata ora (quella committata usa guard rails diversi)');
+    }
+  } else {
+    console.log('  calibrazione usata     ricalcolata ora (nessuna calibration.json per questa dimensione)');
   }
+
   console.log('');
-  const perTier: string[] = [];
   for (const difficulty of DIFFICULTY_ORDER as Difficulty[]) {
     const genStats = newAleGenerationStats();
     const attemptsUsed: number[] = [];
@@ -243,14 +267,14 @@ function main(): void {
         wordCount: words.length,
         commonCount: 0,
         // Come in produzione: una parola è comune se lo è lei o la sua RADICE.
-        difficulty: 1 - words.filter((w) => isAleCommon(w, common, lemmas)).length / Math.max(1, words.length),
+        rarity: 1 - words.filter((w) => isAleCommon(w, common, lemmas)).length / Math.max(1, words.length),
         score: words.reduce((a, w) => a + Math.max(0, w.length - 2), 0),
         longest: scheda.longest,
       });
     }
 
     const wc = produced.map((p) => p.wordCount);
-    const df = produced.map((p) => p.difficulty);
+    const df = produced.map((p) => boardDifficulty(p, generationCalibration.wordRange));
     // Scarti aggregati per REGOLA (i messaggi contengono la misura).
     const byRule = new Map<string, number>();
     for (const [reason, n] of Object.entries(genStats.railRejections)) {
@@ -275,11 +299,12 @@ function main(): void {
         `violazioni ${railTotal.toLocaleString('it-IT')} (un campione può violarne più di una)`,
     );
     for (const [rule, n] of [...byRule.entries()].sort((a, b) => b[1] - a[1])) {
-      console.log(`      ${rule.padEnd(38)} ${n.toLocaleString('it-IT').padStart(8)}  (${pct(n / Math.max(1, genStats.sampled))} dei campioni)`);
+      console.log(`      ${rule.padEnd(34)} ${n.toLocaleString('it-IT').padStart(8)}  (${pct(n / Math.max(1, genStats.sampled))} dei campioni)`);
     }
     console.log(
       `    schede prodotte        parole ${Math.min(...wc)}–${Math.max(...wc)} (media ${(wc.reduce((a, b) => a + b, 0) / count).toFixed(0)}) · ` +
-        `difficoltà ${Math.min(...df).toFixed(3)}–${Math.max(...df).toFixed(3)} (centro fascia ${generationCalibration.tiers.find((t) => t.difficulty === difficulty)!.targetDifficulty.toFixed(3)})`,
+        `difficoltà ${Math.min(...df).toFixed(3)}–${Math.max(...df).toFixed(3)} ` +
+        `(centro fascia ${generationCalibration.tiers.find((t) => t.difficulty === difficulty)!.targetDifficulty.toFixed(3)})`,
     );
     // Verifica di riproduzione: le griglie prodotte ci sono già nel catalogo?
     const catalog = loadCatalogAle(size, difficulty);
@@ -292,12 +317,25 @@ function main(): void {
           `(media ${(catalogWords.reduce((a, b) => a + b, 0) / catalog.length).toFixed(0)}) · griglie identiche a questa run: ${same}/${count}`,
       );
     }
-    perTier.push(difficulty);
   }
-  void perTier;
+}
 
+function main(): void {
+  const allSizes = hasFlag('all-sizes');
+  const sizes: GridSize[] = allSizes
+    ? [4, 5, 6]
+    : [Number(arg('size', '5')) as GridSize];
+  const samples = Number(arg('samples', '500'));
+  const count = Number(arg('n', '15'));
+  const seed = Number(arg('seed', '1'));
+  const maxAttempts = Number(arg('attempts', '500'));
+
+  const inputs = loadAleInputs();
+  for (const size of sizes) {
+    reportForSize(size, inputs, samples, count, seed, maxAttempts);
+  }
   console.log(
-    `\nRiproduci con: pnpm --filter @boggle/server report:ale -- --size ${size} --samples ${samples} --n ${count} --seed ${seed}`,
+    `\nRiproduci con: pnpm --filter @boggle/server report:ale -- ${allSizes ? '--all-sizes' : `--size ${sizes[0]}`} --samples ${samples} --n ${count} --seed ${seed}`,
   );
 }
 

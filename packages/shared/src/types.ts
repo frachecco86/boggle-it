@@ -10,6 +10,21 @@ import type { SfxSlot } from './profile.js';
 
 export type GridSize = 4 | 5 | 6;
 
+/**
+ * Impostazioni globali decise dall'admin e valide per TUTTI i giocatori.
+ *
+ * Vivono sul server (`GET /config`) e non nel browser: il tipo di scheda di
+ * default è una scelta di prodotto, non una preferenza del singolo. Prima il
+ * giocatore lo sceglieva in home e in lobby; ora lo decide solo l'admin.
+ */
+export interface AppConfig {
+  /**
+   * Insieme di criteri delle schede usato da tutte le partite (single player e
+   * stanze). `standard`, `full` o `ale`.
+   */
+  defaultSchedaVariant: SchedaVariant;
+}
+
 export type GamePhase = 'lobby' | 'countdown' | 'playing' | 'roundEnd' | 'gameEnd';
 
 /** Una cella della griglia. `q` rappresenta la faccia "Qu" (Q+U inseparabili). */

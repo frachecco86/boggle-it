@@ -57,16 +57,32 @@ export interface SolveOptions {
   minLength?: number;
 }
 
+/** Risultato con COPERTURA: quali celle compaiono in almeno una parola trovata. */
+export interface SolveCoverageResult {
+  /** Parole trovate, ordinate come in `solveGrid`. */
+  words: string[];
+  /** `used[i]` = true se la cella `i` fa parte di almeno una parola trovata. */
+  used: boolean[];
+}
+
 /**
- * Trova tutte le parole del trie componibili sulla griglia.
- * DFS con potatura: si scende nel trie solo se il prefisso esiste.
+ * Trova tutte le parole del trie componibili sulla griglia E dice quali celle
+ * sono state usate.
+ *
+ * PERCHÉ la copertura: un guard rail dell'algoritmo "ale" vuole che OGNI riga e
+ * OGNI colonna sia attraversata da almeno una soluzione. Non è una proprietà
+ * dei soli token — dipende dal dizionario — quindi serve risolvere la griglia e
+ * guardare dove passano le parole.
  */
-export function solveGrid(grid: Grid, trie: TrieNode, options: SolveOptions = {}): string[] {
+export function solveGridCoverage(grid: Grid, trie: TrieNode, options: SolveOptions = {}): SolveCoverageResult {
   const { limit = 200, minLength = MIN_WORD_LENGTH } = options;
   const size = grid.size;
   const n = size * size;
   const found = new Set<string>();
+  const used = new Array<boolean>(n).fill(false);
   const visited = new Array<boolean>(n).fill(false);
+  /** Percorso corrente (indici di cella), per marcare le celle quando si trova una parola. */
+  const path: number[] = [];
   // Buffer del prefisso per efficienza (una sola stringa concatenata)
   let prefix = '';
 
@@ -82,7 +98,17 @@ export function solveGrid(grid: Grid, trie: TrieNode, options: SolveOptions = {}
     }
     const prevPrefix = prefix;
     prefix += value;
-    if (current.word && prefix.length >= minLength) found.add(current.word);
+    path.push(index);
+    if (current.word && prefix.length >= minLength) {
+      found.add(current.word);
+      /*
+       * Si marcano le celle anche se la parola era già stata trovata: la STESSA
+       * parola può avere più percorsi, e un percorso alternativo può toccare una
+       * cella che il primo non tocca. Senza, la copertura risulterebbe incompleta
+       * e si scarterebbero griglie in realtà valide.
+       */
+      for (const cell of path) used[cell] = true;
+    }
 
     if (prefix.length < MAX_WORD_LENGTH) {
       visited[index] = true;
@@ -98,6 +124,7 @@ export function solveGrid(grid: Grid, trie: TrieNode, options: SolveOptions = {}
       }
       visited[index] = false;
     }
+    path.pop();
     prefix = prevPrefix;
   };
 
@@ -105,5 +132,13 @@ export function solveGrid(grid: Grid, trie: TrieNode, options: SolveOptions = {}
     dfs(i, trie);
     if (found.size >= limit) break;
   }
-  return [...found].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  return { words: [...found].sort((a, b) => b.length - a.length || a.localeCompare(b)), used };
+}
+
+/**
+ * Trova tutte le parole del trie componibili sulla griglia.
+ * DFS con potatura: si scende nel trie solo se il prefisso esiste.
+ */
+export function solveGrid(grid: Grid, trie: TrieNode, options: SolveOptions = {}): string[] {
+  return solveGridCoverage(grid, trie, options).words;
 }

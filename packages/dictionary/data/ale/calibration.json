@@ -1,43 +1,42 @@
 {
-  "generatedAt": "2026-09-27T11:12:25.214Z",
+  "generatedAt": "2026-09-27T12:58:59.031Z",
   "seed": 1,
   "guardRails": {
     "vowels": {
-      "min": 0.38,
-      "max": 0.52
+      "min": 0.3,
+      "max": 0.6
     },
-    "rareCap": true,
-    "noDeadLines": true,
-    "noForeign": false
+    "rareCap": 3,
+    "noUncoveredLines": true
   },
   "bySize": {
-    "5": {
+    "4": {
       "wordRange": {
-        "lo": 95,
-        "hi": 474
+        "lo": 22,
+        "hi": 207
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.5200922101070955,
+          "targetDifficulty": 0.3071571550768564,
           "range": {
             "min": 0,
-            "max": 0.5530453097686456
+            "max": 0.42246822833601116
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.5859984094301959,
+          "targetDifficulty": 0.5377793015951658,
           "range": {
-            "min": 0.5530453097686456,
-            "max": 0.6178116237990482
+            "min": 0.42246822833601116,
+            "max": 0.634212190556888
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.6496248381679005,
+          "targetDifficulty": 0.7306450795186104,
           "range": {
-            "min": 0.6178116237990482,
+            "min": 0.634212190556888,
             "max": 1
           }
         }
@@ -46,23 +45,142 @@
         "samples": 500,
         "guardRails": {
           "vowels": {
-            "min": 0.38,
-            "max": 0.52
+            "min": 0.3,
+            "max": 0.6
           },
-          "rareCap": true,
-          "noDeadLines": true,
-          "noForeign": false
+          "rareCap": 3,
+          "noUncoveredLines": true
         },
-        "dictSize": 368210,
+        "dictSize": 368098,
         "commonSize": 7042,
         "wordCount": {
-          "min": 90,
-          "q1": 211,
-          "median": 276,
-          "q3": 369,
-          "max": 758
+          "min": 10,
+          "q1": 77,
+          "median": 112,
+          "q3": 154,
+          "max": 425
         },
         "rho": 0.6,
+        "weights": {
+          "rarity": 0.25,
+          "scarcity": 0.75
+        },
+        "usedKmeans": true
+      }
+    },
+    "5": {
+      "wordRange": {
+        "lo": 73,
+        "hi": 445
+      },
+      "tiers": [
+        {
+          "difficulty": "facile",
+          "targetDifficulty": 0.31739871372869893,
+          "range": {
+            "min": 0,
+            "max": 0.4257095817064557
+          }
+        },
+        {
+          "difficulty": "normale",
+          "targetDifficulty": 0.5340204496842125,
+          "range": {
+            "min": 0.4257095817064557,
+            "max": 0.6350434769833763
+          }
+        },
+        {
+          "difficulty": "difficile",
+          "targetDifficulty": 0.7360665042825401,
+          "range": {
+            "min": 0.6350434769833763,
+            "max": 1
+          }
+        }
+      ],
+      "provenance": {
+        "samples": 500,
+        "guardRails": {
+          "vowels": {
+            "min": 0.3,
+            "max": 0.6
+          },
+          "rareCap": 3,
+          "noUncoveredLines": true
+        },
+        "dictSize": 368098,
+        "commonSize": 7042,
+        "wordCount": {
+          "min": 44,
+          "q1": 184.75,
+          "median": 254,
+          "q3": 340,
+          "max": 770
+        },
+        "rho": 0.6,
+        "weights": {
+          "rarity": 0.25,
+          "scarcity": 0.75
+        },
+        "usedKmeans": true
+      }
+    },
+    "6": {
+      "wordRange": {
+        "lo": 160,
+        "hi": 770
+      },
+      "tiers": [
+        {
+          "difficulty": "facile",
+          "targetDifficulty": 0.31336972531759216,
+          "range": {
+            "min": 0,
+            "max": 0.4225813464261555
+          }
+        },
+        {
+          "difficulty": "normale",
+          "targetDifficulty": 0.5317929675347189,
+          "range": {
+            "min": 0.4225813464261555,
+            "max": 0.632362575548683
+          }
+        },
+        {
+          "difficulty": "difficile",
+          "targetDifficulty": 0.7329321835626472,
+          "range": {
+            "min": 0.632362575548683,
+            "max": 1
+          }
+        }
+      ],
+      "provenance": {
+        "samples": 500,
+        "guardRails": {
+          "vowels": {
+            "min": 0.3,
+            "max": 0.6
+          },
+          "rareCap": 3,
+          "noUncoveredLines": true
+        },
+        "dictSize": 368098,
+        "commonSize": 7042,
+        "wordCount": {
+          "min": 125,
+          "q1": 341,
+          "median": 460,
+          "q3": 595.5,
+          "max": 1318
+        },
+        "rho": 0.6,
+        "weights": {
+          "rarity": 0.25,
+          "scarcity": 0.75
+        },
         "usedKmeans": true
       }
     }

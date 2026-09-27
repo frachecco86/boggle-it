@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { acceptedWords, createSchedaPool, rowsToGrid, scoreForWord, wordFromPath } from './index.js';
 import { BAND_SIZES, bandNameFor, generateScheda } from './schedaGen.js';
+import { schedaVariantForSize, schedaVariantSupportsSize } from './scheda.js';
 import type { Difficulty, GridSize } from './index.js';
 
 /*
@@ -129,5 +130,16 @@ describe('catalogo schede (metadati)', () => {
     const difficulties: Difficulty[] = ['facile', 'normale', 'difficile'];
     expect(sizes).toHaveLength(3);
     expect(difficulties).toHaveLength(3);
+  });
+});
+
+describe('compatibilità variante × dimensione', () => {
+  it('ogni variante è disponibile su ogni dimensione', () => {
+    for (const size of [4, 5, 6] as const) {
+      expect(schedaVariantSupportsSize('standard', size)).toBe(true);
+      expect(schedaVariantSupportsSize('full', size)).toBe(true);
+      expect(schedaVariantSupportsSize('ale', size)).toBe(true);
+      expect(schedaVariantForSize('ale', size)).toBe('ale');
+    }
   });
 });

@@ -53,8 +53,29 @@ export const SCHEDA_VARIANT_LABELS: Record<SchedaVariant, string> = {
 export const SCHEDA_VARIANT_HINTS: Record<SchedaVariant, string> = {
   standard: 'Il catalogo storico.',
   full: 'Criteri completi: vocali/consonanti, frequenza delle lettere, numero di parole e parole ancora.',
-  ale: 'Algoritmo "ale": lettere pescate per frequenza, difficoltà calibrata sulle parole comuni (solo 5×5).',
+  ale: 'Algoritmo "ale": lettere pescate per frequenza, difficoltà calibrata su rarità e numero di parole (calibrazione per ogni dimensione).',
 };
+
+/**
+ * true se la variante ha senso per una certa dimensione di griglia.
+ *
+ * Tutte le varianti sono disponibili su tutte le dimensioni: le schede "ale"
+ * hanno una CALIBRAZIONE PER DIMENSIONE (4×4, 5×5, 6×6), quindi non sono più
+ * legate al solo 5×5. La funzione resta perché è il punto unico in cui la regola
+ * è espressa: se in futuro una variante tornasse a essere limitata, si cambia
+ * solo qui.
+ */
+export function schedaVariantSupportsSize(_variant: SchedaVariant, _size: GridSize): boolean {
+  return true;
+}
+
+/**
+ * Variante effettiva per una griglia. Oggi è l'identità (ogni variante vale su
+ * ogni dimensione); esiste per centralizzare l'eventuale compatibilità.
+ */
+export function schedaVariantForSize(variant: SchedaVariant, _size: GridSize): SchedaVariant {
+  return variant;
+}
 
 export function isSchedaVariant(value: unknown): value is SchedaVariant {
   return value === 'standard' || value === 'full' || value === 'ale';

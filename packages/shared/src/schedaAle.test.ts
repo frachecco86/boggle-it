@@ -4,16 +4,19 @@ import {
   buildAleLemmas,
   calibrateAle,
   cleanAleWord,
+  compositeDifficulty,
   computeAleFrequency,
+  coverageIssues,
   DEFAULT_ALE_GUARD_RAILS,
   generateAleGrid,
   generateAleScheda,
-  guardRailIssues,
   isAleCommon,
   mulberry32,
   sampleAleBoards,
+  scarcityFor,
   tierForDifficulty,
   tokenizeAle,
+  tokenGuardRailIssues,
 } from './schedaAle.js';
 import { buildTrie } from './solver.js';
 
@@ -85,37 +88,51 @@ describe('ale: Common = NVdB ∩ Dict’', () => {
   });
 });
 
-describe('ale: guard rails', () => {
+describe('ale: guard rails sui token', () => {
   it('accetta una griglia conforme', () => {
     const tokens = ['c', 'a', 's', 'a', 'm', 'e', 'n', 't', 'e'];
-    expect(guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS)).toEqual([]);
+    expect(tokenGuardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS)).toEqual([]);
   });
 
-  it('rifiuta una riga di sole consonanti', () => {
-    const tokens = ['b', 'c', 'd', 'a', 'e', 'i', 'a', 'e', 'i'];
-    const issues = guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS);
-    expect(issues.some((i) => i.includes('sole consonanti'))).toBe(true);
-  });
-
-  it('rifiuta due Z (rare cap)', () => {
-    const tokens = ['z', 'a', 'z', 'a', 'e', 'i', 'a', 'e', 'i'];
-    const issues = guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS);
-    expect(issues.some((i) => i.includes('z'))).toBe(true);
-  });
-
-  it('le lettere non italiane sono ammesse con i rail di default', () => {
-    /*
-     * La spec dice che l'alfabeto è di 26 token (QU compreso) e che si campiona
-     * da quello: `j k w x y` esistono in `Dict'` (prestiti e nomi stranieri),
-     * quindi NON vengono escluse. La regola resta disponibile per chi la vuole.
-     */
-    const tokens = ['j', 'a', 'x', 'b', 'e', 'c', 'o', 'f', 'i'];
-    expect(guardRailIssues(tokens, 3, DEFAULT_ALE_GUARD_RAILS)).toHaveLength(0);
+  it('rifiuta troppe vocali o troppo poche (banda 30–60%)', () => {
+    const troppe = ['a', 'e', 'i', 'o', 'u', 'a', 'e', 'i', 'o'];
     expect(
-      guardRailIssues(tokens, 3, { ...DEFAULT_ALE_GUARD_RAILS, noForeign: true }).some((i) =>
-        i.includes('non italiani'),
-      ),
+      tokenGuardRailIssues(troppe, 3, DEFAULT_ALE_GUARD_RAILS).some((i: string) => i.startsWith('vocali')),
     ).toBe(true);
+    const pochissime = ['b', 'c', 'd', 'f', 'g', 'h', 'l', 'm', 'n'];
+    expect(
+      tokenGuardRailIssues(pochissime, 3, DEFAULT_ALE_GUARD_RAILS).some((i: string) => i.startsWith('vocali')),
+    ).toBe(true);
+  });
+
+  it('accetta fino a tre token rari H/Z/QU, rifiuta il quarto', () => {
+    // 3 rari + vocali 4/9 = 44% (dentro la banda 30–60%)
+    const tre = ['z', 'h', 'qu', 'c', 'd', 'f', 'a', 'e', 'i'];
+    expect(tokenGuardRailIssues(tre, 3, DEFAULT_ALE_GUARD_RAILS)).toEqual([]);
+    // 4 rari + vocali 3/9 = 33% (dentro la banda)
+    const quattro = ['z', 'h', 'qu', 'z', 'c', 'd', 'a', 'e', 'i'];
+    expect(
+      tokenGuardRailIssues(quattro, 3, DEFAULT_ALE_GUARD_RAILS).some((i: string) => i.includes('rari')),
+    ).toBe(true);
+  });
+});
+
+describe('ale: copertura delle righe/colonne', () => {
+  it('segnala righe e colonne senza soluzioni', () => {
+    // Tutte le celle usate tranne l’ultima riga e l’ultima colonna.
+    const used = [
+      true, true, false,
+      true, true, false,
+      false, false, false,
+    ];
+    const issues = coverageIssues(used, 3);
+    expect(issues.some((i: string) => i.includes('righe'))).toBe(true);
+    expect(issues.some((i: string) => i.includes('colonne'))).toBe(true);
+  });
+
+  it('non segnala nulla quando ogni linea è coperta', () => {
+    const used = new Array(9).fill(true);
+    expect(coverageIssues(used, 3)).toEqual([]);
   });
 });
 
@@ -128,18 +145,22 @@ describe('ale: determinismo', () => {
 
   it('la griglia dipende solo dal seme', () => {
     const freq = computeAleFrequency(['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando']);
-    const g1 = generateAleGrid(4, freq, mulberry32(7));
-    const g2 = generateAleGrid(4, freq, mulberry32(7));
+    const trie = buildTrie(['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando'], {
+      maxLength: 16,
+      minLength: 3,
+    });
+    const g1 = generateAleGrid(4, freq, mulberry32(7), trie);
+    const g2 = generateAleGrid(4, freq, mulberry32(7), trie);
     expect(g1?.tiles.map((t) => t.letter)).toEqual(g2?.tiles.map((t) => t.letter));
   });
 });
 
 describe('ale: calibrazione', () => {
-  const makeStats = (wordCount: number, difficulty: number) => ({
+  const makeStats = (wordCount: number, rarity: number) => ({
     words: Array.from({ length: wordCount }, () => 'abc'),
     wordCount,
-    commonCount: Math.round(wordCount * (1 - difficulty)),
-    difficulty,
+    commonCount: Math.round(wordCount * (1 - rarity)),
+    rarity,
     score: wordCount,
     longest: 3,
   });
@@ -171,6 +192,36 @@ describe('ale: calibrazione', () => {
     });
     expect(tierForDifficulty(0, cal)).toBe('facile');
     expect(tierForDifficulty(1, cal)).toBe('difficile');
+  });
+});
+describe('ale: difficoltà composita 0.25·R + 0.75·S', () => {
+  it('S = 0 al massimo dell’intervallo, S = 1 al minimo', () => {
+    expect(scarcityFor(200, { lo: 100, hi: 200 })).toBe(0);
+    expect(scarcityFor(100, { lo: 100, hi: 200 })).toBe(1);
+    expect(scarcityFor(150, { lo: 100, hi: 200 })).toBeCloseTo(0.5);
+  });
+
+  it('combina rarità e scarsità con i pesi 0.25/0.75', () => {
+    const range = { lo: 100, hi: 200 };
+    // R = 0 (tutte comuni), S = 0 (massimo di parole) → 0
+    expect(compositeDifficulty(0, 200, range)).toBeCloseTo(0);
+    // R = 0, S = 1 (minimo di parole) → 0.75
+    expect(compositeDifficulty(0, 100, range)).toBeCloseTo(0.75);
+    // R = 1 (tutte rare), S = 1 → 1
+    expect(compositeDifficulty(1, 100, range)).toBeCloseTo(1);
+    // R = 1, S = 0 → 0.25
+    expect(compositeDifficulty(1, 200, range)).toBeCloseTo(0.25);
+  });
+
+  it('una griglia SCARSA ma di parole comuni batte una FITTA di parole rare', () => {
+    /*
+     * È il senso della nuova metrica: la scarsità pesa tre volte la rarità.
+     * Esempio: 0.75·1 = 0.75 contro 0.25·1 = 0.25.
+     */
+    const range = { lo: 100, hi: 200 };
+    const scarsaComune = compositeDifficulty(0, 100, range);
+    const fittaRara = compositeDifficulty(1, 200, range);
+    expect(scarsaComune).toBeGreaterThan(fittaRara);
   });
 });
 

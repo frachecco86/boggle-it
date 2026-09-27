@@ -10,14 +10,18 @@
  *      di difficoltà (k-means, con fallback ai tertili);
  *   5. Produzione: cicli di reiezione con seme, con targeting per fascia.
  *
+ * Gli ingressi (1–3) arrivano da `ale-inputs.ts`, la STESSA sorgente usata dal
+ * server per la generazione dall'admin: una sola implementazione, nessuna
+ * possibilità che catalogo offline e catalogo del pannello divergano.
+ *
  * Uso:
- *   pnpm gen:schede:ale                          # 15 schede per fascia su 5×5
+ *   pnpm gen:schede:ale                          # 15 schede per fascia su 4×4, 5×5 e 6×6
  *   pnpm gen:schede:ale -- --n 5 --size 4        # 5 per fascia, tutte le dimensioni
  *   pnpm gen:schede:ale -- --append              # aggiunge senza sovrascrivere
  *   pnpm gen:schede:ale -- --samples 2000        # campione di calibrazione più grande
  *
  * Opzioni:
- *   --size 4|5|6        dimensione (default 5)
+ *   --size 4|5|6        dimensione (default: tutte)
  *   --difficolta <n>    facile|normale|difficile (default: tutte)
  *   --n <numero>        schede per fascia (default 15)
  *   --samples <numero>  griglie per la calibrazione (default 500)
@@ -27,18 +31,11 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
-  buildAleCommon,
-  buildAleLemmas,
-  buildTrie,
   calibrateAle,
-  cleanAleWord,
-  computeAleFrequency,
-  DIFFICULTY_ORDER,
   DEFAULT_ALE_GUARD_RAILS,
+  DIFFICULTY_ORDER,
   generateAleScheda,
-  mulberry32,
   sampleAleBoards,
   schedaFileName,
   schedaKey,
@@ -50,14 +47,7 @@ import {
   type Scheda,
   type SchedaFile,
 } from '@boggle/shared';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../../..');
-const DICT_DIR = path.join(ROOT, 'packages/dictionary/data');
-const ALE_DIR = path.join(DICT_DIR, 'ale');
-const NVDB_PATH = path.join(ALE_DIR, 'nvdb.words.txt');
-const CALIB_PATH = path.join(ALE_DIR, 'calibration.json');
-const OUT_DIR = path.join(ROOT, 'packages/shared/schede');
+import { CALIB_PATH, loadAleInputs, OUT_DIR } from './ale-inputs.js';
 
 const ALL_SIZES: GridSize[] = [4, 5, 6];
 
@@ -68,11 +58,6 @@ function arg(name: string, fallback?: string): string | undefined {
   return value && !value.startsWith('--') ? value : fallback;
 }
 const hasFlag = (name: string) => process.argv.includes(`--${name}`);
-
-function readLines(file: string): string[] {
-  if (!existsSync(file)) throw new Error(`Manca ${file}`);
-  return readFileSync(file, 'utf8').split('\n');
-}
 
 function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
   const file = path.join(OUT_DIR, schedaFileName(size, difficulty));
@@ -86,7 +71,7 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 }
 
 function main(): void {
-  const sizes = arg('size') ? [Number(arg('size')) as GridSize] : [5 as GridSize];
+  const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : DIFFICULTY_ORDER;
   const count = Number(arg('n', '15'));
   const samples = Number(arg('samples', '500'));
@@ -97,48 +82,8 @@ function main(): void {
   for (const s of sizes) if (!ALL_SIZES.includes(s)) throw new Error(`Dimensione non valida: ${s}`);
   for (const d of difficulties) if (!DIFFICULTY_ORDER.includes(d)) throw new Error(`Difficoltà non valida: ${d}`);
 
-  console.log('Carico il dizionario e lo pulisco (Dict → Dict’)…');
-  const rawDict = readLines(path.join(DICT_DIR, 'words.txt'));
-  const dictPrime: string[] = [];
-  const dictSet = new Set<string>();
-  for (const raw of rawDict) {
-    const w = cleanAleWord(raw);
-    if (!w || dictSet.has(w)) continue;
-    dictSet.add(w);
-    dictPrime.push(w);
-  }
-  console.log(`  Dict  ${rawDict.length.toLocaleString('it-IT')} voci → Dict' ${dictPrime.length.toLocaleString('it-IT')}`);
-
-  console.log('Calcolo la frequenza dei token…');
-  const freq = computeAleFrequency(dictPrime);
-  console.log(
-    `  top token: ${freq.ordered.slice(0, 8).map((t) => `${t.token}:${(t.freq * 100).toFixed(1)}%`).join(' ')}`,
-  );
-
-  console.log('Costruisco `Common` (NVdB ∩ Dict’)…');
-  const nvdb = readLines(NVDB_PATH);
-  const common = buildAleCommon(nvdb, dictSet);
-  console.log(`  NVdB ${nvdb.length.toLocaleString('it-IT')} → Common ${common.size.toLocaleString('it-IT')} (${((common.size / dictPrime.length) * 100).toFixed(1)}% di Dict')`);
-
-  /*
-   * Radici (forma → lemma) da Morph-it: NVdB contiene i LEMMI (`amare`), non
-   * tutte le forme flesse. Senza la radice `amo` risulterebbe "rara". Morph-it è
-   * in ISO-8859-1: si decodifica esplicitamente (come fa `build-words.mjs`).
-   */
-  console.log('Costruisco le radici (forma → lemma) da Morph-it…');
-  const morphPath = path.join(DICT_DIR, 'morph-it_048.txt');
-  if (!existsSync(morphPath)) {
-    throw new Error(
-      `Manca ${morphPath}: serve per le radici (le forme flesse contate come comuni).\n` +
-        'Non è nell\u2019immagine Docker (è gitignored per dimensione): la rigenerazione delle schede ale si fa in locale.',
-    );
-  }
-  const morphRaw = new TextDecoder('latin1').decode(readFileSync(morphPath));
-  const lemmas = buildAleLemmas(morphRaw);
-  console.log(`  coppie forma→lemma: ${lemmas.size.toLocaleString('it-IT')}`);
-
-  console.log('Costruisco il trie del solver (Dict’)…');
-  const trie = buildTrie(dictPrime, { maxLength: 16, minLength: 3 });
+  const inputs = loadAleInputs();
+  const { freq, trie, common, lemmas, dictPrime } = inputs;
 
   // La calibrazione dipende dalla DIMENSIONE: la facciamo per ogni dimensione
   // richiesta. Un file per dimensione (una 4×4 ha meno celle di una 6×6).
@@ -163,8 +108,21 @@ function main(): void {
     console.log(`  k-means usato: ${calibration.provenance.usedKmeans ? 'sì' : 'no (fallback ai tertili)'}`);
   }
 
-  // Persistenza della calibrazione (provenienza della spec §6.4).
-  mkdirSync(ALE_DIR, { recursive: true });
+  /*
+   * Persistenza della calibrazione (provenienza della spec §6.4).
+   *
+   * Si FONDE con il file esistente: una run per una sola dimensione non deve
+   * cancellare le calibrazioni delle altre. Il file contiene `bySize` con una
+   * voce per dimensione (una 4×4 ha meno celle di una 6×6).
+   */
+  mkdirSync(path.dirname(CALIB_PATH), { recursive: true });
+  const previous = existsSync(CALIB_PATH)
+    ? (JSON.parse(readFileSync(CALIB_PATH, 'utf8')) as { bySize?: Record<string, AleCalibration> })
+    : {};
+  const bySize = {
+    ...(previous.bySize ?? {}),
+    ...Object.fromEntries([...calibrations.entries()].map(([s, c]) => [String(s), c])),
+  };
   writeFileSync(
     CALIB_PATH,
     JSON.stringify(
@@ -172,13 +130,13 @@ function main(): void {
         generatedAt: new Date().toISOString(),
         seed,
         guardRails: DEFAULT_ALE_GUARD_RAILS,
-        bySize: Object.fromEntries([...calibrations.entries()].map(([s, c]) => [String(s), c])),
+        bySize,
       },
       null,
       2,
     ) + '\n',
   );
-  console.log(`✓ Calibrazione scritta in ${path.relative(ROOT, CALIB_PATH)}`);
+  console.log(`✓ Calibrazione scritta in ${path.relative(process.cwd(), CALIB_PATH)} (dimensioni: ${Object.keys(bySize).sort().join(', ')})`);
 
   mkdirSync(OUT_DIR, { recursive: true });
 
@@ -237,7 +195,7 @@ function main(): void {
       );
     }
   }
-  console.log(`\nSchede scritte in ${path.relative(ROOT, OUT_DIR)}/`);
+  console.log(`\nSchede scritte in ${path.relative(process.cwd(), OUT_DIR)}/`);
   console.log('Ricordati di copiare il bundle: node apps/web/scripts/copy-schede.mjs');
 }
 
