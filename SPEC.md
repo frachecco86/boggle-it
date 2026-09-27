@@ -87,9 +87,11 @@ Requisiti di qualità (imposti in generazione, con rigenerazione finché non è 
 | Lunghezza media | — | bande misurate (4,4 / 4,1 / 3,8 su 4×4) |
 | Struttura | — | nessuna consonante a più di 2 celle da una vocale, al massimo una riga/colonna senza vocali, nessuna `h` senza `c`/`g` |
 
-La scelta si fa in home (foglio impostazioni) e vale sia per il single player sia per la stanza
-creata; in lobby l'host può cambiarla. Le schede `full` portano l'etichetta **FULL** nella pagina
-"Sfoglia le schede", dove si possono anche filtrare.
+La scelta si fa dal **pannello admin** (tipo di scheda di default): è una decisione di
+prodotto valida per tutti, non una preferenza del giocatore. Nelle impostazioni partita il
+giocatore la vede come **etichetta** (non modificabile) e in lobby l'host non può cambiarla.
+Le schede `full` portano l'etichetta **FULL** nella pagina "Sfoglia le schede", dove si
+possono anche filtrare.
 
 **La banda sul numero di parole è la leva della disparità.** Misurato: `r(parole, punti) = 0,99`
 (il 98% della varianza dei punti è spiegata dal numero di parole; i punti per parola variano solo
@@ -107,9 +109,11 @@ si formano parole lunghe.
 I numeri si rimisurano con `pnpm --filter @boggle/server measure:schede` (opzione `--variant`);
 le schede si verificano con `verify:schede`.
 
-Catalogo di base: **135 schede** — 10 `standard` + 5 `full` per ognuna delle 9 combinazioni
-dimensione × difficoltà — rigenerabili con `pnpm gen:schede` (opzioni `--variant`, `--append`) e
-ampliabili dal pannello admin.
+Catalogo di base: **270 schede** — 10 `standard` + 5 `full` + 15 `ale` per ognuna delle 9
+combinazioni dimensione × difficoltà (4×4, 5×5, 6×6) — rigenerabili con `pnpm gen:schede`
+(opzioni `--variant`, `--append`), `pnpm gen:schede:ale` e ampliabili dal pannello admin. Le
+schede `ale` generate a runtime stanno in `schede-ale/`, separate dalle `standard`/`full` in
+`schede-extra/`.
 
 ### 3.2 Selezione parola (swipe)
 - Il giocatore preme su una cella e trascina verso celle **adiacenti** (8 direzioni).
@@ -218,24 +222,31 @@ I punti non sono salvati: si derivano (`lunghezza − 2`). I file sono partizion
 ### 4-bis.2 Endpoint
 | Metodo | Rotta | Auth | Descrizione |
 |---|---|---|---|
+| GET | `/config` | no | Configurazione globale (tipo di scheda di default) |
 | GET | `/schede` | no | Totali e conteggi per gruppo |
 | GET | `/schede/:id` | no | Scheda completa (griglia + tutte le parole) |
 | GET | `/preview?gridSize=&difficulty=` | no | Una scheda di esempio + conteggio |
 | GET | `/admin/verify` | Bearer | Verifica token |
-| GET | `/admin/schede?size=&difficulty=` | Bearer | Elenco metadati schede |
-| POST | `/admin/schede/genera` | Bearer | Genera e salva nuove schede |
+| GET | `/admin/config` | Bearer | Legge la configurazione globale |
+| PUT | `/admin/config` | Bearer | Imposta il tipo di scheda di default |
+| GET | `/admin/schede?size=&difficulty=&variant=` | Bearer | Elenco metadati schede |
+| POST | `/admin/schede/genera` | Bearer | Genera e salva nuove schede (`standard` / `full` / `ale`) |
+| DELETE | `/admin/schede?scope=&variant=&confirm=DELETE` | Bearer | Cancella schede (ambiti: `extra`, `ale`, `variant`, `all`) |
 
 Il token admin sta in `ADMIN_TOKEN`. Se non impostato, le rotte admin rispondono **503**
 (admin disabilitato di default: più sicuro di un pannello aperto per dimenticanza).
-Le schede generate dall'admin sono salvate in `SCHEDE_EXTRA_DIR` (default `schede-extra/`),
-separate da quelle versionate, e aggiunte subito al catalogo in memoria.
+Le schede generate dall'admin sono salvate in `SCHEDE_EXTRA_DIR` (default `schede-extra/`) e
+quelle `ale` in `SCHEDE_ALE_DIR` (default `schede-ale/`), separate da quelle versionate,
+e aggiunte subito al catalogo in memoria.
 
 ### 4-bis.3 Interfaccia
 - **Home**: numero totale di schede disponibili, sempre visibile.
-- **Pagina scheda** (`/` → schermata `scheda`): griglia e **tutte** le parole trovabili,
-  raggruppate per lunghezza con i punti. Le soluzioni sono pubbliche per scelta di prodotto.
-- **Pannello admin** (schermata `admin`): token, elenco con anteprima delle griglie,
-  filtri e generazione di nuove schede; dalla card si apre la pagina scheda.
+- **Pagina scheda** (`scheda`): griglia e **tutte** le parole trovabili, raggruppate per
+  lunghezza con i punti. Le soluzioni sono pubbliche per scelta di prodotto; vi si accede dal
+  pannello admin ("Sfoglia le schede"), non dalla home.
+- **Pannello admin** (schermata `admin`, tre tab): tab **Schede** con il tipo di scheda di
+default, la generazione (`standard` / `full` / `ale`), i filtri, la sfoglia-schede e la
+cancellazione (per ambito o variante, con conferma digitata); tab **Musica** e **Profili**.
 
 ---
 
@@ -277,19 +288,20 @@ separate da quelle versionate, e aggiunte subito al catalogo in memoria.
 
 ### 6.1 Schermate
 1. **Home** — titolo, numero di schede disponibili, «Gioca da solo» (parte subito) e
-   «Impostazioni partita» (apre il foglio), campo codice + «Entra», link a «Sfoglia le
-   schede» e «Admin», credits dizionario.
+   «Impostazioni partita» (apre il foglio), campo codice + «Entra», link a «Admin» e
+   «Profili», credits dizionario.
 2. **Impostazioni partita** — foglio sovrapposto alla home: griglia, difficoltà, durata,
-   round, «Regole e punteggi», e le due partenze «Gioca da solo» / «Crea la stanza».
-   Le stesse scelte valgono per single player e stanza.
+   round, tipo di scheda (etichetta, decisa dall'admin), «Regole e punteggi», e le due
+   partenze «Gioca da solo» / «Crea la stanza». Le stesse scelte valgono per single player
+   e stanza.
 3. **Lobby multiplayer** — codice stanza grande e copiabile, invito con link, lista
-   giocatori, impostazioni host, «Avvia». Della scheda si sa solo **che è pronta**: non si
-   vede prima del round.
+   giocatori, impostazioni host (la variante delle schede è un'etichetta), «Avvia». Della
+   scheda si sa solo **che è pronta**: non si vede prima del round.
 4. **Gioco** — griglia centrale, timer, punteggio, input parola corrente, lista parole trovate, classifica (MP).
 5. **Riepilogo round** — punteggi del round, parole per giocatore (badge ×2 sulle uniche), "Prossimo round".
 6. **Riepilogo finale** — classifica, statistiche, "Rigioca" / "Torna alla home".
-7. **Scheda** — griglia della scheda e tutte le parole trovabili, per lunghezza.
-8. **Admin** — token, elenco schede con anteprima, filtri, generazione.
+7. **Scheda** — griglia della scheda e tutte le parole trovabili, per lunghezza (dal pannello admin).
+8. **Admin** — tre tab: Schede (default, genera, filtra, sfoglia, cancella), Musica, Profili.
 
 Mobile-first: layout verticale, griglia a tutta larghezza, area di swipe con `touch-action: none`.
 

@@ -18,10 +18,10 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**.
   **Ogni voce è giocabile**: è la stessa lista usata dalle schede. Le abbreviazioni e le
   etichette di materia (`idr`, `geogr`, `avv`…) **non** sono nel lessico.
-- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (135 schede di base:
-  10 `standard` + 5 `full criteria` per ognuna delle 9 combinazioni dimensione × difficoltà).
-  Ogni scheda contiene la griglia e **tutte** le parole trovabili (accettate in partita), con
-  parole di varia lunghezza. I due cataloghi si scelgono nelle impostazioni partita.
+- **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (270 schede di base:
+  10 `standard` + 5 `full criteria` + 15 `ale` per ognuna delle 9 combinazioni dimensione ×
+  difficoltà). Ogni scheda contiene la griglia e **tutte** le parole trovabili (accettate in
+  partita), con parole di varia lunghezza. Il tipo di scheda si scegle dal pannello admin.
   Niente più griglie improvvisate: partite riproducibili e soluzioni verificate.
 - **La difficoltà è il numero di parole trovabili**, non la composizione delle lettere: le bande
   di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
@@ -30,9 +30,10 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Punteggio Boggle adattato**: **1 punto per una parola di 3 lettere, poi un punto in più per
   ogni lettera** (lunghezza − 2; una parola da 10 lettere vale 8 punti). In multiplayer una
   parola trovata da **un solo giocatore vale doppio**.
-- **Catalogo schede in home**: numero totale sempre visibile; **pagina scheda** con la griglia
-  e tutte le parole trovabili raggruppate per lunghezza; **pannello admin** con token per
-  generarerne di nuove.
+- **Catalogo schede in home**: numero totale sempre visibile; **pannello admin** con token per
+  generarne di nuove e per decidere il **tipo di scheda di default** (Standard / Full criteria /
+  Ale) valido per tutti i giocatori; la **pagina scheda** con la griglia e tutte le parole
+  trovabili si apre dal pannello admin ("Sfoglia le schede").
 - **Profili persistenti** (opzionali): più profili salvati sul dispositivo con switch rapido,
   registrazione/acceso con nickname e password (scrypt, SQLite). Il profilo porta con sé
   avatar, **foto** e **suoni personali**.
@@ -154,13 +155,14 @@ mentre il container gira come `node`. Dettagli in [`docs/DEPLOY.md`](docs/DEPLOY
 
 ### Schede
 
-Le schede di base sono versionate in `packages/shared/schede/` (135 schede, ~330 KB).
+Le schede di base sono versionate in `packages/shared/schede/` (270 schede, ~700 KB).
 Per rigenerarle o aggiungerne:
 
 ```bash
 pnpm gen:schede                                   # 10 schede standard per combinazione
 pnpm gen:schede -- --variant full --n 5 --append   # 5 schede "full criteria"
 pnpm gen:schede -- --size 4 --difficolta facile --n 60
+pnpm gen:schede:ale -- --replace                   # schede "ale" (4×4, 5×5, 6×6)
 ```
 
 Le schede generate con i **criteri completi** portano `variant: "full"` e l’etichetta **FULL**
@@ -168,8 +170,11 @@ nella pagina "Sfoglia le schede" (dove si possono anche filtrare).
 
 Come funzionano i tre algoritmi (con criteri e numeri misurati): **[`docs/algoritmi/`](docs/algoritmi/README.md)**.
 
-L'admin può generarne altre a runtime dal pannello `/admin` (richiede `ADMIN_TOKEN`).
-Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata).
+L'admin può generarne altre a runtime dal pannello `/admin` (richiede `ADMIN_TOKEN`), comprese
+le **ale**: il pannello ha il pulsante "Genera" per ogni variante e può **cancellare** le schede
+per ambito (solo quelle aggiunte, solo le ale, per variante o tutte).
+Quelle nuove vengono salvate in `DATA_DIR/schede-extra/` (standard/full) e `DATA_DIR/schede-ale/`
+(ale) — entrambe non versionate e dentro il volume persistente.
 
 ---
 
@@ -207,6 +212,10 @@ Quelle nuove vengono salvate in `packages/shared/schede-extra/` (non versionata)
 | `ROUND_DURATION_MS` | `180000` | Durata round (per test/dev) |
 | `COUNTDOWN_MS` | `3000` | Countdown iniziale (per test/dev) |
 | `ROUND_END_PAUSE_MS` | `10000` | Pausa tra i round |
+| `DATA_DIR` | `data/` | Volume persistente (DB, schede admin, musica, config) |
+| `SCHEDE_EXTRA_DIR` | `<DATA_DIR>/schede-extra` | Schede standard/full generate dall'admin |
+| `SCHEDE_ALE_DIR` | `<DATA_DIR>/schede-ale` | Schede ale generate dall'admin |
+| `APP_CONFIG_FILE` | `<DATA_DIR>/app-config.json` | Tipo di scheda di default |
 
 ---
 
@@ -278,12 +287,14 @@ Guida completa in [`docs/DEPLOY.md`](docs/DEPLOY.md). Due opzioni:
 
 | Stato | RSS |
 |---|---|
-| Avvio (dizionario + catalogo schede in memoria) | ~180 MB |
-| Generazione schede dall'admin (trie completo) | picco ~350 MB |
+| Avvio (dizionario + catalogo schede in memoria) | ~230 MB |
+| Generazione schede standard/full dall'admin (trie completo) | picco ~350 MB |
+| Generazione schede **ale** dall'admin (trie 16 lettere + radici) | picco ~450 MB, rilasciato subito dopo |
 
 Il trie del **solver non esiste più a runtime**: le parole valide arrivano dalle schede,
-quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione viene
-allocato **solo se** l'admin genera nuove schede.
+quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione delle schede
+classiche e gli ingressi dell'algoritmo **ale** vengono allocati **solo** quando l'admin
+genera. Quelli delle ale vengono **rilasciati** a fine richiesta, così il picco non resta.
 
 I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quindi
 `pnpm --filter @boggle/dictionary build` rigenera `words.txt` senza rete.

@@ -16,13 +16,14 @@ ripeterle.
 
 ## Come si sceglie
 
-La variante è una scelta del giocatore, non della partita:
+La variante è una **decisione di prodotto**, non una scelta del giocatore:
 
-- **Home → Impostazioni partita** (riga "Schede"): vale sia per il single player sia per la
-  stanza che si crea;
-- **Lobby**: l’host può cambiarla (gli altri la vedono nella riga riassuntiva);
-- **Sfoglia le schede**: filtro "Criteri" ed etichetta accanto al titolo (`FULL` per i
-  "full criteria", `Ale` per le schede ale).
+- **Pannello admin → tab Schede** ("Tipo di scheda di default"): vale per **tutte** le
+  partite, single player e stanze. Il giocatore non può cambiarla;
+- **Home → Impostazioni partita** e **Lobby**: la variante in vigore compare come
+  **etichetta** (non modificabile);
+- **Sfoglia le schede** (dal pannello admin): filtro "Tipo" ed etichetta accanto al titolo
+  (`FULL` per i "full criteria", `ALE` per le schede ale).
 
 Ogni scheda porta la variante nel campo `variant` (`standard` | `full` | `ale`); le schede
 di formato ≤ 2, senza il campo, valgono `standard`.

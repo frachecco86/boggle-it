@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.34.0';
+export const APP_VERSION = '0.36.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,77 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.36.0',
+    date: '2026-09-27',
+    title: 'Schede Ale nuove: guard rail più larghi, difficoltà su rarità e quantità',
+    promo: {
+      emoji: '🃏',
+      headline: 'Le schede Ale su ogni griglia',
+      text: 'L’algoritmo Ale cambia: le parole contano sia per quanto sono rare sia per quante ce ne sono, e ogni riga e colonna della griglia deve servire a trovare almeno una parola. Ora le schede Ale sono calibrate e disponibili su 4×4, 5×5 e 6×6.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Schede Ale su tutte le griglie**: calibrazione per 4×4, 5×5 e 6×6 (prima solo 5×5) e 15 schede per ognuna delle 9 combinazioni. Il tipo di scheda di default scelto dall’admin può quindi essere `Ale` con qualsiasi dimensione.',
+          '**Nuova metrica di difficoltà** `0.25·R + 0.75·S`: `R` è la quota di parole rare (fuori dal vocabolario comune), `S` la **scarsità** di parole dentro l’intervallo calibrato. Così una griglia con poche parole è difficile anche se le parole sono comuni, e una griglia fitta resta abbordabile.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Guard rail nuovi**: banda vocali allargata a 30–60%, al più **tre** token rari (`H`/`Z`/`QU`) in totale, e — soprattutto — **nessuna riga o colonna senza soluzioni**: ogni linea deve contribuire ad almeno una parola. Le vecchie regole sulle “righe di sole consonanti” e sulle lettere straniere sono state rimosse.',
+          'Le tre fasce di difficoltà restano **bilanciate** (circa un terzo ciascuna) in ogni dimensione, quindi le partite facili, normali e difficili restano disponibili in pari misura.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Il guard rail di copertura non è una proprietà dei token: richiede di **risolvere** la griglia e verificare che ogni riga e colonna sia attraversata da almeno una parola (`coverageIssues` / `solveGridCoverage`). Viene valutato solo sui candidati che hanno già superato i rail sui token, così il costo resta basso.',
+          'La difficoltà non è più salvata come campo unico: `rarity` nella statistica di griglia e `compositeDifficulty` in calibrazione, con i pesi registrati in `calibration.json` (`provenance.weights`). Cambiare pesi o guard rail invalida la calibrazione, come da contratto dell’algoritmo.',
+          '`pnpm --filter @boggle/server report:ale -- --all-sizes` misura tutte le dimensioni; `gen:schede:ale` calibra 4/5/6 e **fonde** con la calibrazione esistente invece di sovrascriverla.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.35.0',
+    date: '2026-09-27',
+    title: 'Il tipo di scheda lo decide l’admin, generazione Ale e pulizia del catalogo',
+    promo: {
+      emoji: '🃏',
+      headline: 'Il tipo di scheda lo scegle chi amministra',
+      text: 'Standard, Full criteria o Ale: ora è una scelta unica, decisa dal pannello di amministrazione e valida per tutte le partite. Nelle impostazioni partita lo vedi come etichetta, senza doverlo più scegliere. E dal pannello puoi generare anche le schede Ale e ripulire il catalogo.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Tipo di scheda di default, deciso dall’admin** (tab Schede): vale per **tutte** le partite — single player e stanze — e i giocatori non possono cambiarlo. Prima lo sceglieva il giocatore in home e l’host in lobby, quindi due partite potevano avere criteri diversi senza che nessuno lo sapesse.',
+          '**Generazione delle schede Ale dal pannello**: il selettore “Tipo” include `Ale` (griglia forzata 5×5). La pipeline completa (calibrazione + vocabolario comune + radici) gira sul server; le schede finiscono in `schede-ale/`, separate dalle altre.',
+          '**Cancellazione delle schede dal pannello**: per ambito (solo quelle aggiunte, solo le Ale, per variante, o **tutte**), con conferma digitata (`DELETE`) perché è irreversibile. Prima non c’era modo di svuotare il catalogo.',
+          '**“Sfoglia le schede” si sposta nel pannello admin**: le soluzioni sono pubbliche per scelta di prodotto, ma il tasto in home invitava a studiarle prima di giocare. Ora è dentro la tab Schede (e dalla card si apre la singola scheda).',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**Impostazioni partita**: la riga “Schede” mostra il tipo in vigore come **etichetta** (non più tre pulsanti), con la spiegazione. Stessa cosa in lobby, dove l’host continua a scegliere griglia, difficoltà, durata, round e musica.',
+          '**La sfoglia-schede** mantiene esattamente quello che c’era (filtri per griglia, difficoltà, tipo, punteggio minimo e ordinamento), solo in un posto più sensato.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La configurazione globale vive in `DATA_DIR/app-config.json` ed è esposta da `GET /config` (pubblica, senza cache). Le stanze la impongono anche se un client vecchio invia ancora `schedaVariant`: il server ignora il campo.',
+          '`schedaVariantForSize()` centralizza la regola “le Ale esistono solo su 5×5”: un’unica funzione per client, server e selettore, invece di tre copie.',
+          'Le radici forma → lemma per l’algoritmo Ale sono in `packages/dictionary/data/ale/lemmas.br` (169 KB, versionato): solo le forme il cui lemma è comune, equivalenti a Morph-it (verificato su 283.000 parole) ma senza i 19 MB della fonte grezza. Rigenerabili con `pnpm --filter @boggle/dictionary build:ale-lemmas`.',
+          'Gli ingressi dell’algoritmo Ale vengono **rilasciati** dopo la generazione (`releaseAleInputs`), così il picco di memoria (~450 MB con il trie a 16 lettere) non resta occupato.',
+        ],
+      },
+    ],
+  },
   {
     "version": "0.34.0",
     "date": "2026-09-26",
