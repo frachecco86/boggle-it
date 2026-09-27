@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.37.0';
+export const APP_VERSION = '0.37.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,32 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.37.1',
+    date: '2026-09-27',
+    title: 'In multiplayer valgono le schede scelte dall’amministratore',
+    promo: {
+      emoji: '🎛️',
+      headline: 'La stanza usa le schede giuste',
+      text: 'Creando una stanza, le schede tornavano sempre quelle “standard”, anche se l’amministratore aveva scelto un altro tipo: in single player la scelta valeva, in multiplayer no. Ora la stanza usa le schede decise dall’amministratore come il gioco da solo.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le stanze multiplayer usano il tipo di scheda scelto dall’amministratore.** Creando una stanza, la scelta tornava sempre su *Standard*: se in amministrazione era impostato un altro tipo (per esempio *Ale*), il single player e la home lo rispettavano ma la stanza no, e si giocavano criteri diversi da quelli previsti.',
+          'La correzione è **lato server**: vale da subito anche per l’app già installata, senza reinstallare nulla.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La regola “quale variante vale per una partita” era scritta **due volte**: la creazione della stanza la leggeva dal client con fallback `standard`, la riconfigurazione usava invece il default dell’amministratore. Dal 0.35.0 il client non invia più quel campo, quindi la prima copia è rimasta a fissare `standard` per ogni stanza, mentre la seconda era corretta.',
+          'La regola è ora **una sola funzione** (`roomVariant.ts`) usata da entrambe le rotte, così le due copie non possono più divergere. 5 test la coprono, incluso il caso in cui un client vecchio provi a imporre la propria scelta: viene ignorata.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.37.0',
     date: '2026-09-27',

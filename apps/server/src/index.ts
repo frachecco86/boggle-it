@@ -43,6 +43,7 @@ import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 import { VoiceRelay } from './voice.js';
 import { corsOriginList, corsSettingsFromEnv, makeCorsOrigin } from './corsOrigin.js';
+import { resolveRoomVariant } from './roomVariant.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -1508,8 +1509,19 @@ io.on('connection', (socket) => {
       const difficulty = isDifficulty(payload?.difficulty) ? payload.difficulty : 'normale';
       const roundDurationMs = clampDuration(payload?.roundDurationMs);
       const maxPlayers = clampMaxPlayers(payload?.maxPlayers);
-      // Insieme di criteri delle schede della stanza (standard / full criteria).
-      const schedaVariant = resolveSchedaVariant(payload?.schedaVariant);
+      /*
+       * I criteri delle schede li decide l'ADMIN, non chi crea la stanza: il
+       * valore eventualmente inviato dal client viene IGNORATO e si usa il
+       * default globale (con la compatibilità di dimensione), esattamente come
+       * in `room:configure`.
+       *
+       * Il difetto: qui si leggeva `payload.schedaVariant` con fallback
+       * `'standard'`. Il client non lo invia piu' (dal 0.35.0 la scelta e'
+       * dell'admin), quindi OGNI stanza nasceva `standard` e il multiplayer
+       * ignorava l'impostazione dell'admin, che si vedeva invece in single
+       * player e in home.
+       */
+      const schedaVariant = resolveRoomVariant(defaultVariant(), gridSize, payload?.schedaVariant);
       const room = registry.create(
         gridSize,
         rounds,
@@ -1688,7 +1700,7 @@ io.on('connection', (socket) => {
      * Se la variante cambia (l'admin l'ha modificata), la scheda già scelta non
      * appartiene più alla selezione e va azzerata.
      */
-    const enforced = schedaVariantForSize(defaultVariant(), room.gridSize);
+    const enforced = resolveRoomVariant(defaultVariant(), room.gridSize, undefined);
     if (enforced !== room.schedaVariant) {
       room.schedaVariant = enforced;
       room.pendingSchedaId = null;
