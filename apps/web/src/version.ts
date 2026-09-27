@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.36.0';
+export const APP_VERSION = '0.36.1';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,32 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.36.1',
+    date: '2026-09-27',
+    title: 'Classifica e Parole funzionano nell’app Android',
+    promo: {
+      emoji: '📱',
+      headline: 'L’app si connette di nuovo al server',
+      text: 'Nell’app la Classifica e la pagina Parole dicevano “server non raggiungibile” anche con la rete attiva. Il server non riconosceva l’app come un client autorizzato: ora la riconosce, e multiplayer e profili tornano a funzionare normalmente.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Nell’app Android Classifica, Parole e multiplayer dicono addio a “server non raggiungibile”.** I file dell’app vengono caricati dal WebView da un indirizzo interno al telefono (`https://localhost`), quindi ogni chiamata al server è considerata *da un sito esterno*: il server aveva un elenco di siti autorizzati che non includeva quello interno, e scartava le risposte. Il server ora riconosce l’app come client autorizzato.',
+          'Il difetto non era nell’app né nella rete: l’APK conteneva già l’indirizzo giusto del server. Era il server a rifiutare le richieste, e per questo la correzione **non richiede di reinstallare l’app**: basta aggiornare il server.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le origini del WebView (`https://localhost` per Android, `capacitor://localhost` per iOS) sono ora **nel codice** con default attivo, non solo in una variabile d’ambiente: dimenticarsene rendeva l’app inutilizzabile a fronte di un server perfettamente sano. Restano disattivabili con `ALLOW_CAPACITOR=0`.',
+          'Regole CORS estratte in `corsOrigin.ts` (prima erano anonime dentro `index.ts`, che avvia il server all’import e quindi non è testabile): **9 test** coprono app, origini esplicite, `*`, assenza di `Origin`, sviluppo locale e il caso di regressione.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.36.0',
     date: '2026-09-27',

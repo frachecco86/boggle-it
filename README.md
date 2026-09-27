@@ -208,7 +208,8 @@ Quelle nuove vengono salvate in `DATA_DIR/schede-extra/` (standard/full) e `DATA
 | Variabile | Default | Descrizione |
 |---|---|---|
 | `PORT` | `3001` | Porta HTTP/Socket.IO |
-| `CLIENT_ORIGIN` | `http://localhost:5173` | Origine CORS consentita |
+| `CLIENT_ORIGIN` | `http://localhost:5173` | Origini CORS consentite (separate da virgola, `*` per tutte). L'app Android è **sempre** consentita, vedi `ALLOW_CAPACITOR` |
+| `ALLOW_CAPACITOR` | `1` | Accetta le origini del WebView dell'app (`https://localhost`, `capacitor://localhost`). Metti `0` solo servendo il WebView da un dominio reale |
 | `ROUND_DURATION_MS` | `180000` | Durata round (per test/dev) |
 | `COUNTDOWN_MS` | `3000` | Countdown iniziale (per test/dev) |
 | `ROUND_END_PAUSE_MS` | `10000` | Pausa tra i round |

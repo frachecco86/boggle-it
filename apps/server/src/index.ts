@@ -42,6 +42,7 @@ import { extractAudio, probeMedia, MediaToolError } from './mediaTool.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 import { VoiceRelay } from './voice.js';
+import { corsOriginList, corsSettingsFromEnv, makeCorsOrigin } from './corsOrigin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 3001);
@@ -49,21 +50,12 @@ const PORT = Number(process.env.PORT ?? 3001);
 /**
  * Origini consentite: una o piu' separate da virgola (es. Netlify + locale).
  * Con `*` si accettano tutte (utile in sviluppo).
+ *
+ * Le origini del WebView Capacitor sono AGGIUNTE sempre (vedi `corsOrigin.ts`):
+ * senza di esse l'app Android non puo' parlare col server, pur essendo online.
  */
-const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN ?? 'http://localhost:5173')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
-  if (!origin) return callback(null, true); // curl, health check, same-origin
-  if (CLIENT_ORIGINS.includes('*') || CLIENT_ORIGINS.includes(origin)) return callback(null, true);
-  // In sviluppo consenti localhost su qualsiasi porta.
-  if (process.env.NODE_ENV !== 'production' && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-    return callback(null, true);
-  }
-  return callback(null, false);
-};
+const CORS_SETTINGS = corsSettingsFromEnv();
+const corsOrigin = makeCorsOrigin(CORS_SETTINGS);
 
 // Il dizionario (Set) e' sempre in memoria; il trie del solver e' lazy.
 const dictionary = await loadServerDictionary();
@@ -1883,7 +1875,9 @@ function computeMissedWords(room: Room): string[] {
 
 httpServer.listen(PORT, () => {
   console.log(`✓ Sbooble server su http://localhost:${PORT}`);
-  console.log(`  origini client consentite: ${CLIENT_ORIGINS.join(', ')}`);
+  console.log(
+    `  origini client consentite: ${corsOriginList(CORS_SETTINGS).join(', ')}`,
+  );
   console.log(`  parole in dizionario: ${dictionary.size.toLocaleString('it-IT')}`);
   console.log(`  schede disponibili: ${schede.size.toLocaleString('it-IT')}`);
   const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
