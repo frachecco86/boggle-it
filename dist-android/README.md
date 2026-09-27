@@ -8,19 +8,23 @@ chi clona il repo li trova già.
 
 | File | Versione | Note |
 |---|---|---|
-| `sbooble-0.12.1-debug.apk` | 0.12.1 | `versionCode 13` — server `boggle-it-production.up.railway.app` |
+| `sbooble-0.36.0-debug.apk` | 0.36.0 | `versionCode 14` — server `boggle-it-production.up.railway.app`; schede Ale 4×4/5×5/6×6 e cura dell'apprendimento |
+| `sbooble-0.12.1-debug.apk` | 0.12.1 | storico — `versionCode 13`, server `boggle-it-production.up.railway.app` |
 | `sbooble-0.6.0-debug.apk` | 0.6.0 | storico — cablato **senza** server (multiplayer non funzionante, `.env` ignorato da Vite: corretto in 0.12.1) |
 
 Verifica integrità:
 
 ```bash
 sha256sum dist-android/*.apk
+# 54c1a3693009bd43b1c5379396939322fa85032084d9d54def1b353f9a4bf4cc  sbooble-0.36.0-debug.apk
+# 96599dd4eb592e0a730a58e5db060a645e7c87f51bb2c2b5f381bf07933f27ba  sbooble-0.12.1-debug.apk
+# 58f60210395e5b2c9530ef2f4a84ef60dcae88bce66541c678e837af967203ba  sbooble-0.6.0-debug.apk
 ```
 
 Installazione sul telefono:
 
 ```bash
-adb install -r dist-android/sbooble-0.12.1-debug.apk
+adb install -r dist-android/sbooble-0.36.0-debug.apk
 ```
 
 Oppure copia l'APK sul dispositivo e aprilo (richiede "Installa app da fonti
