@@ -73,13 +73,13 @@ COPY --from=builder /app/packages/dictionary/data/word-index.br ./packages/dicti
 # Definizioni (modalità apprendimento): pannello "?" della parola trovata.
 # Senza, il pannello ripiega sul link a Wikizionario (funziona comunque).
 COPY --from=builder /app/packages/dictionary/data/definitions.br ./packages/dictionary/data/definitions.br
-# Vocabolario comune NVdB e calibrazione "ale".
+# Vocabolario comune NVdB, calibrazione "ale" e radici.
 #
-# NOTA: la calibrazione (`calibration.json`) è già pronta perché il catalogo
-# versionato la include. Il vocabolario NVdB serve solo per RIGENERARE le schede
-# ale con `pnpm gen:schede:ale`, che richiede anche `morph-it_048.txt` (escluso
-# dall'immagine per dimensione): la rigenerazione delle schede ale si fa quindi
-# in locale, non dentro il container. Il server non ne ha bisogno a runtime.
+# La cartella `ale/` include: `nvdb.words.txt` (vocabolario comune), la
+# `calibration.json` e `lemmas.br` (radici forma → lemma, versionate). Con questi
+# tre file la generazione delle schede ale gira anche nel container: dallo script
+# `pnpm gen:schede:ale` E dal pulsante "Genera" del pannello admin. Morph-it
+# (19 MB, gitignored) NON serve: `lemmas.br` è già il suo estratto utile.
 COPY --from=builder /app/packages/dictionary/data/ale ./packages/dictionary/data/ale
 
 # Tool di estrazione audio da link (tab Musica dell'admin).
@@ -119,9 +119,13 @@ ENV PORT=3001
 #
 # Il picco sale a ~370 MB quando si aprono le DEFINIZIONI (modalità
 # apprendimento): `definitions.br` è caricato pigramente e resta in memoria.
-# Senza apprendimento il server resta sui ~220 MB. 640 MB lascia margine per
-# entrambi i casi senza esagerare (un tetto troppo alto rischia l'OOM del
-# container, che di solito ne ha meno).
+# Senza apprendimento il server resta sui ~220 MB.
+#
+# La GENERAZIONE delle schede ale dall'admin è l'altro picco: trie a 16 lettere
+# (~180 MB) + radici, per qualche secondo. L'endpoint la rilascia subito dopo
+# (`releaseAleInputs`), quindi il picco è temporaneo e non si somma alle
+# definizioni. 640 MB lascia margine per entrambi i casi senza esagerare (un
+# tetto troppo alto rischia l'OOM del container, che di solito ne ha meno).
 ENV NODE_OPTIONS=--max-old-space-size=640
 
 EXPOSE 3001

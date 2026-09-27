@@ -21,17 +21,22 @@ import {
   type LeaderboardPeriod,
   type WordCatalogQuery,
   type SchedaStats,
+  type AppConfig,
   type SchedaVariant,
   type SfxSlot,
   acceptedWords,
+  isSchedaVariant,
   resolveSchedaVariant,
+  schedaVariantForSize,
   schedaVariantOf,
   schedaWordPoints,
   WORD_CATALOG_DEFAULT_LIMIT,
   type ServerToClientEvents,
 } from '@boggle/shared';
 import { loadServerDictionary, getSchedaPool } from './dictionary.js';
-import { DATA_DIR, EXTRA_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
+import { DATA_DIR, EXTRA_SCHEDE_DIR, ALE_SCHEDE_DIR, BASE_SCHEDE_DIR, SchedaCatalog, toMeta } from './schede.js';
+import { AppConfigStore } from './appConfig.js';
+import { generateAleBatch, getAleInputs, releaseAleInputs } from './ale.js';
 import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
 import { extractAudio, probeMedia, MediaToolError } from './mediaTool.js';
 import { ProfileStore } from './profiles.js';
@@ -65,6 +70,23 @@ const dictionary = await loadServerDictionary();
 const registry = new RoomRegistry(dictionary);
 // Catalogo schede: caricato una volta all'avvio (base versionate + extra admin).
 const schede = SchedaCatalog.load();
+
+/**
+ * Configurazione globale (tipo di scheda di default), decisa dall'admin.
+ * Persistita nel volume dei dati, quindi sopravvive ai riavvii del container.
+ */
+const appConfig = new AppConfigStore();
+
+/**
+ * Variante in vigore: il default deciso dall'admin, non una scelta del giocatore.
+ *
+ * La variante viene passata dal client (home e lobby) in vecchie versioni: qui la
+ * IGNORIAMO sempre e usiamo solo questa. Così anche un client non aggiornato gioca
+ * i criteri stabiliti dall'amministratore.
+ */
+function defaultVariant(): SchedaVariant {
+  return appConfig.get().defaultSchedaVariant;
+}
 
 /**
  * Profili: un file SQLite in DATA_DIR (lo stesso usato dal catalogo per le schede
@@ -119,6 +141,19 @@ app.get('/dictionary/words.txt', (req, res) => {
   res.sendFile(path.join(DICT_DIR, 'words.txt'));
 });
 
+/* ---------------- Configurazione globale (pubblica) ---------------- */
+
+/**
+ * Configurazione dell'app, decisa dall'admin e valida per tutti.
+ *
+ * Pubblica e senza cache: il client la legge all'avvio (e al ritorno in home)
+ * per sapere il tipo di scheda di default. Non contiene nulla di sensibile.
+ */
+app.get('/config', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(appConfig.get());
+});
+
 /* ---------------- Musica (playlist condivisa) ---------------- */
 
 /**
@@ -167,8 +202,16 @@ app.get('/preview', (req, res) => {
   const gridSize: GridSize = gridSizeRaw === 5 || gridSizeRaw === 6 ? gridSizeRaw : 4;
   const difficultyRaw = String(req.query.difficulty ?? 'normale');
   const difficulty: Difficulty = isDifficulty(difficultyRaw) ? difficultyRaw : 'normale';
-  // Criteri delle schede: `standard` (default) o `full` ("full criteria").
-  const variant = resolveSchedaVariant(req.query.variant);
+  /*
+   * Criteri delle schede: SEMPRE quelli globali decisi dall'admin.
+   *
+   * Prima arrivavano dal client (`?variant=`), quindi il giocatore sceglieva i
+   * criteri. Ora la scelta è di prodotto e il parametro viene ignorato: così
+   * anche un client non aggiornato gioca il default dell'admin. Se la variante
+   * non è compatibile con la griglia si ricade su
+   * standard invece di restituire zero schede.
+   */
+  const variant = schedaVariantForSize(defaultVariant(), gridSize);
 
   res.setHeader('Cache-Control', 'no-store');
   const scheda = schede.random(gridSize, difficulty, Math.random, variant);
@@ -246,8 +289,9 @@ app.get('/schede', (_req, res) => {
     const size = key.split('-')[0]!;
     bySize[size] = (bySize[size] ?? 0) + count;
   }
+  const byVariant = schede.countByVariant();
   // Quante schede per criterio: il client può mostrare cosa è disponibile.
-  res.json({ total: schede.size, byKey, bySize, ids, meta, byVariant: schede.countByVariant() });
+  res.json({ total: schede.size, byKey, bySize, ids, meta, byVariant, config: appConfig.get() });
 });
 
 
@@ -789,41 +833,66 @@ app.get('/admin/schede', (req, res) => {
   if (!requireAdmin(req, res)) return;
   const size = Number(req.query.size);
   const difficulty = String(req.query.difficulty ?? '');
-  const filtered = schede.list(
+  const variant = String(req.query.variant ?? '');
+  let filtered = schede.list(
     size === 4 || size === 5 || size === 6 ? size : undefined,
     isDifficulty(difficulty) ? difficulty : undefined,
   );
+  if (isSchedaVariant(variant)) filtered = filtered.filter((s) => schedaVariantOf(s) === variant);
   res.json({
     total: schede.size,
     count: filtered.length,
     byKey: schede.countByKey(),
+    byVariant: schede.countByVariant(),
+    config: appConfig.get(),
     schede: filtered.map(toMeta),
   });
 });
 
 /**
+ * Stato e modifica della configurazione globale.
+ *
+ * GET  /admin/config -> { defaultSchedaVariant }
+ * PUT  /admin/config { defaultSchedaVariant } -> configurazione aggiornata
+ *
+ * Il tipo di scheda di default è una scelta di PRODOTTO: vale per il single
+ * player e per tutte le stanze, e il giocatore non può cambiarlo. Per questo
+ * vive sul server, condivisa, e non nella preferenza del singolo dispositivo.
+ */
+app.get('/admin/config', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(appConfig.get());
+});
+
+app.put('/admin/config', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const raw = req.body?.defaultSchedaVariant;
+  if (!isSchedaVariant(raw)) {
+    return res.status(400).json({ error: 'defaultSchedaVariant deve essere standard, full o ale' });
+  }
+  const next = appConfig.setDefaultSchedaVariant(raw);
+  console.log(`✓ Admin: tipo di scheda di default → ${next.defaultSchedaVariant}`);
+  res.json(next);
+});
+
+/**
  * Genera e salva nuove schede.
  *
- * POST /admin/schede/genera  { size, difficulty, count }
+ * POST /admin/schede/genera  { size, difficulty, count, variant }
  * -> { created: SchedaMeta[], total }
  *
- * Le schede vengono scritte in `SCHEDE_EXTRA_DIR` (default `schede-extra/`) e
- * aggiunte subito al catalogo in memoria.
+ * Le varianti `standard` e `full` sono classiche (pool del dizionario) e vivono
+ * in `schede-extra/`. La variante `ale` richiede la pipeline completa
+ * (calibrazione + NVdB + Morph-it) e viene scritta in `schede-ale/`, separata,
+ * così cancellarla o rigenerarla non tocca le altre.
  */
 app.post('/admin/schede/genera', async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const size = Number(req.body?.size);
   const difficulty = String(req.body?.difficulty ?? '');
   const count = Math.max(1, Math.min(100, Number(req.body?.count ?? 10)));
-  // Criteri di generazione: `standard` (default) o `full` ("full criteria").
-  // `ale` non è generabile da qui: richiede la calibrazione e il vocabolario NVdB,
-  // quindi si produce offline con `pnpm gen:schede:ale`.
   const variant = resolveSchedaVariant(req.body?.variant);
-  if (variant === 'ale') {
-    return res.status(400).json({
-      error: 'Le schede "ale" si generano offline con `pnpm gen:schede:ale` (richiedono calibrazione).',
-    });
-  }
   if (size !== 4 && size !== 5 && size !== 6) {
     return res.status(400).json({ error: 'size deve essere 4, 5 o 6' });
   }
@@ -831,11 +900,35 @@ app.post('/admin/schede/genera', async (req, res) => {
     return res.status(400).json({ error: 'difficulty non valida' });
   }
 
+
+
   const startedAt = Date.now();
   try {
-    const pool = await getSchedaPool();
     const startIndex = schede.list(size, difficulty).length + 1;
-    const created = pool.generate(size, difficulty, count, { startIndex, variant: variant === 'full' ? 'full' : 'standard' });
+
+    // `ale`: pipeline pesante ma tutta in memoria fino alla scrittura finale.
+    if (variant === 'ale') {
+      const inputs = await getAleInputs();
+      const created = generateAleBatch({ size, difficulty, count, startIndex, inputs });
+      const files = schede.persistMany(created, ALE_SCHEDE_DIR);
+      for (const scheda of created) schede.add(scheda);
+      console.log(
+        `✓ Admin: generate ${created.length} schede ale ${size}x${size} ${difficulty} in ${Date.now() - startedAt}ms → ${files.length} file`,
+      );
+      return res.json({
+        created: created.map(toMeta),
+        total: schede.size,
+        byKey: schede.countByKey(),
+        byVariant: schede.countByVariant(),
+        savedTo: ALE_SCHEDE_DIR,
+      });
+    }
+
+    const pool = await getSchedaPool();
+    const created = pool.generate(size, difficulty, count, {
+      startIndex,
+      variant: variant === 'full' ? 'full' : 'standard',
+    });
 
     /*
      * ORDINE IMPORTANTE: prima si scrive su DISCO, poi si aggiunge in memoria.
@@ -846,8 +939,6 @@ app.post('/admin/schede/genera', async (req, res) => {
      * senza che nessuno se ne accorgesse.
      * Scrivendo prima, un errore blocca tutto e viene riportato subito.
      */
-    // Prima su disco (in blocco), poi in memoria: se la scrittura fallisce,
-    // il catalogo non cambia e l'errore viene riportato.
     const files = schede.persistMany(created);
     for (const scheda of created) schede.add(scheda);
 
@@ -858,10 +949,11 @@ app.post('/admin/schede/genera', async (req, res) => {
       created: created.map(toMeta),
       total: schede.size,
       byKey: schede.countByKey(),
+      byVariant: schede.countByVariant(),
       savedTo: EXTRA_SCHEDE_DIR,
     });
   } catch (err) {
-    // Errore di scrittura: lo diciamo chiaramente invece di dare un 500 opaco.
+    // Errore di scrittura o di generazione: lo diciamo chiaramente, niente 500 opaco.
     const message = err instanceof Error ? err.message : String(err);
     console.error(`✗ Admin: generazione schede fallita: ${message}`);
     const isPerm = /EACCES|EPERM|EROFS/.test(message);
@@ -871,7 +963,73 @@ app.post('/admin/schede/genera', async (req, res) => {
         : `Generazione fallita: ${message}`,
       savedTo: EXTRA_SCHEDE_DIR,
     });
+  } finally {
+    /*
+     * La pipeline ale tiene in memoria trie e radici condivise (~180 MB di
+     * heap). Finita la generazione le rilasciamo: una richiesta admin rara non
+     * deve lasciare la memoria occupata per sempre. La prossima generazione le
+     * ricostruisce (pochi secondi).
+     */
+    if (variant === 'ale') releaseAleInputs();
   }
+});
+
+/**
+ * Elimina schede dal catalogo.
+ *
+ * DELETE /admin/schede?scope=extra|ale|all|variant&variant=<standard|full|ale>
+ * -> { removed, remaining, byKey, byVariant }
+ *
+ * Gli ambiti:
+ *   - `extra`   solo le schede aggiunte dall'admin (schede-extra/)
+ *   - `ale`     solo le schede "ale" generate a runtime (schede-ale/)
+ *   - `variant` solo una variante (standard / full / ale)
+ *   - `all`     TUTTE, catalogo base versionato compreso: irreversibile
+ *
+ * `?confirm=DELETE` è obbligatorio: l'operazione è irreversibile e un click per
+ * sbaglio non deve poter svuotare il catalogo.
+ */
+app.delete('/admin/schede', (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (String(req.query.confirm ?? '') !== 'DELETE') {
+    return res.status(400).json({ error: 'Conferma mancante: aggiungi ?confirm=DELETE' });
+  }
+  const scope = String(req.query.scope ?? 'extra');
+
+  let result: { removed: number; removedIds: string[]; files: string[] };
+  if (scope === 'all') {
+    result = schede.removeAll();
+  } else if (scope === 'extra') {
+    result = schede.removeWhere(() => true, [EXTRA_SCHEDE_DIR]);
+  } else if (scope === 'ale') {
+    result = schede.removeWhere(() => true, [ALE_SCHEDE_DIR]);
+  } else if (scope === 'variant') {
+    const variant = String(req.query.variant ?? '');
+    if (!isSchedaVariant(variant)) {
+      return res.status(400).json({ error: 'variant deve essere standard, full o ale' });
+    }
+    /*
+     * Cancella la variante SU TUTTO il catalogo, base inclusa: è l'unico modo
+     * per svuotare davvero una variante (le schede standard della base non
+     * stanno in schede-extra). Un secondo click non è una sorpresa: la conferma
+     * `DELETE` è già stata data.
+     */
+    result = schede.removeWhere(
+      (scheda) => schedaVariantOf(scheda) === variant,
+      [EXTRA_SCHEDE_DIR, ALE_SCHEDE_DIR, BASE_SCHEDE_DIR],
+    );
+  } else {
+    return res.status(400).json({ error: 'scope deve essere extra, ale, variant o all' });
+  }
+
+  console.log(`✓ Admin: cancellate ${result.removed} schede (ambito ${scope})`);
+  res.json({
+    removed: result.removed,
+    files: result.files.length,
+    remaining: schede.size,
+    byKey: schede.countByKey(),
+    byVariant: schede.countByVariant(),
+  });
 });
 
 /**
@@ -1516,7 +1674,7 @@ io.on('connection', (socket) => {
     setTimeout(startRound, COUNTDOWN_MS);
   });
 
-  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId, schedaVariant }) => {
+  socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId }) => {
     const st = socketState.get(socket.id);
     const room = registry.get(code);
     if (!room || !st || st.code !== room.code) return;
@@ -1529,20 +1687,18 @@ io.on('connection', (socket) => {
     if (sizeChanged || diffChanged) room.pendingSchedaId = null;
     if (isValidGridSize(gridSize)) room.gridSize = gridSize;
     if (isDifficulty(difficulty)) room.difficulty = difficulty;
-    // Cambiando i criteri delle schede cambia anche l'insieme da cui pescare:
-    // la scheda già scelta non appartiene più alla selezione.
-    if (schedaVariant !== undefined && resolveSchedaVariant(schedaVariant) !== room.schedaVariant) {
-      room.schedaVariant = resolveSchedaVariant(schedaVariant);
-      room.pendingSchedaId = null;
-    }
     /*
-     * Coerenza variante × dimensione: le schede "Ale" esistono solo su 5×5 (la
-     * calibrazione è per dimensione). Se l'host sceglie una griglia diversa mentre
-     * "Ale" è attivo, si torna a `standard`: senza questo la stanza resterebbe
-     * configurata su una variante senza schede e l'avvio round la troverebbe vuota.
+     * I criteri delle schede li decide l'ADMIN, non l'host: qualunque valore
+     * arrivi dal client viene ignorato e riportato al default globale (con la
+     * compatibilità di dimensione). L'host continua a scegliere griglia,
+     * difficoltà, durata, round e musica; la variante delle schede no.
+     *
+     * Se la variante cambia (l'admin l'ha modificata), la scheda già scelta non
+     * appartiene più alla selezione e va azzerata.
      */
-    if (room.schedaVariant === 'ale' && room.gridSize !== 5) {
-      room.schedaVariant = 'standard';
+    const enforced = schedaVariantForSize(defaultVariant(), room.gridSize);
+    if (enforced !== room.schedaVariant) {
+      room.schedaVariant = enforced;
       room.pendingSchedaId = null;
     }
     room.rounds = clampRounds(rounds);

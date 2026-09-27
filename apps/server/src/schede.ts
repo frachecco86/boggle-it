@@ -13,7 +13,7 @@
  * Il catalogo è tenuto in memoria: sono ~1.4 MB di JSON, trascurabili, e così le
  * richieste (anche /schede/random) sono O(1).
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadDefinitions, loadWordIndex, type WordIndex } from './wordIndex.js';
@@ -53,6 +53,19 @@ export const BASE_SCHEDE_DIR = process.env.SCHEDE_DIR
 export const EXTRA_SCHEDE_DIR = process.env.SCHEDE_EXTRA_DIR
   ? path.resolve(process.env.SCHEDE_EXTRA_DIR)
   : path.join(DATA_DIR, 'schede-extra');
+
+/**
+ * Schede "ale" generate dall'admin A RUNTIME: cartella separata da quella base
+ * (versionata) e da quella delle altre varianti (extra).
+ *
+ * Perché separata: le schede "ale" si rigenerano in blocco (la calibrazione
+ * cambia, o si vuole un nuovo lotto) e cancellarle non deve toccare le schede
+ * standard/full aggiunte dall'admin. Tenerle in una cartella dedicata rende
+ * l'operazione un semplice svuotamento di directory.
+ */
+export const ALE_SCHEDE_DIR = process.env.SCHEDE_ALE_DIR
+  ? path.resolve(process.env.SCHEDE_ALE_DIR)
+  : path.join(DATA_DIR, 'schede-ale');
 
 /**
  * Cartella del dizionario: contiene `words.txt` e `word-index.br`.
@@ -134,8 +147,11 @@ export class SchedaCatalog {
     const catalog = new SchedaCatalog();
     const base = catalog.loadDir(BASE_SCHEDE_DIR);
     const extra = catalog.loadDir(EXTRA_SCHEDE_DIR);
+    const ale = catalog.loadDir(ALE_SCHEDE_DIR);
     console.log(
-      `✓ Schede caricate: ${catalog.size} (base ${base} da ${path.relative(process.cwd(), BASE_SCHEDE_DIR)}, extra ${extra} da ${path.relative(process.cwd(), EXTRA_SCHEDE_DIR)})`,
+      `✓ Schede caricate: ${catalog.size} (base ${base} da ${path.relative(process.cwd(), BASE_SCHEDE_DIR)}, ` +
+        `extra ${extra} da ${path.relative(process.cwd(), EXTRA_SCHEDE_DIR)}, ` +
+        `ale ${ale} da ${path.relative(process.cwd(), ALE_SCHEDE_DIR)})`,
     );
     return catalog;
   }
@@ -420,15 +436,19 @@ export class SchedaCatalog {
    * 100 schede su una 6x6 si arriva a scrivere ~49 MB invece di 0,8 MB (60 volte
    * tanto), lento e a rischio timeout su un disco di rete come quello di Railway.
    * Qui raggruppiamo per file e scriviamo una volta sola per gruppo.
+   *
+   * `dir` scegle la destinazione: `EXTRA_SCHEDE_DIR` (default, standard/full) o
+   * `ALE_SCHEDE_DIR` (schede "ale", tenute separate per poterle rigenerare e
+   * cancellare in blocco senza toccare le altre).
    */
-  persistMany(schede: Scheda[]): string[] {
+  persistMany(schede: Scheda[], dir: string = EXTRA_SCHEDE_DIR): string[] {
     if (schede.length === 0) return [];
-    mkdirSync(EXTRA_SCHEDE_DIR, { recursive: true });
+    mkdirSync(dir, { recursive: true });
 
     // Raggruppa per file di destinazione.
     const perFile = new Map<string, Scheda[]>();
     for (const scheda of schede) {
-      const file = path.join(EXTRA_SCHEDE_DIR, schedaFileName(scheda.size, scheda.difficulty));
+      const file = path.join(dir, schedaFileName(scheda.size, scheda.difficulty));
       const list = perFile.get(file) ?? [];
       list.push(scheda);
       perFile.set(file, list);
@@ -463,9 +483,9 @@ export class SchedaCatalog {
    *
    * Per più schede insieme preferisci `persistMany`, che scrive una volta sola.
    */
-  persist(scheda: Scheda): string {
-    mkdirSync(EXTRA_SCHEDE_DIR, { recursive: true });
-    const file = path.join(EXTRA_SCHEDE_DIR, schedaFileName(scheda.size, scheda.difficulty));
+  persist(scheda: Scheda, dir: string = EXTRA_SCHEDE_DIR): string {
+    mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, schedaFileName(scheda.size, scheda.difficulty));
     const existing: SchedaFile = existsSync(file)
       ? (JSON.parse(readFileSync(file, 'utf8')) as SchedaFile)
       : {
@@ -481,5 +501,121 @@ export class SchedaCatalog {
     existing.generatedAt = new Date().toISOString();
     writeFileSync(file, JSON.stringify(existing, null, 2) + '\n');
     return file;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Cancellazione                                                      */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Cancella dall'archivio le schede che soddisfano il filtro, su disco e in
+   * memoria. Ritorna quante ne sono state rimosse e quali file hanno toccato.
+   *
+   * Le cartelle coinvolte sono SOLO quelle scrivibili a runtime
+   * (`schede-extra/` e `schede-ale/`): il catalogo base è versionato nel
+   * repository e non va toccato dal pannello. Un file che resta senza schede
+   * viene eliminato, così il conteggio per gruppo non lascia file vuoti.
+   *
+   * `includeBase` estende l'operazione al catalogo base (usato solo dalla
+   * cancellazione totale esplicita): in quel caso il file viene comunque
+   * RISCRITTO svuotato, non rimosso, per non far sparire un file versionato dal
+   * repository (una ricreazione/riavvio non deve sorprendere).
+   */
+  removeWhere(filter: (scheda: Scheda) => boolean, dirs: string[] = [EXTRA_SCHEDE_DIR, ALE_SCHEDE_DIR]): {
+    removed: number;
+    removedIds: string[];
+    files: string[];
+  } {
+    const removedIds: string[] = [];
+    const files: string[] = [];
+
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue;
+      for (const name of readdirSync(dir)) {
+        if (!/^schede-.*\.json$/.test(name)) continue;
+        const file = path.join(dir, name);
+        let parsed: SchedaFile;
+        try {
+          parsed = JSON.parse(readFileSync(file, 'utf8')) as SchedaFile;
+        } catch {
+          continue;
+        }
+        if (!Array.isArray(parsed.schede)) continue;
+
+        const kept = parsed.schede.filter((scheda) => !filter(scheda));
+        const dropped = parsed.schede.filter(filter);
+        if (dropped.length === 0) continue;
+
+        for (const scheda of dropped) {
+          removedIds.push(scheda.id);
+          this.removeFromMemory(scheda.id);
+        }
+        parsed.schede = kept;
+        parsed.generatedAt = new Date().toISOString();
+        if (kept.length === 0) {
+          /*
+           * Gruppo svuotato: il file si ELIMINA, così non restano file vuoti
+           * che farebbero sembrare il catalogo più grande di quanto è. Fa
+           * eccezione la cartella BASE (versionata): lì il file viene RISCRITTO
+           * vuoto, non rimosso, perché la sua sparizione dal repository non deve
+           * dipendere da un click nel pannello (e un `git checkout` non deve
+           * sorprendere).
+           */
+          if (dir !== BASE_SCHEDE_DIR) rmSync(file, { force: true });
+          else writeFileSync(file, JSON.stringify(parsed, null, 2) + '\n');
+        } else {
+          writeFileSync(file, JSON.stringify(parsed, null, 2) + '\n');
+        }
+        files.push(file);
+      }
+    }
+
+    return { removed: removedIds.length, removedIds, files };
+  }
+
+  /**
+   * Cartelle scrivibili dai comandi di cancellazione che NON toccano il catalogo
+   * base versionato: schede-extra (standard/full) e schede-ale (ale a runtime).
+   */
+  get runtimeDirs(): string[] {
+    return [EXTRA_SCHEDE_DIR, ALE_SCHEDE_DIR];
+  }
+
+  /**
+   * Cancella TUTTE le schede (catalogo base incluso). Operazione irreversibile:
+   * la variante base viene ripristinata solo rigenerandola (`pnpm gen:schede`) o
+   * ripristinando i file dal repository.
+   */
+  removeAll(): { removed: number; removedIds: string[]; files: string[] } {
+    return this.removeWhere(() => true, [EXTRA_SCHEDE_DIR, ALE_SCHEDE_DIR, BASE_SCHEDE_DIR]);
+  }
+
+  /** Rimuove una singola scheda dall'indice in memoria (disco a parte). */
+  private removeFromMemory(id: string): void {
+    const scheda = this.byId.get(id);
+    if (!scheda) return;
+    this.byId.delete(id);
+    const key = schedaKey(scheda.size, scheda.difficulty);
+    const list = this.byKey.get(key);
+    if (!list) return;
+    const next = list.filter((s) => s.id !== id);
+    if (next.length > 0) this.byKey.set(key, next);
+    else this.byKey.delete(key);
+    this.invalidate();
+  }
+
+  /**
+   * Svuota tutto e ricarica dal disco. Usata dopo una cancellazione massiva:
+   * ricostruire l'indice da zero è più semplice (e più sicuro) che aggiornare
+   * a mano mappe e chiavi, ed è un'operazione rara.
+   */
+  reload(): number {
+    this.byId.clear();
+    this.byKey.clear();
+    this.invalidate();
+    const base = this.loadDir(BASE_SCHEDE_DIR);
+    const extra = this.loadDir(EXTRA_SCHEDE_DIR);
+    const ale = this.loadDir(ALE_SCHEDE_DIR);
+    return base + extra + ale;
   }
 }
