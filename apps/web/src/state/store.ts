@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
   resolveSchedaVariant,
+  schedaVariantForSize,
   type AppConfig,
   type Difficulty,
   type Grid,
@@ -324,7 +325,8 @@ interface AppState {
   refreshAppConfig: () => Promise<void>;
   /**
    * Variante delle schede in vigore: quella decisa dall'admin, con la
-   * compatibilità di dimensione (le "ale" sono solo 5×5).
+   * compatibilità di dimensione. Le "ale" hanno una calibrazione per ogni
+   * griglia (4×4, 5×5, 6×6), quindi valgono su tutte.
    */
   schedaVariantFor: (size: GridSize) => SchedaVariant;
   setLearningMode: (on: boolean) => void;
@@ -805,9 +807,14 @@ export const useAppStore = create<AppState>()(
       },
 
       schedaVariantFor: (size) => {
-        const variant = get().appConfig.defaultSchedaVariant;
-        // Le schede "ale" esistono solo su 5×5: altrove si usa `standard`.
-        return variant === 'ale' && size !== 5 ? 'standard' : variant;
+        /*
+         * Si delega alla funzione CONDIVISA, non a una regola riscritta qui: una
+         * copia locale era rimasta ferma a "le ale esistono solo su 5×5" e
+         * scartava la variante dell'admin su 4×4 e 6×6. Il giocatore vedeva
+         * "Standard" e giocava le schede sbagliate, mentre il server (che usa la
+         * funzione condivisa) serviva correttamente le Ale su ogni griglia.
+         */
+        return schedaVariantForSize(get().appConfig.defaultSchedaVariant, size);
       },
 
       setLearningMode: (on) => set({ learningMode: on }),

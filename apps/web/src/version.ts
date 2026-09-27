@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.36.1';
+export const APP_VERSION = '0.36.2';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,32 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.36.2',
+    date: '2026-09-27',
+    title: 'Le schede Ale arrivano davvero su tutte le griglie',
+    promo: {
+      emoji: '🃏',
+      headline: 'Ale vale su 4×4, 5×5 e 6×6',
+      text: 'Con le schede Ale impostate dall’amministratore, su 4×4 e 6×6 l’app ripiegava sulle schede standard: nelle impostazioni partita vedevi “Standard” e giocavi criteri diversi da quelli scelti. Ora la scelta dell’admin vale su ogni griglia.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Su 4×4 e 6×6 le schede Ale non venivano usate.** Con l’amministratore impostato su Ale, il foglio *Impostazioni partita* mostrava **Standard** e la partita usava i criteri delle schede standard. Il vincolo “le Ale esistono solo su 5×5” era rimasto in una copia locale della regola, anche se le Ale ormai hanno una calibrazione per ogni dimensione: il server le serviva correttamente, il gioco no.',
+          '**La regola ora è una sola per client e server.** Il gioco delega alla funzione condivisa, quindi non può più capitare che le due parti non siano d’accordo su quale variante vale per una griglia.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Lo store aveva riscritto la regola a mano (`variant === \'ale\' && size !== 5`) invece di usare `schedaVariantForSize()`: dopo l’introduzione delle Ale multi-dimensione la copia è rimasta indietro. Il commento diceva ancora “le ale esistono solo su 5×5”.',
+          '4 test di regressione (`store.test.ts`) coprono Ale/Full/Standard su 4×4, 5×5 e 6×6, e verificano esplicitamente che 4×4 e 6×6 **non** siano declassate a `standard`.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.36.1',
     date: '2026-09-27',

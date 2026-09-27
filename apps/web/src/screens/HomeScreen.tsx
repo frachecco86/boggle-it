@@ -85,7 +85,7 @@ export function HomeScreen() {
   const [hostDurationMs, setHostDurationMs] = useState(soloRoundDurationMs);
   const [hostRounds, setHostRounds] = useState(soloRounds);
 
-  /** Variante in vigore per la griglia scelta (le "ale" sono solo 5×5). */
+  /** Variante in vigore per la griglia scelta (decisa dall'admin). */
   const schedaVariant = schedaVariantFor(hostGridSize);
 
   const handleJoin = async () => {
