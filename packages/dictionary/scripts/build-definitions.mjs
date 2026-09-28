@@ -195,7 +195,17 @@ async function main() {
         // Scarta i gloss che, ripuliti, restano vuoti o sono solo rimandi.
         if (c.length < 3) continue;
         if (isPlaceholderGloss(c)) continue;
-        if (/^\(?\s*(vedi|cfr\.?|sin\.|variante di)\b/i.test(c)) continue;
+        /*
+         * Rimandi e varianti NON sono definizioni: `vedi emittente`, `variante
+         * di alcol`, `cfr. x`. Si scartano solo quando sono l'INTERO gloss.
+         *
+         * ATTENZIONE alle abbreviazioni SENZA punto: `sin.` (sinonimo) scartava
+         * anche `sin dalla nascita` — una definizione VERA di `innato`, che
+         * spariva dal dizionario. Per questo `sin` e `cfr` richiedono il punto,
+         * e `vedi`/`variante di` sono ancorate al confine di parola (`\b`) per
+         * non catturare `vediamo` o `variantemente`.
+         */
+        if (/^\(?\s*(vedi\b|cfr\.|sin\.|variante di\b)/i.test(c)) continue;
         glosses.push(c);
       }
     }

@@ -39,6 +39,7 @@ import { AppConfigStore } from './appConfig.js';
 import { generateAleBatch, getAleInputs, releaseAleInputs } from './ale.js';
 import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
 import { extractAudio, probeMedia, MediaToolError } from './mediaTool.js';
+import { refreshYtDlp } from './ytDlpUpdate.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 import { VoiceRelay } from './voice.js';
@@ -1909,6 +1910,27 @@ httpServer.listen(PORT, () => {
   console.log(`  schede disponibili: ${schede.size.toLocaleString('it-IT')}`);
   const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
   console.log(`  RSS all'avvio: ${mem} MB (nessun trie del solver: parole dalle schede)`);
+  /*
+   * `yt-dlp` si aggiorna da solo ALL'AVVIO, non solo al build dell'immagine.
+   *
+   * Perche': il Dockerfile scarica `releases/latest` al momento della BUILD, ma
+   * un deploy che resta in esecuzione per mesi conserva quella versione. YouTube
+   * cambia spesso e `yt-dlp` pubblica fix ogni poche settimane: un binario
+   * congelato e' la causa tipica di "l'aggiunta di musica da YouTube non
+   * funziona" a distanza di tempo dall'ultimo deploy.
+   *
+   * Non blocca l'avvio e non e' fatale: se l'aggiornamento fallisce (rete
+   * assente, filesystem in sola lettura) il server parte comunque con la
+   * versione installata, che quasi sempre funziona ancora.
+   */
+  void refreshYtDlp().then((result) => {
+    if (result.updated) console.log(`  yt-dlp aggiornato: ${result.from} → ${result.to}`);
+    else if (result.reason === 'unsupported') {
+      console.log('  yt-dlp: aggiornamento automatico non disponibile, uso la versione installata');
+    } else if (result.reason === 'failed') {
+      console.log(`  yt-dlp: aggiornamento non riuscito, uso la versione installata (${result.from})`);
+    }
+  });
 });
 
 /**
