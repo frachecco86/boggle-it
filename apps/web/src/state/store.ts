@@ -21,6 +21,7 @@ import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket, SERVER_BASE } from '../net/socket.js';
 import { voiceChat } from '../net/voiceChat.js';
+import { clearPlayedSchede } from '../game/schedeLoader.js';
 
 /**
  * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
@@ -883,6 +884,13 @@ export const useAppStore = create<AppState>()(
       },
 
       joinRoom: async (code) => {
+        /*
+         * In MULTIPLAYER la cronologia personale non conta: le schede della
+         * stanza le decide l'host (o l'admin), quindi quello che ho visto da solo
+         * non deve filtrare le proposte degli altri. Si azzera la cronologia.
+         * Non si attende: e' accessorio e non deve ritardare l'ingresso.
+         */
+        void clearPlayedSchede();
         const socket = getSocket();
         const nickname = get().nickname || 'Giocatore';
         const avatar = get().avatar || avatarFromNickname(nickname);

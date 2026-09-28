@@ -207,8 +207,23 @@ app.get('/preview', (req, res) => {
    */
   const variant = schedaVariantForSize(defaultVariant(), gridSize);
 
+  /*
+   * Schede GIA' VISTE da chi chiede: si escludono per non riproporle.
+   *
+   * Solo se la richiesta porta un token valido (`Authorization: Bearer`): senza
+   * profilo non esiste una cronologia, e il comportamento resta quello di prima.
+   * Il token arriva dal client che ha il profilo attivo (vedi `loadRandomScheda`).
+   *
+   * PERCHE' SOLO IN SINGLE PLAYER: in una stanza la partita e' di tutti, e la
+   * cronologia personale di un giocatore non deve decidere le schede degli altri.
+   * Il multiplayer non passa da qui (usa `room:shuffleScheda` e `Room`).
+   */
+  const token = bearerToken(req);
+  const profile = token ? profiles.getByToken(token) : null;
+  const exclude = profile ? profiles.playedSchede(profile.id) : undefined;
+
   res.setHeader('Cache-Control', 'no-store');
-  const scheda = schede.random(gridSize, difficulty, Math.random, variant);
+  const scheda = schede.randomUnplayed(gridSize, difficulty, Math.random, variant, exclude);
   if (!scheda) {
     return res.json({
       gridSize,
@@ -602,9 +617,64 @@ app.get('/leaderboard', (req, res) => {
   });
 });
 
-/** Statistiche personali del giocatore autenticato. */
-app.get('/me/stats', (req, res) => {
+/**
+ * Segna una o piu' schede come GIA' GIOCATE dal profilo autenticato.
+ *
+ * POST /me/played-schede  body `{ schedaId }` oppure `{ schedaIds: [...] }`.
+ *
+ * PERCHE' NON LO FA IL SERVER DA SOLO: la scheda si considera "giocata" quando
+ * la partita e' davvero iniziata, e solo il client lo sa (in single player non
+ * c'e' una rotta di fine round). Segnarla al `preview` sarebbe sbagliato: una
+ * scheda pescata e mai giocata resterebbe esclusa per sempre.
+ *
+ * Idempotente: ripetere la chiamata non crea duplicati.
+ */
+app.post('/me/played-schede', (req, res) => {
   const profile = requireProfile(req, res);
+  if (!profile) return;
+  const single = typeof req.body?.schedaId === 'string' ? req.body.schedaId.trim() : '';
+  const many = Array.isArray(req.body?.schedaIds)
+    ? (req.body.schedaIds as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0)
+    : [];
+  if (single) profiles.markSchedaPlayed(profile.id, single);
+  if (many.length > 0) profiles.markSchedePlayed(profile.id, many);
+  if (!single && many.length === 0) {
+    return res.status(400).json({ error: 'Serve schedaId o schedaIds' });
+  }
+  res.json({ ok: true, played: profiles.playedSchede(profile.id).size });
+});
+
+/**
+ * Quante schede ha gia' giocato il profilo, e quali.
+ *
+ * Il numero serve alla home ("hai giocato N schede"); l'elenco agli strumenti di
+ * diagnosi. `Cache-Control: no-store`: cambia a ogni partita.
+ */
+app.get('/me/played-schede', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  res.setHeader('Cache-Control', 'no-store');
+  const played = [...profiles.playedSchede(profile.id)];
+  res.json({ count: played.length, schedaIds: played });
+});
+
+/**
+ * Dimentica la cronologia delle schede giocate (profilo autenticato).
+ *
+ * Serve al MULTIPLAYER: in una stanza le schede le decide l'host (o l'admin), e
+ * quello che ho visto da solo non deve influire sulla partita degli altri. Il
+ * client la chiama entrando in una stanza, così le schede della stanza non
+ * vengono filtrate dalla cronologia personale.
+ */
+app.delete('/me/played-schede', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const removed = profiles.clearPlayedSchede(profile.id);
+  res.json({ ok: true, removed });
+});
+
+/** Statistiche personali del giocatore autenticato. */
+app.get('/me/stats', (req, res) => {  const profile = requireProfile(req, res);
   if (!profile) return;
   res.json(profiles.playerStats(profile.id));
 });

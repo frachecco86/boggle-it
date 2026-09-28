@@ -164,6 +164,30 @@ export class ProfileStore {
       CREATE INDEX IF NOT EXISTS idx_game_words_profile ON game_words(profile_id);
       CREATE INDEX IF NOT EXISTS idx_game_words_game ON game_words(game_id);
       CREATE INDEX IF NOT EXISTS idx_game_words_profile_word ON game_words(profile_id, word);
+
+      /*
+       * Schede GIA' GIOCATE da ogni profilo, per non riproporle.
+       *
+       * PERCHE' UNA TABELLA A PARTE e non una colonna in 'games': qui conta solo
+       * COPPIA (profilo, scheda), non l'esito. Un INSERT OR IGNORE a ogni
+       * partita basta, senza duplicati, e la lettura e' un solo indice.
+       *
+       * PERCHE' NON SI USA games.scheda_id: quella tabella esiste solo per le
+       * partite CONCLUSE e registrate, quindi chi abbandona a meta' partita (o
+       * gioca offline in single player) non comparirebbe mai. Qui la scheda si
+       * segna come vista indipendentemente da come finisce la partita.
+       *
+       * played_at serve solo a poter ripulire le voci vecchie e a mostrare
+       * l'ordine: la regola "non riproporla" non dipende dal tempo.
+       */
+      CREATE TABLE IF NOT EXISTS played_schede (
+        profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+        scheda_id  TEXT NOT NULL,
+        played_at  INTEGER NOT NULL,
+        PRIMARY KEY (profile_id, scheda_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_played_schede_profile ON played_schede(profile_id);
+      CREATE INDEX IF NOT EXISTS idx_played_schede_scheda ON played_schede(scheda_id);
     `);
   }
 
@@ -743,6 +767,85 @@ export class ProfileStore {
    * Record di una scheda: miglior punteggio mai realizzato, chi lo detiene e
    * quante partite sono state giocate. Alimenta l'anteprima della scheda.
    */
+  /**
+   * Segna una scheda come GIA' GIOCATA da questo profilo.
+   *
+   * Idempotente (`INSERT OR IGNORE`): rigiocare la stessa scheda non crea una
+   * seconda voce e non aggiorna la data — quello che conta e' "l'ho vista".
+   *
+   * Silenzioso su profilo inesistente: la chiave esterna lo bloccherebbe con un
+   * errore, ma segnare una scheda non deve mai far fallire una partita. Se il
+   * profilo non c'e' (token scaduto, profilo cancellato), si ignora.
+   */
+  markSchedaPlayed(profileId: string, schedaId: string): void {
+    if (!profileId || !schedaId) return;
+    try {
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO played_schede (profile_id, scheda_id, played_at)
+           VALUES (?, ?, ?)`,
+        )
+        .run(profileId, schedaId, Date.now());
+    } catch {
+      /* profilo assente o vincolo violato: non e' un errore di gioco */
+    }
+  }
+
+  /** Segna PIU' schede in una volta (una transazione, non N insert). */
+  markSchedePlayed(profileId: string, schedaIds: readonly string[]): void {
+    if (!profileId || schedaIds.length === 0) return;
+    const now = Date.now();
+    try {
+      const stmt = this.db.prepare(
+        `INSERT OR IGNORE INTO played_schede (profile_id, scheda_id, played_at)
+         VALUES (?, ?, ?)`,
+      );
+      this.db.exec('BEGIN');
+      for (const id of schedaIds) {
+        if (id) stmt.run(profileId, id, now);
+      }
+      this.db.exec('COMMIT');
+    } catch {
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {
+        /* niente da fare */
+      }
+    }
+  }
+
+  /**
+   * Id delle schede gia' giocate da un profilo.
+   *
+   * Restituisce un `Set` (non un array): il chiamante deve chiedere "questa
+   * scheda l'ho vista?" per ogni candidata, e con centinaia di voci il Set rende
+   * il controllo O(1) invece di una scansione lineare.
+   */
+  playedSchede(profileId: string): Set<string> {
+    const out = new Set<string>();
+    if (!profileId) return out;
+    const rows = this.db
+      .prepare('SELECT scheda_id FROM played_schede WHERE profile_id = ?')
+      .all(profileId) as Array<{ scheda_id: string }>;
+    for (const row of rows) out.add(row.scheda_id);
+    return out;
+  }
+
+  /**
+   * Cancella lo storico delle schede giocate.
+   *
+   * Serve al MULTIPLAYER: in stanza la partita non e' del singolo giocatore, e
+   * "la scheda che ho gia' visto da solo" non deve escluderla per tutti. La
+   * stanza usa le schede scelte dall'host/admin, non la cronologia personale.
+   * Ritorna quante voci sono state rimosse (per il pannello admin).
+   */
+  clearPlayedSchede(profileId: string): number {
+    const result = this.db
+      .prepare('DELETE FROM played_schede WHERE profile_id = ?')
+      .run(profileId);
+    return Number(result.changes ?? 0);
+  }
+
   schedaRecord(schedaId: string): {
     record: { score: number; nickname: string; avatar: string; playedAt: number } | null;
     gamesPlayed: number;

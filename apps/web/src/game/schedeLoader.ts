@@ -12,6 +12,7 @@
  */
 import { schedaVariantOf, type Difficulty, type GridSize, type Scheda, type SchedaVariant } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
+import { activeToken } from './profileStore.js';
 
 /**
  * Metadati di una scheda per la pagina "Sfoglia schede".
@@ -54,11 +55,69 @@ export interface CatalogInfo {
  */
 const LOCAL_BASE = `${import.meta.env.BASE_URL ?? '/'}bundled-schede`.replace(/\/+$/, '');
 
-async function fetchJson<T>(url: string, timeoutMs = 2500): Promise<T | null> {
+/**
+ * Header `Authorization` col token del profilo attivo, se c'è.
+ *
+ * Il token vive in `profileStore` (localStorage): leggerlo qui evita di far
+ * dipendere il caricamento delle schede dallo store dell'app, che ha bisogno di
+ * React montato. Senza token ritorna un oggetto vuoto: le richieste al server
+ * restano valide e comportano solo il comportamento anonimo.
+ */
+function authHeaders(): Record<string, string> {
+  const token = activeToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Segna una scheda come GIA' GIOCATA dal profilo attivo.
+ *
+ * Si chiama quando la partita INIZIA davvero (non quando la scheda viene
+ * pescata): una scheda pescata e mai giocata non deve restare esclusa per
+ * sempre. Senza profilo non fa nulla: non c'è una cronologia da aggiornare.
+ *
+ * Non lancia e non attende il risultato: è un'informazione accessoria, e un
+ * fallimento di rete non deve interferire con la partita in corso.
+ */
+export function markSchedaPlayed(schedaId: string | null | undefined): void {
+  if (!schedaId) return;
+  const token = activeToken();
+  if (!token) return;
+  void fetch(`${SERVER_BASE}/me/played-schede`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ schedaId }),
+  }).catch(() => undefined);
+}
+
+/**
+ * Cancella la cronologia delle schede giocate (profilo attivo).
+ *
+ * Serve al MULTIPLAYER: in una stanza le schede le sceglie l'host/admin, e
+ * quello che ho visto da solo non deve influire sulla partita degli altri.
+ */
+export async function clearPlayedSchede(): Promise<boolean> {
+  const token = activeToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`${SERVER_BASE}/me/played-schede`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchJson<T>(
+  url: string,
+  options: { timeoutMs?: number; headers?: Record<string, string> } = {},
+): Promise<T | null> {
+  const timeoutMs = options.timeoutMs ?? 2500;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { signal: controller.signal, headers: options.headers });
     clearTimeout(timer);
     if (!res.ok) return null;
     return (await res.json()) as T;
@@ -105,8 +164,14 @@ export async function loadRandomScheda(
   difficulty: Difficulty,
   variant: SchedaVariant = 'standard',
 ): Promise<Scheda | null> {
+  /*
+   * Il token del profilo va nella richiesta: il server esclude le schede che
+   * questo profilo ha gia' giocato (vedi `GET /preview`). Senza token (nessun
+   * profilo) il server si comporta come prima.
+   */
   const online = await fetchJson<{ schedaId: string | null }>(
     `${SERVER_BASE}/preview?gridSize=${size}&difficulty=${encodeURIComponent(difficulty)}&variant=${variant}`,
+    { headers: authHeaders() },
   );
   if (online?.schedaId) {
     const scheda = await loadScheda(online.schedaId);

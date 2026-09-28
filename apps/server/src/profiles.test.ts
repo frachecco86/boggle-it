@@ -158,3 +158,72 @@ describe('ProfileStore: elenco e cancellazione (admin)', () => {
     store.close();
   });
 });
+
+/*
+ * Schede gia' giocate: e' la memoria che impedisce di riproporre la stessa
+ * scheda allo stesso giocatore in due partite single player diverse.
+ *
+ * Contano tre cose: l'idempotenza (rigiocare non duplica), la separazione PER
+ * PROFILO (la cronologia di uno non tocca l'altro) e la cancellazione (serve al
+ * multiplayer, dove le schede le decide l'host).
+ */
+describe('ProfileStore: schede gia\' giocate', () => {
+  it('segna una scheda e la ritrova', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    expect(store.playedSchede(p.id).size).toBe(0);
+    store.markSchedaPlayed(p.id, '4-normale-001');
+    expect([...store.playedSchede(p.id)]).toEqual(['4-normale-001']);
+  });
+
+  it('rigiocare la stessa scheda non crea duplicati (idempotente)', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedaPlayed(p.id, 'x');
+    store.markSchedaPlayed(p.id, 'x');
+    store.markSchedaPlayed(p.id, 'x');
+    expect(store.playedSchede(p.id).size).toBe(1);
+  });
+
+  it('la cronologia e\' PER PROFILO: uno non vede quella dell\'altro', async () => {
+    const a = await store.register('Anna', 'segreta123', '🐱');
+    const b = await store.register('Bruno', 'segreta123', '🐶');
+    store.markSchedaPlayed(a.id, 's-1');
+    expect(store.playedSchede(a.id).has('s-1')).toBe(true);
+    expect(store.playedSchede(b.id).has('s-1')).toBe(false);
+  });
+
+  it('segna piu\' schede in una volta', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedePlayed(p.id, ['a', 'b', 'c', 'a']);
+    expect(store.playedSchede(p.id)).toEqual(new Set(['a', 'b', 'c']));
+  });
+
+  it('un profilo inesistente non fa fallire la segnalazione', () => {
+    // Non deve lanciare: segnare una scheda non e' mai un errore di gioco.
+    expect(() => store.markSchedaPlayed('non-esiste', 'x')).not.toThrow();
+    expect(() => store.markSchedePlayed('non-esiste', ['x', 'y'])).not.toThrow();
+  });
+
+  it('id vuoti vengono ignorati', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedaPlayed(p.id, '');
+    store.markSchedePlayed(p.id, ['', '']);
+    expect(store.playedSchede(p.id).size).toBe(0);
+  });
+
+  it('la cancellazione azzera la cronologia (serve al multiplayer)', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedePlayed(p.id, ['a', 'b']);
+    expect(store.clearPlayedSchede(p.id)).toBe(2);
+    expect(store.playedSchede(p.id).size).toBe(0);
+    // Cancellare di nuovo non e' un errore: zero voci rimosse.
+    expect(store.clearPlayedSchede(p.id)).toBe(0);
+  });
+
+  it('cancellare il profilo porta via anche la cronologia (ON DELETE CASCADE)', async () => {
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedaPlayed(p.id, 'a');
+    store.deleteProfile(p.id);
+    // Nessun profilo: la lettura ritorna vuoto invece di lanciare.
+    expect(store.playedSchede(p.id).size).toBe(0);
+  });
+});
