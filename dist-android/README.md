@@ -24,7 +24,7 @@ Verifica integrità:
 
 ```bash
 sha256sum dist-android/*.apk
-# 5cd28f7bd173da35ff35fd834043c05a6d2a59a81c5ab5477c27efd45dbfc691  sbooble-0.38.0-debug.apk
+# 59bcd60130c0e16617bc5d55878745ef7724d7ae4cf197d57b63b1faf6652f29  sbooble-0.38.0-debug.apk
 # b6ac7bb4a2078da9d88f3a431bc6062c6ab2d6f980a8706ef58ad1d8bbe46df9  sbooble-0.37.1-debug.apk
 # 71b477efe939828d779f1421e1d3c468f1428293448f7e88253bb57327ecd595  sbooble-0.37.0-debug.apk
 # edc7435a18793e48a9b828587ae9c6764701d4694f6d5421fcaeba073340a4eb  sbooble-0.36.2-debug.apk
