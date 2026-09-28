@@ -98,6 +98,24 @@ export function hintArrowDelayMs(index: number): number {
 }
 
 /**
+ * Stile delle tracce della griglia, in funzione del lato.
+ *
+ * DEVE restare espresso in `--cell`, una lunghezza CALCOLATA (vedi `.grid-board`
+ * in styles.css): le tracce erano scritte come `repeat(n, 1fr)` inline, e `1fr`
+ * le faceva ALLARGARE per riempire la larghezza del contenitore. Le celle sono
+ * quadrate (`aspect-ratio: 1` su `.tile`), quindi una traccia più larga non le
+ * rendeva più grandi: le schiacciava in rettangoli alti e stretti.
+ *
+ * Si vedeva sul tablet, dove il contenitore è largo ma basso: lì `--cell` è
+ * limitata dall'altezza, e il vecchio `1fr` ignorava quel limite — la griglia si
+ * "allungava" proprio come segnalato nel bug. Con `var(--cell)` le tracce
+ * seguono il lato calcolato e la griglia resta quadrata in ogni formato.
+ */
+export function gridTrackStyle(size: number): { gridTemplateColumns: string } {
+  return { gridTemplateColumns: `repeat(${size}, var(--cell))` };
+}
+
+/**
  * Griglia con swipe. Il percorso è renderizzato come catena di frecce luminose
  * che collegano le celle selezionate (stile Boggle).
  *
@@ -297,7 +315,7 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
           </g>
         ))}
       </svg>
-      <div className="grid-cells" style={{ gridTemplateColumns: `repeat(${grid.size}, 1fr)` }}>
+      <div className="grid-cells" style={gridTrackStyle(grid.size)}>
         {grid.tiles.map((tile) => {
           const pathIndex = selectedPath.indexOf(tile.index);
           const selected = pathIndex >= 0;

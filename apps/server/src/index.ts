@@ -1625,7 +1625,13 @@ io.on('connection', (socket) => {
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
-    const scheda = schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
+    const scheda = schede.randomUnplayed(
+      room.gridSize,
+      room.difficulty,
+      Math.random,
+      room.schedaVariant,
+      room.playedSchedaIds,
+    );
     if (!scheda) return;
     room.pendingSchedaId = scheda.id;
     broadcastState(room);
@@ -1640,11 +1646,20 @@ io.on('connection', (socket) => {
 
     const startRound = () => {
       // Usa la scheda scelta in lobby se c'è (l'host l'ha vista e approvata),
-      // altrimenti ne pesca una a caso. Per i round successivi al primo, se non
-      // c'è una pending si pesca una scheda nuova.
+      // altrimenti ne pesca una a caso — mai una già giocata in questa partita
+      // (vedi `Room.playedSchedaIds`: i pool sono piccoli e la ripetizione era
+      // frequente). Per i round successivi al primo, se non c'è una pending si
+      // pesca una scheda nuova.
       const fromPending = room.pendingSchedaId ? schede.get(room.pendingSchedaId) : undefined;
       const scheda =
-        fromPending ?? schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
+        fromPending ??
+        schede.randomUnplayed(
+          room.gridSize,
+          room.difficulty,
+          Math.random,
+          room.schedaVariant,
+          room.playedSchedaIds,
+        );
       // La pending è consumata: il prossimo round ne pescherà una nuova.
       room.pendingSchedaId = null;
       const { grid, endsAt } = room.startRound(scheda);

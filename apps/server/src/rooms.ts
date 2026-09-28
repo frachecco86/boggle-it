@@ -106,6 +106,16 @@ export class Room {
   /** Id della scheda in gioco nel round corrente. */
   schedaId: string | null = null;
   /**
+   * Id di TUTTE le schede giocate in questa partita (anche quelle dei round
+   * passati).
+   *
+   * Serve a non riproporre la stessa scheda due volte nella stessa partita: i
+   * pool sono piccoli (10-15 schede per griglia/difficoltà/variante), quindi su
+   * 3 round la probabilità di ripescare per caso una scheda già giocata è del
+   * 17-28% circa. Senza questo elenco il server non aveva memoria fra i round.
+   */
+  playedSchedaIds = new Set<string>();
+  /**
    * Scheda scelta in lobby per il prossimo round.
    * Persiste fra i round finché l'host non ne pesca un'altra.
    */
@@ -263,6 +273,8 @@ export class Room {
     this.phase = 'playing';
     this.grid = scheda ? rowsToGrid(scheda.grid) : generateGrid(this.gridSize, Math.random, this.difficulty);
     this.schedaId = scheda?.id ?? null;
+    // La scheda entra nello storico: il prossimo round non la ripescherà.
+    if (this.schedaId) this.playedSchedaIds.add(this.schedaId);
     this.roundValidWords = new Set(scheda ? acceptedWords(scheda) : []);
     this.roundExpectedWords = new Set(scheda?.words ?? []);
     this.roundFoundWords = new Set();

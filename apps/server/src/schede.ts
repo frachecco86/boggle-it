@@ -241,6 +241,40 @@ export class SchedaCatalog {
     return matching[Math.floor(rng() * matching.length)];
   }
 
+  /**
+   * Scheda casuale che NON sia già stata giocata in questa partita.
+   *
+   * `exclude` sono gli id già usati (vedi `Room.playedSchedaIds`): con i pool
+   * piccoli del catalogo (10-15 schede) una scelta puramente casuale ripeteva la
+   * stessa scheda due volte nella stessa partita nel 17-28% dei casi su 3 round.
+   *
+   * Se tutte le schede del gruppo sono state giocate si RIPARTE da capo
+   * (`exclude` ignorato) invece di ritornare `undefined`: una partita da 5 round
+   * su un pool da 10 è legittima, e fermare il gioco sarebbe peggio di una
+   * ripetizione. Meglio una scheda già vista che nessuna scheda.
+   */
+  randomUnplayed(
+    size: GridSize,
+    difficulty: Difficulty,
+    rng: () => number = Math.random,
+    variant: SchedaVariant = 'standard',
+    exclude?: ReadonlySet<string>,
+  ): Scheda | undefined {
+    const all = this.randomPool(size, difficulty, variant);
+    if (all.length === 0) return undefined;
+    if (!exclude || exclude.size === 0) return all[Math.floor(rng() * all.length)];
+    const fresh = all.filter((s) => !exclude.has(s.id));
+    const pool = fresh.length > 0 ? fresh : all;
+    return pool[Math.floor(rng() * pool.length)];
+  }
+
+  /** Le schede di un gruppo compatibili con la variante richiesta. */
+  private randomPool(size: GridSize, difficulty: Difficulty, variant: SchedaVariant): Scheda[] {
+    const list = this.byKey.get(schedaKey(size, difficulty));
+    if (!list) return [];
+    return list.filter((s) => schedaVariantOf(s) === variant);
+  }
+
   /** Quante schede per dimensione/difficoltà e variante (per il selettore). */
   countByVariant(): Record<string, Record<SchedaVariant, number>> {
     const out: Record<string, Record<SchedaVariant, number>> = {};

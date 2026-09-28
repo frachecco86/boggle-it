@@ -11,7 +11,7 @@
  * all'accensione della cella N+1.
  */
 import { describe, expect, it } from 'vitest';
-import { HINT_STEP_MS, hintArrowDelayMs, hintTileDelayMs } from './GridBoard.js';
+import { HINT_STEP_MS, gridTrackStyle, hintArrowDelayMs, hintTileDelayMs } from './GridBoard.js';
 
 describe('suggerimento — ordine di accensione', () => {
   it('le celle si accendono in ordine crescente', () => {
@@ -48,5 +48,26 @@ describe('suggerimento — ordine di accensione', () => {
   it('la prima freccia compare subito dopo la prima cella', () => {
     expect(hintArrowDelayMs(0)).toBe(HINT_STEP_MS / 2);
     expect(hintArrowDelayMs(0)).toBeLessThan(HINT_STEP_MS);
+  });
+});
+
+/*
+ * Le tracce della griglia devono seguire `--cell` (lunghezza calcolata su
+ * larghezza E altezza), non `1fr`: con `1fr` le tracce si allargavano per
+ * riempire il contenitore e le celle — quadrate — finivano schiacciate in
+ * rettangoli alti e stretti. Su un tablet (largo e basso) la griglia sembrava
+ * "allungata". Test di regressione sul bug.
+ */
+describe('griglia — tracce delle celle', () => {
+  it('usa il lato calcolato, non una frazione della larghezza', () => {
+    for (const size of [4, 5, 6]) {
+      const style = gridTrackStyle(size);
+      expect(style.gridTemplateColumns).toBe(`repeat(${size}, var(--cell))`);
+      expect(style.gridTemplateColumns).not.toContain('1fr');
+    }
+  });
+
+  it('il numero di tracce segue il lato della griglia', () => {
+    expect(gridTrackStyle(6).gridTemplateColumns).toContain('repeat(6,');
   });
 });
