@@ -135,7 +135,12 @@ parole. L'id delle schede si assegna per secchio in ordine di riempimento
 
 ---
 
-## Appendice A — punto sospeso: definizione di "parola comune" (componente R)
+## Appendice A — punto deciso: definizione di "parola comune" (componente R)
+
+> **DECISO (28/09/2026): si adotta la variante 4** (anelli di frequenza pesati,
+> vedi §"Opzioni"). La specifica di implementazione dettagliata è in
+> [`IMPLEMENTATION.md`](../IMPLEMENTATION.md). Il resto di questa appendice
+> resta come storico dell'analisi che ha portato alla decisione.
 
 Non fa parte del piano: richiede una **decisione di prodotto**. Qui il
 confronto dettagliato fra le tre candidate, misurato sui dati reali.
@@ -238,7 +243,12 @@ punisce contrazioni e prestiti d'uso; V2 fa l'opposto. Nessuna delle due è
 
 ### Raccomandazione
 
-**Adottare V3 ora** (una riga: `commonEff ∪ F5` in fase di costruzione di
+**Esito: superata dalla decisione.** Si implementa la **variante 4** (anelli
+pesati `(0·f5 + 1·f5–20k + 2·>20k)/2`): pipeline semplificata (addio NVdB,
+`lemmas.br` e Morph-it dalla pipeline ale) e metrica graduata. Vedi
+`IMPLEMENTATION.md`. La raccomandazione originale era:
+
+~~**Adottare V3 ora**~~ (superata) (una riga: `commonEff ∪ F5` in fase di costruzione di
 `Common`), tenere V2 come evoluzione futura solo se si vuole semplificare la
 pipeline eliminando Morph-it. Se si adotta V3 o V2: la R cambia → ricalibrare
 insieme allo Step 4 (i pesi/rails/ρ restano, cambia l'input di Common).
