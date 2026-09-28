@@ -519,7 +519,20 @@ body::before {
  * Da attivo il bordo e lo sfondo si intensificano (è un interruttore: lo stato
  * deve leggersi a colpo d'occhio).
  */
-.home__learn {
+/*
+ * Tasto della modalità apprendimento.
+ *
+ * L'etichetta non cambia mai (è sempre "Modalità apprendimento"): lo stato acceso
+ * si legge dal colore pieno e dal bordo continuo, mentre a riposo è un tratteggio.
+ * Così il tasto resta lo stesso elemento e non sembra diventare un altro comando.
+ *
+ * NOTA sulla specificità: `.btn` è dichiarata più sotto nel foglio e con la
+ * stessa specificità (una classe), quindi vinceva lei — `border: none` e il fondo
+ * neutro di `.btn` cancellavano ogni volta queste regole, e il tasto non si è mai
+ * distinto dagli altri. `button.home__learn` (classe + tipo) è più specifico e
+ * non dipende più dall'ORDINE delle regole nel file.
+ */
+button.home__learn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -530,20 +543,83 @@ body::before {
   font-weight: 700;
 }
 
-.home__learn:hover {
+button.home__learn:hover {
   border-color: #e0a800;
   background: color-mix(in srgb, #ffd54a 18%, var(--surface));
 }
 
-.home__learn--active {
+/*
+ * Stato ACCESO: fondo pieno e bordo continuo, più un anello esterno. Senza il
+ * testo "attivo" (tolto di proposito) è il colore a dover dire che la modalità è
+ * accesa: un solo tratteggio più scuro non bastava a distinguerla a colpo d'occhio.
+ */
+button.home__learn--active {
   border-style: solid;
-  border-color: #e0a800;
-  background: color-mix(in srgb, #ffd54a 26%, var(--surface));
+  border-color: #b8860b;
+  background: color-mix(in srgb, #ffd54a 42%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, #e0a800 35%, transparent);
 }
 
 /* Riga audio: sempre visibile, quindi solo un filo di margine. */
-.home .audio-settings {
-  margin-top: 0;
+/*
+ * Tasto volumi della home: una riga sola, con pannello a discesa.
+ *
+ * Prima era il blocco dei tre cursori sempre aperto (~90px di altezza). Gli
+ * angoli in alto sono già della barra fissa, quindi il tasto resta nel flusso
+ * della home, subito sotto le azioni di gioco.
+ */
+.home-audio {
+  position: relative;
+  width: min(360px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-audio__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.home-audio__toggle:hover,
+.home-audio--open .home-audio__toggle {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Il pannello si apre VERSO IL BASSO: il tasto sta sopra di lui. */
+.home-audio__panel {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  animation: home-audio-in 0.2s cubic-bezier(0.2, 1, 0.4, 1);
+  transform-origin: top center;
+}
+
+@keyframes home-audio-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .home__mode {
@@ -3860,18 +3936,25 @@ body::before {
 /* ---------- Musica ---------- */
 
 .music-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: min(520px, 100%);
+  display: grid;
+  /*
+   * Più tracce per riga: l'elenco era una colonna a tutta larghezza, con ogni
+   * voce alta ~62px (etichetta + mood + crediti impilati). Con le tracce caricate
+   * dall'admin l'elenco si allunga e diventa uno scorrimento lungo per scegliere
+   * un brano. A griglia le voci sono più strette e ne entrano 2-3 per riga, così
+   * la scelta si vede quasi tutta senza scorrere.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  width: min(640px, 100%);
   margin: 0 auto;
 }
 
 .music-option {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 14px;
+  gap: 1px;
+  padding: 7px 10px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3886,18 +3969,36 @@ body::before {
 }
 
 .music-option__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
   font-weight: 700;
+  font-size: 0.85rem;
+  /* La riga resta una sola: il titolo si accorcia, il badge no. */
+  min-width: 0;
+}
+
+/* Il titolo può accorciarsi con i puntini; il badge resta intero. */
+.music-option__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .music-option__mood {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
 }
 
+/*
+ * I crediti non si mostrano nella voce: sono la riga più lunga e la più bassa di
+ * valore, e da soli facevano crescere ogni voce di ~18px. Restano nel `title`
+ * della voce (vedi `MusicPicker`), quindi il dato non va perso.
+ */
 .music-option__credits {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-  opacity: 0.75;
+  display: none;
 }
 
 /* Foto profilo nei giocatori in stanza */
@@ -5499,7 +5600,7 @@ body::before {
 /* ---------- Music picker: badge "nuova" per le tracce dell'admin ---------- */
 
 .music-option__badge {
-  margin-left: 8px;
+  flex-shrink: 0;
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--primary);
@@ -6238,6 +6339,24 @@ body::before {
   border-radius: var(--radius);
   padding: 10px 12px;
   transition: border-color 0.25s, background 0.25s;
+  /*
+   * Il riquadro cambia POSIZIONE quando cambia la classifica corrente (vedi
+   * `rankingAt`): l'animazione sulla posizione rende visibile lo scambio invece
+   * di farlo apparire come un salto. `--rank` è l'indice corrente, scritto inline
+   * dal componente.
+   */
+  animation: replay-player-in 0.35s cubic-bezier(0.2, 1, 0.4, 1);
+}
+
+@keyframes replay-player-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .replay__player--active {

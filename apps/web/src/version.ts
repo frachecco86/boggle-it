@@ -76,6 +76,56 @@ export const RELEASES: ReleaseEntry[] = [
       },
     ],
   },
+
+  {
+    version: '0.38.0',
+    date: '2026-09-28',
+    title: 'Griglia dritta, voce per tutti e mai due volte la stessa scheda',
+    promo: {
+      emoji: '🧱',
+      headline: 'Griglia quadrata, voce per tutti',
+      text: 'Su tablet la griglia si vedeva allungata, con i quadrati stretti: ora sta dritta su ogni schermo. A fine partita la voce annuncia il vincitore a tutti, non solo a lui. E in multiplayer non capita più di rigiocare la stessa scheda due volte.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**La griglia non si allunga più su tablet.** Su schermi larghi e bassi le celle diventavano rettangoli alti e stretti e la griglia sembrava stirata. Ora le colonne seguono il lato calcolato — lo stesso che tiene conto anche dell’altezza — quindi i quadrati restano quadrati in ogni formato.',
+          '**La voce di fine partita parla a tutti.** Prima la sentiva solo chi vinceva: in multiplayer la sentiva una persona sola. Ora chi vince sente la frase col proprio nome, e chi non ha vinto sente chi ha vinto, come uno speaker. Il testo per gli altri è in terza persona: la frase di vittoria dice “hai vinto”, quindi detta a chi ha perso avrebbe detto a tutti di aver vinto.',
+          '**Mai più la stessa scheda due volte nella stessa partita.** I gruppi di schede sono piccoli (10-15 per griglia e difficoltà): su tre round capitava di rigiocare la stessa scheda in circa una partita su quattro. Ora il server ricorda quelle già giocate e non le ripropone. Se si fanno più round delle schede disponibili si riparte da capo, invece di fermare il gioco.',
+          '**“sin dalla nascita” è una definizione, non un rimando.** Il filtro che scarta i rimandi del dizionario (“vedi …”, “variante di …”) scambiava per abbreviazione “sin.” anche le frasi che iniziano con “sin”: la definizione di *innato* spariva e il pannello diceva “definizione non disponibile”.',
+          '**Il link d’invito creato dall’app non è più `localhost`.** Dentro l’app l’indirizzo è quello interno del telefono, quindi il link condiviso non portava da nessuna parte. Ora l’invito punta all’indirizzo pubblico del gioco, che funziona anche per chi lo apre dal browser.',
+          '**Aprendo un invito si entra direttamente nella stanza.** Prima il codice veniva solo scritto nel campo “Entra” e si aspettava un tocco: chi riceveva il link vedeva la home e doveva capire da solo cosa fare. Ora si entra e basta — purché ci sia già un’identità (un profilo o un nome salvato). Senza, resta il campo da compilare: entrare come “Giocatore” anonimo in una stanza dove ti aspettano con il tuo nome sarebbe peggio che chiedere.',
+          '**Il tasto della modalità apprendimento non cambia più etichetta.** Quando era acceso diventava “Apprendimento attivo · disattiva”: lo stesso tasto indicava ora cosa fa il tocco, ora che cosa sei. Ora il testo è sempre “Modalità apprendimento” e lo stato acceso si legge dal colore pieno e dal bordo continuo (più `aria-pressed` per i lettori di schermo). Il tratteggio giallo del tasto, per la cronaca, non si vedeva affatto: `.btn` è dichiarata più sotto nel foglio e con la stessa specificità, quindi cancellava quelle regole.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**La musica da YouTube continua a funzionare nel tempo.** Lo scaricatore di audio si aggiorna da solo all’avvio del server: prima aggiornava solo quando si ricostruiva l’immagine, quindi con il passare delle settimane YouTube cambiava e l’importazione smetteva di funzionare. L’aggiornamento non blocca l’avvio e, se fallisce, il server parte comunque.',
+          '**La home ha più respiro.** I tre cursori del volume erano sempre in linea e occupavano una fascia intera: ora stanno dietro un tasto “Volume” che apre i cursori quando servono. Il fondo della pagina con i crediti è stato tolto.',
+          '**L’elenco delle tracce musicali è più compatto.** Era una colonna con ogni voce alta tre righe (titolo, tipo, crediti): ora è una griglia con due voci per riga e il titolo su una riga sola. Le sei tracce si vedono quasi tutte senza scorrere. I crediti restano passando il dito sulla voce.',
+          '**“Sfoglia le schede” è una sezione sua del pannello admin.** Prima era un tasto dentro *Schede* che usciva dal pannello e apriva una schermata a parte: ora è una tab accanto a Schede, Musica e Profili, e toccando una scheda dall’elenco il dettaglio si apre **dentro** la tab, senza cambiare schermata.',
+          '**A fine round i riquadri dei giocatori si riordinano mentre la partita scorre.** Prima restavano fissi nell’ordine della classifica finale, quindi il primo riquadro era sempre chi avrebbe vinto anche quando era ultimo. Ora l’ordine segue il punteggio che sale, come una classifica che si aggiorna, e solo alla fine coincide con quella definitiva.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le tracce della griglia usano `var(--cell)`, la lunghezza calcolata su larghezza **e** altezza, invece di `1fr` (che si allarga per riempire il contenitore e schiaccia le celle quadrate). Il test di regressione verifica che le tracce non contengano mai `1fr`.',
+          '`pickVictoryLine` sceglie il testo in base a chi ascolta e `speakVictory` riceve la frase già formata invece del nickname: la decisione non può divergere fra schermate. 6 test coprono vincitore, non vincitore e assenza di vincitore.',
+          '`Room.playedSchedaIds` tiene lo storico delle schede giocate e `SchedaCatalog.randomUnplayed` sceglie fra quelle non ancora viste. 7 test fra catalogo e stanza.',
+          '`publicAppHref` sostituisce le origini locali (`localhost`/`127.0.0.1`) con il server configurato quando si costruisce un invito: nell’APK la WebView ha origine `https://localhost` e il link era inutilizzabile. 5 test coprono APK, web, sviluppo e indirizzo non valido.',
+          '`rankingAt(results, punteggiParziali)` calcola l’ordine dei riquadri dalla classifica CORRENTE del replay: a parità di punteggio conserva l’ordine di arrivo (che il server manda già ordinato per punteggio finale), così l’ordine non “salta” fra due frame. 5 test lo coprono.',
+          '`AudioSettings` è ora un tasto con pannello (`home-audio__toggle`): gli angoli in alto della home erano già occupati dalla barra fissa (tema e Home a sinistra, Classifica/Parole/versione a destra), quindi il tasto resta nel flusso invece di sovrapporsi. Il pannello riusa `VolumeSliders`, lo stesso componente del tasto volumi in partita.',
+          '`canAutoJoinFromInvite(hasProfile, nickname)` (in `net/invite.ts`) decide se l’invito porta dentro subito o chiede prima il nome: modulo puro, 4 test, perché il componente che la usa monta lo store e `localStorage` e non si può provare senza jsdom (che il progetto non usa).',
+          'Le regole del tasto apprendimento usano `button.home__learn` (tipo + classe) invece di `.home__learn`: con la sola classe la specificità era pari a `.btn`, dichiarata più sotto, che vinceva nell’ordine e annullava bordo e fondo.',
+          'La sfoglia delle schede è un componente a sé (`SchedaBrowser`) usato da due punti: la schermata `SchedaScreen` e la nuova tab “Sfoglia” dell’admin. Prima il markup stava in `SchedaScreen` e l’admin ci arrivava con un cambio di schermata: due percorsi per la stessa cosa, che potevano divergere.',
+          '`scripts/missing-definitions.ts` misura la copertura delle definizioni per variante di scheda: serviva a distinguere un bug da un buco della fonte. Il risultato è che la stragrande maggioranza delle parole senza definizione è assente da Wikizionario (voce con “definizione mancante” o assente), non un problema del gioco. La copertura dichiarata in 0.33.0 (92%) era una misura superata: oggi è ~81% per parola unica, ~85% pesata sulle occorrenze.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.37.1',
     date: '2026-09-27',

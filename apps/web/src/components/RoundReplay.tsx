@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RoundResultEntry } from '@boggle/shared';
 import { audio } from '../audio/AudioEngine.js';
-import { buildReplayPlan, revealedCountAt, type ReplayStep } from '../game/replay.js';
+import { buildReplayPlan, rankingAt, revealedCountAt, type ReplayStep } from '../game/replay.js';
 
 interface RoundReplayProps {
   /** Risultati del round appena concluso (con `timeline`). */
@@ -103,9 +103,34 @@ export function RoundReplay({ results, onDone, players }: RoundReplayProps) {
     return map;
   }, [revealed, plan, results]);
 
+  /**
+   * Se il replay è già iniziato (almeno una parola rivelata).
+   *
+   * Dichiarato QUI e non più in basso perché serve sia all'ordinamento dei
+   * riquadri (`ordered`) sia alla barra di avanzamento: una sola fonte.
+   */
+  const started = revealed > 0;
+
+  /**
+   * I riquadri si dispongono in ordine di CLASSIFICA CORRENTE, non in quello
+   * finale: chi sta segnando in questo momento sale in alto. E' cio' che rende il
+   * replay una partita che si svolge invece di una classifica gia' scritta.
+   *
+   * Prima di iniziare (`!started`) si usa l'ordine finale: e' lo stato di
+   * partenza, tutti a zero, e non c'e' nulla da riordinare.
+   */
+  const partialScores = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const [id, data] of byPlayer) map.set(id, data.score);
+    return map;
+  }, [byPlayer]);
+  const ordered = useMemo(
+    () => (started ? rankingAt(results, partialScores) : results),
+    [started, results, partialScores],
+  );
+
   const totalWords = plan.steps.length;
   const progress = totalWords > 0 ? revealed / totalWords : 1;
-  const started = revealed > 0;
 
   return (
     <div className="replay">
@@ -121,15 +146,26 @@ export function RoundReplay({ results, onDone, players }: RoundReplayProps) {
       </div>
 
       {/* I concorrenti in basso, come nel Boggle: per ognuno le parole che si
-          accendono man mano e il punteggio che sale. */}
+          accendono man mano e il punteggio che sale. L'ordine segue la
+          classifica CORRENTE (vedi `ordered`): chi segna sale. */}
       <div className="replay__players">
-        {results.map((r) => {
+        {ordered.map((r) => {
           const data = byPlayer.get(r.playerId);
           const words = data?.words ?? [];
           const score = data?.score ?? 0;
           const player = players?.find((p) => p.id === r.playerId);
+          /*
+           * Posizione corrente: `--rank` serve all'animazione di scambio. Il
+           * riquadro non viene smontato (stessa `key`), quindi la posizione
+           * cambia con una transizione invece di un salto brusco.
+           */
+          const rank = ordered.findIndex((x) => x.playerId === r.playerId);
           return (
-            <div key={r.playerId} className={`replay__player${score > 0 ? ' replay__player--active' : ''}`}>
+            <div
+              key={r.playerId}
+              className={`replay__player${score > 0 ? ' replay__player--active' : ''}`}
+              style={{ ['--rank' as string]: rank }}
+            >
               <div className="replay__player-head">
                 <span className="replay__avatar" aria-hidden>
                   {player?.photoUrl ? <img src={player.photoUrl} alt="" /> : (player?.avatar ?? '🐱')}

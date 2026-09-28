@@ -342,3 +342,43 @@ describe('musica della stanza e tracce disabilitate', () => {
     expect(room.musicId).toBe('none');
   });
 });
+
+/*
+ * Storico delle schede giocate: è la memoria che impedisce di riproporre la
+ * stessa scheda due volte nella stessa partita (vedi `randomUnplayed`).
+ */
+describe('Room: schede già giocate', () => {
+  const fakeScheda = (id: string) =>
+    ({
+      id,
+      size: 4 as const,
+      difficulty: 'facile' as const,
+      variant: 'standard' as const,
+      grid: 'casa\ncasa\ncasa\ncasa',
+      words: ['casa'],
+      allWords: ['casa'],
+      longest: 4,
+    });
+
+  it('registra la scheda giocata e la tiene fra i round', () => {
+    const room = new Room('SCH01', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice');
+    expect(room.playedSchedaIds.size).toBe(0);
+
+    room.startRound(fakeScheda('s-1'));
+    expect(room.playedSchedaIds.has('s-1')).toBe(true);
+    room.endRound();
+
+    room.startRound(fakeScheda('s-2'));
+    // La prima resta in memoria: il terzo round non la ripescherà.
+    expect(room.playedSchedaIds).toEqual(new Set(['s-1', 's-2']));
+  });
+
+  it('un round senza scheda (griglia generata) non sporca lo storico', () => {
+    const room = new Room('SCH02', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice');
+    room.startRound();
+    expect(room.schedaId).toBeNull();
+    expect(room.playedSchedaIds.size).toBe(0);
+  });
+});

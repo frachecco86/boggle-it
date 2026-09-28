@@ -26,10 +26,17 @@ export function MusicPicker({ value, onChange, title = 'Musica', hint, disabled 
       type="button"
       disabled={disabled}
       className={`music-option${value === track.id ? ' music-option--active' : ''}`}
+      /*
+       * Crediti e umore nel `title`: nella voce compatta lo spazio è di una riga
+       * sola e i crediti non ci stanno (vedi `.music-option__credits` in CSS).
+       * Così il dato resta raggiungibile passando il dito, senza appesantire
+       * l'elenco, che con le tracce caricate dall'admin si allunga.
+       */
+      title={[track.label, track.mood, track.credits].filter(Boolean).join(' · ')}
       onClick={() => onChange(track.id)}
     >
       <span className="music-option__label">
-        {track.label}
+        <span className="music-option__title">{track.label}</span>
         {track.uploaded && <span className="music-option__badge">nuova</span>}
       </span>
       <span className="music-option__mood">{track.mood}</span>

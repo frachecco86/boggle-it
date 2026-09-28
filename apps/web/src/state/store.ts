@@ -21,6 +21,7 @@ import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket, SERVER_BASE } from '../net/socket.js';
 import { voiceChat } from '../net/voiceChat.js';
+import { clearPlayedSchede } from '../game/schedeLoader.js';
 
 /**
  * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
@@ -160,16 +161,39 @@ function emitSfxDebug(message: string, data: unknown): void {
   }
 }
 
+/**
+ * Catalogo musicale dal server, con i percorsi resi ASSOLUTI.
+ *
+ * PERCHÉ serve l'assolutizzazione: le tracce caricate dall'admin hanno `file`
+ * come percorso del server (`/music/up-xxx/file`), mentre quelle incluse nel
+ * bundle hanno un percorso del client (`/audio/tracks/classica.mp3`). Su web le
+ * due cose coincidono perché il client è servito dallo stesso host del server;
+ * nell'APK NO: l'origine della WebView è `https://localhost` e contiene il
+ * bundle dell'app, quindi un `<audio src="/music/up-xxx/file">` cercava il file
+ * dentro l'app invece che sul server — la musica caricata dall'admin non si
+ * sentiva, senza alcun errore visibile (solo silenzio).
+ *
+ * Si assolutizza SOLO ciò che non è già assoluto e che punta al server
+ * (`/music/...`): i percorsi del bundle restano relativi e continuano a
+ * funzionare anche senza rete.
+ */
+export function absoluteMusicTrack(track: MusicTrackMeta): MusicTrackMeta {
+  if (/^https?:/i.test(track.file) || !track.file.startsWith('/music/')) return track;
+  return { ...track, file: `${SERVER_BASE}${track.file}` };
+}
+
 async function loadMusicCatalog(): Promise<MusicTrackMeta[] | null> {
   try {
     const res = await fetch(`${SERVER_BASE}/music`);
     if (!res.ok) return null;
     const body = (await res.json()) as { tracks?: MusicTrackMeta[] };
-    return Array.isArray(body.tracks) && body.tracks.length > 0 ? body.tracks : null;
+    if (!Array.isArray(body.tracks) || body.tracks.length === 0) return null;
+    return body.tracks.map(absoluteMusicTrack);
   } catch {
     return null;
   }
 }
+
 import {
   activeToken,
   getActiveProfile,
@@ -860,6 +884,13 @@ export const useAppStore = create<AppState>()(
       },
 
       joinRoom: async (code) => {
+        /*
+         * In MULTIPLAYER la cronologia personale non conta: le schede della
+         * stanza le decide l'host (o l'admin), quindi quello che ho visto da solo
+         * non deve filtrare le proposte degli altri. Si azzera la cronologia.
+         * Non si attende: e' accessorio e non deve ritardare l'ingresso.
+         */
+        void clearPlayedSchede();
         const socket = getSocket();
         const nickname = get().nickname || 'Giocatore';
         const avatar = get().avatar || avatarFromNickname(nickname);

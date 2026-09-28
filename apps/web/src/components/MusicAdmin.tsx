@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AdminMusicTrack, MusicTrackMeta } from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
-import { useAppStore } from '../state/store.js';
+import { absoluteMusicTrack, useAppStore } from '../state/store.js';
+
+/**
+ * URL riproducibile di una traccia del pannello admin.
+ *
+ * Le tracce caricate hanno `file` relativo al server (`/music/...`): va reso
+ * assoluto, altrimenti dentro l'APK (origine `https://localhost`) l'anteprima
+ * cerca il file nel bundle dell'app e resta muta. Passa dalla stessa regola
+ * usata dalla musica di gioco, così le due non possono divergere.
+ */
+function previewSrc(track: AdminMusicTrack): string {
+  return absoluteMusicTrack(track).file;
+}
 
 /**
  * Caricamento degli MP3 nel pannello admin.
@@ -337,7 +349,7 @@ export function MusicAdmin({ token }: { token: string }) {
                 {track.enabled ? '' : ' · spenta'}
               </span>
             </div>
-            <audio controls preload="none" src={`${SERVER_BASE}${track.file}`} />
+            <audio controls preload="none" src={previewSrc(track)} />
             <button
               type="button"
               className={`btn btn--tiny${track.enabled ? ' btn--ghost' : ''}`}

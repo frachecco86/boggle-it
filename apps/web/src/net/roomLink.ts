@@ -17,9 +17,10 @@
  *    stanza di prima.
  */
 
+import { SERVER_URL } from './socket.js';
+
 /** Nome del parametro nell'URL: `…/?stanza=K7QM2P`. */
 export const ROOM_QUERY_PARAM = 'stanza';
-
 /** Minimo e massimo di caratteri accettati per un codice stanza. */
 const MIN_CODE_LENGTH = 4;
 const MAX_CODE_LENGTH = 6;
@@ -41,13 +42,45 @@ function currentHref(): string {
 }
 
 /**
+ * L'indirizzo PUBLICO dell'app, quello da mettere in un invito.
+ *
+ * PERCHÉ NON SEMPRE `window.location.href`: nell'APK l'origine della WebView è
+ * `https://localhost`, che esiste solo dentro il telefono. Un invito costruito
+ * così è un link a `https://localhost/?stanza=XXXX` — inutile per chi lo riceve,
+ * e inservibile anche per chi l'ha mandato appena esce dall'app (vedi bug "Il
+ * link multiplayer creato dall' apk è un link localhost").
+ *
+ * Quando l'origine è locale ma l'app parla con un server remoto, l'invito deve
+ * puntare al server: è lui che serve il frontend (Express monolite), quindi il
+ * link porta alla stessa applicazione da un browser normale.
+ *
+ * L'host locale riconosciuto è `localhost`/`127.0.0.1`: in sviluppo il server
+ * Vite gira su `localhost` e l'indirizzo va bene COSÌ COM'È (stesso host anche
+ * per gli invitati sulla stessa macchina), quindi il ripiego si applica solo se
+ * c'è davvero un server remoto configurato.
+ */
+export function publicAppHref(href: string = currentHref(), serverUrl: string = SERVER_URL): string {
+  try {
+    const url = new URL(href);
+    const host = url.hostname.toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    if (!isLocalHost || !serverUrl) return url.toString();
+    // L'invito porta al server, sulla sua radice: è lì che vive l'app pubblica.
+    const base = new URL(serverUrl);
+    return base.toString();
+  } catch {
+    return href;
+  }
+}
+
+/**
  * Link da mandare a un amico per farlo entrare nella stanza.
  *
  * L'URL di partenza è quello da cui si sta giocando, quindi il link vale sia nel
  * sito sia nell'app pubblicata (frontend e server possono stare su domini diversi).
  */
 export function roomUrl(code: string, href: string = currentHref()): string {
-  const url = new URL(href);
+  const url = new URL(publicAppHref(href));
   const valid = normalizeRoomCode(code);
   if (valid) url.searchParams.set(ROOM_QUERY_PARAM, valid);
   else url.searchParams.delete(ROOM_QUERY_PARAM);

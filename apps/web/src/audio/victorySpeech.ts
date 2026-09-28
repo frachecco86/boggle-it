@@ -11,6 +11,11 @@
  * La voce è scelta fra quelle ITALIANE installate sul dispositivo, preferendo i
  * nomi femminili noti (Alice, Federica, Elsa…). Il tono è alzato un po' e la
  * velocità leggermente sostenuta: il risultato è entusiasta, non robotico.
+ *
+ * La voce parla a TUTTI, non solo al vincitore: chi vince sente la frase di
+ * vittoria col proprio nome, gli altri sentono il NOME DEL VINCITORE. Prima
+ * parlava solo sul dispositivo di chi aveva vinto, quindi in multiplayer la
+ * voce si sentiva su un solo telefono (vedi `pickVictoryLine`).
  */
 
 /**
@@ -53,6 +58,57 @@ export function pickVictoryPhrase(nickname: string, random: () => number = Math.
     Math.max(0, Math.floor(random() * VICTORY_PHRASES.length)),
   );
   return VICTORY_PHRASES[index]!.replaceAll('{nome}', name);
+}
+
+/**
+ * Le frasi di CHI NON HA VINTO. `{nome}` è il nickname del vincitore.
+ *
+ * Perché servono: la frase di vittoria parla in seconda persona ("hai vinto"),
+ * quindi detta a chi ha perso suonerebbe sbagliata — direbbe a tutti di aver
+ * vinto. Qui la vittoria è annunciata in terza persona, come farebbe uno
+ * speaker: tutti sentono chi ha vinto, anche chi non è sul podio.
+ */
+export const RUNNER_UP_PHRASES: readonly string[] = [
+  'Ha vinto {nome}! Complimenti!',
+  'La partita è di {nome}! Applausi!',
+  'Vittoria di {nome}! Che partita!',
+  '{nome} ha vinto questa partita!',
+  'In cima alla classifica c\u2019è {nome}, che ha vinto!',
+  'Che bravo {nome}, ha portato a casa la partita!',
+  'E alla fine ha vinto {nome}!',
+  'Vittoria per {nome}! Complimenti davvero!',
+  '{nome} ha dominato la griglia: ha vinto!',
+  'La vittoria è di {nome}! Bravo!',
+] as const;
+
+/** Frase a caso di annuncio del vincitore, per chi non ha vinto. */
+export function pickRunnerUpPhrase(winnerName: string, random: () => number = Math.random): string {
+  const name = winnerName.trim() || 'campione';
+  const index = Math.min(
+    RUNNER_UP_PHRASES.length - 1,
+    Math.max(0, Math.floor(random() * RUNNER_UP_PHRASES.length)),
+  );
+  return RUNNER_UP_PHRASES[index]!.replaceAll('{nome}', name);
+}
+
+/**
+ * Cosa dire a fine partita, dal punto di vista di CHI ASCOLTA.
+ *
+ * Una funzione sola per i due casi (vincitore / altri) così la scelta del testo
+ * e la decisione di parlare non possono divergere fra schermate.
+ *
+ * Ritorna `null` quando non c'è nulla da dire: nessun vincitore (partita senza
+ * giocatori) o nome vuoto. Il chiamante NON deve improvvisare una frase in quel
+ * caso: meglio il silenzio di un annuncio sbagliato.
+ */
+export function pickVictoryLine(
+  winnerName: string,
+  listenerIsWinner: boolean,
+  random: () => number = Math.random,
+): string | null {
+  const name = winnerName.trim();
+  if (!name) return null;
+  return listenerIsWinner ? pickVictoryPhrase(name, random) : pickRunnerUpPhrase(name, random);
 }
 
 /** Indizi nei nomi delle voci femminili più comuni (iOS, Android, Windows, macOS). */
@@ -108,19 +164,24 @@ export interface SpeakOptions {
 }
 
 /**
- * Pronuncia la frase di vittoria. Ritorna `false` se il dispositivo non
+ * Pronuncia una frase di fine partita. Ritorna `false` se il dispositivo non
  * supporta la sintesi vocale (in quel caso non c'è nulla da fare: la vittoria si
  * vede comunque nel podio).
+ *
+ * Il TESTO è un parametro e non viene deciso qui: chi chiama sa se sta parlando
+ * al vincitore o agli altri (vedi `pickVictoryLine`), e questa funzione non deve
+ * indovinarlo. Prima accettava un nickname e sceglieva sempre una frase di
+ * vittoria in seconda persona: detta a chi aveva perso sarebbe stata una bugia.
  */
-export function speakVictory(nickname: string, options: SpeakOptions = {}): boolean {
+export function speakVictory(text: string, options: SpeakOptions = {}): boolean {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false;
   const synth = window.speechSynthesis;
   if (typeof SpeechSynthesisUtterance === 'undefined') return false;
-
-  const text = pickVictoryPhrase(nickname, options.random);
+  const line = text.trim();
+  if (!line) return false;
 
   const speak = () => {
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(line);
     utterance.lang = 'it-IT';
     // Tono alto e ritmo brillante: entusiasta, non da segreteria telefonica.
     utterance.rate = 1.05;

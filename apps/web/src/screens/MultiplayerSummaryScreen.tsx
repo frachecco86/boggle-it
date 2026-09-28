@@ -4,7 +4,7 @@ import { BackHome } from '../components/BackHome.js';
 import { Podium } from '../components/Podium.js';
 import { SpeakingIndicator, useVoiceSpeakers } from '../components/VoiceControls.js';
 import { RoundReplay } from '../components/RoundReplay.js';
-import { speakVictory } from '../audio/victorySpeech.js';
+import { pickVictoryLine, speakVictory } from '../audio/victorySpeech.js';
 
 /** Riepilogo multiplayer: classifica finale o di round + parole per giocatore. */
 export function MultiplayerSummaryScreen() {
@@ -16,8 +16,6 @@ export function MultiplayerSummaryScreen() {
     playerId,
     startRoom,
     leaveRoom,
-    nickname,
-    profile,
     audioSettings,
   } = useAppStore();
   const isFinal = Boolean(finalScores);
@@ -25,22 +23,30 @@ export function MultiplayerSummaryScreen() {
   const isHost = room?.hostId === playerId;
   const isLastRound = room ? room.currentRound >= room.rounds : false;
   const sortedWords = [...missedWords].sort((a, b) => b.length - a.length);
-  /** La frase di vittoria si dice UNA volta sola (il riepilogo può ri-renderizzare). */
+  /** La frase di fine partita si dice UNA volta sola (il riepilogo può ri-renderizzare). */
   const spokenRef = useRef(false);
 
   /*
-   * A fine partita, se ho vinto, una voce femminile entusiasta lo dice a voce
-   * alta con una frase presa a caso (vedi `victorySpeech`). Rispetta il muto
-   * degli effetti: chi ha zittito il gioco non si ritrova la voce addosso.
+   * A fine partita la voce annuncia la vittoria a TUTTI, non solo a chi ha
+   * vinto: il vincitore sente la frase con il proprio nome, gli altri sentono il
+   * nome del vincitore (vedi `pickVictoryLine`). Prima si parlava solo sul
+   * dispositivo del vincitore: in multiplayer la sentiva una persona sola.
+   *
+   * Rispetta il muto degli effetti: chi ha zittito il gioco non si ritrova la
+   * voce addosso.
    */
   useEffect(() => {
     if (!isFinal || spokenRef.current) return;
     const winner = results[0];
-    if (!winner || !playerId || winner.playerId !== playerId) return;
+    if (!winner) return;
+    // La frase si decide UNA volta: `spokenRef` impedisce che un re-render la
+    // ripeta (e che ne scelga una diversa a ogni render).
+    const line = pickVictoryLine(winner.nickname, winner.playerId === playerId);
+    if (!line) return;
     spokenRef.current = true;
     if (!audioSettings.sfxEnabled) return;
-    speakVictory((profile?.nickname ?? nickname) || 'campione');
-  }, [isFinal, results, playerId, profile, nickname, audioSettings.sfxEnabled]);
+    speakVictory(line);
+  }, [isFinal, results, playerId, audioSettings.sfxEnabled]);
 
   /*
    * Replay "arcade" a fine round: appare UNA volta per round, poi si può passare

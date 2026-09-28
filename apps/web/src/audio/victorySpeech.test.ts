@@ -7,7 +7,14 @@
  * voci installate la scelta non è arbitraria.
  */
 import { describe, expect, it } from 'vitest';
-import { VICTORY_PHRASES, pickFemaleItalianVoice, pickVictoryPhrase } from './victorySpeech.js';
+import {
+  RUNNER_UP_PHRASES,
+  VICTORY_PHRASES,
+  pickFemaleItalianVoice,
+  pickRunnerUpPhrase,
+  pickVictoryLine,
+  pickVictoryPhrase,
+} from './victorySpeech.js';
 
 describe('victorySpeech — frasi', () => {
   it('ce ne sono abbastanza per non ripetersi spesso', () => {
@@ -71,5 +78,52 @@ describe('victorySpeech — voce', () => {
 
   it('senza voci italiane non inventa: ritorna null', () => {
     expect(pickFemaleItalianVoice([{ name: 'David', lang: 'en-US' }])).toBeNull();
+  });
+});
+
+/*
+ * La voce di fine partita deve parlare a TUTTI. Prima si sentiva solo sul
+ * dispositivo di chi vinceva: in multiplayer la sentiva una persona sola.
+ * Chi non ha vinto non può però sentire una frase in seconda persona
+ * ("hai vinto"): direbbe a tutti di aver vinto.
+ */
+describe('victorySpeech — chi ascolta', () => {
+  it('al vincitore arriva la frase di vittoria, con il proprio nome', () => {
+    const line = pickVictoryLine('Margherita', true, () => 0);
+    expect(line).toContain('Margherita');
+    expect(VICTORY_PHRASES.map((p) => p.replace('{nome}', 'Margherita'))).toContain(line);
+  });
+
+  it('a chi non ha vinto arriva il NOME DEL VINCITORE, non una frase di vittoria propria', () => {
+    const line = pickVictoryLine('Margherita', false, () => 0);
+    expect(line).toContain('Margherita');
+    expect(line).not.toContain('{nome}');
+    // Mai una frase di vittoria in seconda persona a chi ha perso.
+    expect(VICTORY_PHRASES).not.toContain(line);
+  });
+
+  it('le frasi per gli altri non parlano in seconda persona', () => {
+    for (const phrase of RUNNER_UP_PHRASES) {
+      expect(phrase).toContain('{nome}');
+      expect(phrase.toLowerCase()).not.toContain('hai vinto');
+      expect(phrase.toLowerCase()).not.toContain('hai battuto');
+    }
+  });
+
+  it('le frasi per gli altri non sono duplicate', () => {
+    expect(new Set(RUNNER_UP_PHRASES).size).toBe(RUNNER_UP_PHRASES.length);
+  });
+
+  it('il nome del vincitore viene inserito ovunque', () => {
+    for (const random of [0, 0.33, 0.5, 0.99, 1]) {
+      const line = pickRunnerUpPhrase('Margherita', () => random);
+      expect(line).toContain('Margherita');
+      expect(line).not.toContain('{nome}');
+    }
+  });
+
+  it('senza vincitore non si dice nulla (meglio il silenzio di una frase sbagliata)', () => {
+    expect(pickVictoryLine('', true)).toBeNull();
+    expect(pickVictoryLine('   ', false)).toBeNull();
   });
 });

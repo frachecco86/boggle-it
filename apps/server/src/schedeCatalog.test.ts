@@ -91,3 +91,51 @@ describe('SchedaCatalog: cancellazione', () => {
     }
   });
 });
+
+/*
+ * `randomUnplayed` è il fix del bug "nel multiplayer viene mostrata la stessa
+ * scheda due volte nella stessa partita": i pool sono piccoli (10-15 schede per
+ * griglia/difficoltà/variante), quindi una scelta puramente casuale ripeteva la
+ * stessa scheda nel 17-28% delle partite da 3 round.
+ */
+describe('SchedaCatalog: scelta senza ripetizioni', () => {
+  function catalogWith(ids: string[]): SchedaCatalog {
+    const catalog = new SchedaCatalog();
+    for (const id of ids) catalog.add(scheda(id, 'standard'));
+    return catalog;
+  }
+
+  it('non ripesca una scheda già giocata', () => {
+    const catalog = catalogWith(['a', 'b', 'c']);
+    const exclude = new Set(['a', 'b']);
+    // Con un solo id disponibile, qualunque valore di `rng` deve darlo.
+    for (const r of [0, 0.4, 0.99]) {
+      expect(catalog.randomUnplayed(4, 'facile', () => r, 'standard', exclude)?.id).toBe('c');
+    }
+  });
+
+  it('senza esclusioni si comporta come `random`', () => {
+    const catalog = catalogWith(['a', 'b', 'c']);
+    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'standard', new Set())?.id).toBe('a');
+  });
+
+  it('quando TUTTE sono state giocate riparte da capo, non si blocca', () => {
+    const catalog = catalogWith(['a', 'b']);
+    const exclude = new Set(['a', 'b']);
+    const picked = catalog.randomUnplayed(4, 'facile', () => 0, 'standard', exclude);
+    expect(picked).toBeDefined();
+    expect(['a', 'b']).toContain(picked!.id);
+  });
+
+  it('rispetta la variante come `random`', () => {
+    const catalog = new SchedaCatalog();
+    catalog.add(scheda('std', 'standard'));
+    catalog.add(scheda('ale-1', 'ale'));
+    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'ale', new Set())?.id).toBe('ale-1');
+  });
+
+  it('su un gruppo inesistente ritorna undefined', () => {
+    const catalog = catalogWith(['a']);
+    expect(catalog.randomUnplayed(6, 'difficile', () => 0, 'standard', new Set())).toBeUndefined();
+  });
+});

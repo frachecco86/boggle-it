@@ -15,6 +15,7 @@ import { useAppStore } from '../state/store.js';
 import { MusicAdmin } from '../components/MusicAdmin.js';
 import { ProfilesAdmin } from '../components/ProfilesAdmin.js';
 import { BackHome } from '../components/BackHome.js';
+import { SchedaBrowser } from '../components/SchedaBrowser.js';
 
 interface SchedaMetaDTO {
   id: string;
@@ -46,10 +47,11 @@ const DELETE_SCOPES: { id: DeleteScope; label: string; hint: string }[] = [
 ];
 
 /** Le sezioni del pannello, mostrate come tab. */
-type AdminTab = 'schede' | 'musica' | 'profili';
+type AdminTab = 'schede' | 'sfoglia' | 'musica' | 'profili';
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'schede', label: 'Schede' },
+  { id: 'sfoglia', label: 'Sfoglia' },
   { id: 'musica', label: 'Musica' },
   { id: 'profili', label: 'Profili' },
 ];
@@ -71,9 +73,15 @@ const TABS: { id: AdminTab; label: string }[] = [
  * default (scelta di prodotto, non del giocatore), la generazione — comprese le
  * “ale” — il filtro, la sfoglia-schede e la cancellazione. Prima la sfoglia era
  * un tasto della home: l'admin è l'unico che deve poter vedere le soluzioni.
+ *
+ * La sfoglia ha una tab SUA ("Sfoglia") e non è più un tasto dentro Schede:
+ * è una vista a tutto schermo con i suoi filtri e il dettaglio della scheda,
+ * quindi stare in una tab separata la rende raggiungibile in un tocco come le
+ * altre sezioni, senza occupare il flusso di lavoro di generazione/cancellazione
+ * (dove la sfoglia era di fatto una deviazione con un cambio di schermata).
  */
 export function AdminScreen() {
-  const { adminToken, setAdminToken, setScreen, setSchedaId } = useAppStore();
+  const { adminToken, setAdminToken, setSchedaId } = useAppStore();
   const [tab, setTab] = useState<AdminTab>('schede');
   const [userInput, setUserInput] = useState('admin');
   const [passwordInput, setPasswordInput] = useState('');
@@ -536,8 +544,12 @@ export function AdminScreen() {
           <section className="admin__section">
             <div className="admin__section-head">
               <h3 className="summary__label">Elenco ({list?.count ?? 0})</h3>
-              {/* Sfoglia le schede: da qui, perché solo l'admin vede le soluzioni. */}
-              <button className="btn btn--secondary" onClick={() => setScreen('scheda')}>
+              {/*
+               * La sfoglia è una TAB a sé (vedi `TABS`): qui resta solo la
+               * scorciatoia, perché chi sta guardando l'elenco può voler aprire
+               * la vista con i filtri e le soluzioni senza tornare alle tab.
+               */}
+              <button className="btn btn--secondary" onClick={() => setTab('sfoglia')}>
                 Sfoglia le schede
               </button>
             </div>
@@ -546,9 +558,15 @@ export function AdminScreen() {
                 <button
                   key={s.id}
                   className="admin__card"
+                  /*
+                   * Apre la scheda nella tab Sfoglia (stesso frame, niente
+                   * cambio di schermata): il dettaglio con griglia e soluzioni
+                   * vive li', quindi si resta nel pannello admin invece di
+                   * uscirne e doverci tornare.
+                   */
                   onClick={() => {
                     setSchedaId(s.id);
-                    setScreen('scheda');
+                    setTab('sfoglia');
                   }}
                   title="Apri la pagina della scheda"
                 >
@@ -636,6 +654,13 @@ export function AdminScreen() {
 
       {tab === 'musica' && <MusicAdmin token={adminToken} />}
       {tab === 'profili' && <ProfilesAdmin token={adminToken} />}
+
+      {/*
+       * La sfoglia come tab: stesso componente della schermata `SchedaScreen`
+       * (`SchedaBrowser`), così i filtri e il dettaglio non possono divergere fra
+       * i due percorsi.
+       */}
+      {tab === 'sfoglia' && <SchedaBrowser />}
     </div>
   );
 }

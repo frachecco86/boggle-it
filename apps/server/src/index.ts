@@ -39,6 +39,7 @@ import { AppConfigStore } from './appConfig.js';
 import { generateAleBatch, getAleInputs, releaseAleInputs } from './ale.js';
 import { MusicLibrary, MUSIC_MAX_BYTES } from './musicLibrary.js';
 import { extractAudio, probeMedia, MediaToolError } from './mediaTool.js';
+import { refreshYtDlp } from './ytDlpUpdate.js';
 import { ProfileStore } from './profiles.js';
 import { RoomRegistry, ROUND_END_PAUSE_MS, COUNTDOWN_MS, clampDuration, type Room } from './rooms.js';
 import { VoiceRelay } from './voice.js';
@@ -206,8 +207,23 @@ app.get('/preview', (req, res) => {
    */
   const variant = schedaVariantForSize(defaultVariant(), gridSize);
 
+  /*
+   * Schede GIA' VISTE da chi chiede: si escludono per non riproporle.
+   *
+   * Solo se la richiesta porta un token valido (`Authorization: Bearer`): senza
+   * profilo non esiste una cronologia, e il comportamento resta quello di prima.
+   * Il token arriva dal client che ha il profilo attivo (vedi `loadRandomScheda`).
+   *
+   * PERCHE' SOLO IN SINGLE PLAYER: in una stanza la partita e' di tutti, e la
+   * cronologia personale di un giocatore non deve decidere le schede degli altri.
+   * Il multiplayer non passa da qui (usa `room:shuffleScheda` e `Room`).
+   */
+  const token = bearerToken(req);
+  const profile = token ? profiles.getByToken(token) : null;
+  const exclude = profile ? profiles.playedSchede(profile.id) : undefined;
+
   res.setHeader('Cache-Control', 'no-store');
-  const scheda = schede.random(gridSize, difficulty, Math.random, variant);
+  const scheda = schede.randomUnplayed(gridSize, difficulty, Math.random, variant, exclude);
   if (!scheda) {
     return res.json({
       gridSize,
@@ -601,9 +617,64 @@ app.get('/leaderboard', (req, res) => {
   });
 });
 
-/** Statistiche personali del giocatore autenticato. */
-app.get('/me/stats', (req, res) => {
+/**
+ * Segna una o piu' schede come GIA' GIOCATE dal profilo autenticato.
+ *
+ * POST /me/played-schede  body `{ schedaId }` oppure `{ schedaIds: [...] }`.
+ *
+ * PERCHE' NON LO FA IL SERVER DA SOLO: la scheda si considera "giocata" quando
+ * la partita e' davvero iniziata, e solo il client lo sa (in single player non
+ * c'e' una rotta di fine round). Segnarla al `preview` sarebbe sbagliato: una
+ * scheda pescata e mai giocata resterebbe esclusa per sempre.
+ *
+ * Idempotente: ripetere la chiamata non crea duplicati.
+ */
+app.post('/me/played-schede', (req, res) => {
   const profile = requireProfile(req, res);
+  if (!profile) return;
+  const single = typeof req.body?.schedaId === 'string' ? req.body.schedaId.trim() : '';
+  const many = Array.isArray(req.body?.schedaIds)
+    ? (req.body.schedaIds as unknown[]).filter((x): x is string => typeof x === 'string' && x.length > 0)
+    : [];
+  if (single) profiles.markSchedaPlayed(profile.id, single);
+  if (many.length > 0) profiles.markSchedePlayed(profile.id, many);
+  if (!single && many.length === 0) {
+    return res.status(400).json({ error: 'Serve schedaId o schedaIds' });
+  }
+  res.json({ ok: true, played: profiles.playedSchede(profile.id).size });
+});
+
+/**
+ * Quante schede ha gia' giocato il profilo, e quali.
+ *
+ * Il numero serve alla home ("hai giocato N schede"); l'elenco agli strumenti di
+ * diagnosi. `Cache-Control: no-store`: cambia a ogni partita.
+ */
+app.get('/me/played-schede', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  res.setHeader('Cache-Control', 'no-store');
+  const played = [...profiles.playedSchede(profile.id)];
+  res.json({ count: played.length, schedaIds: played });
+});
+
+/**
+ * Dimentica la cronologia delle schede giocate (profilo autenticato).
+ *
+ * Serve al MULTIPLAYER: in una stanza le schede le decide l'host (o l'admin), e
+ * quello che ho visto da solo non deve influire sulla partita degli altri. Il
+ * client la chiama entrando in una stanza, così le schede della stanza non
+ * vengono filtrate dalla cronologia personale.
+ */
+app.delete('/me/played-schede', (req, res) => {
+  const profile = requireProfile(req, res);
+  if (!profile) return;
+  const removed = profiles.clearPlayedSchede(profile.id);
+  res.json({ ok: true, removed });
+});
+
+/** Statistiche personali del giocatore autenticato. */
+app.get('/me/stats', (req, res) => {  const profile = requireProfile(req, res);
   if (!profile) return;
   res.json(profiles.playerStats(profile.id));
 });
@@ -1625,7 +1696,13 @@ io.on('connection', (socket) => {
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
-    const scheda = schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
+    const scheda = schede.randomUnplayed(
+      room.gridSize,
+      room.difficulty,
+      Math.random,
+      room.schedaVariant,
+      room.playedSchedaIds,
+    );
     if (!scheda) return;
     room.pendingSchedaId = scheda.id;
     broadcastState(room);
@@ -1640,11 +1717,20 @@ io.on('connection', (socket) => {
 
     const startRound = () => {
       // Usa la scheda scelta in lobby se c'è (l'host l'ha vista e approvata),
-      // altrimenti ne pesca una a caso. Per i round successivi al primo, se non
-      // c'è una pending si pesca una scheda nuova.
+      // altrimenti ne pesca una a caso — mai una già giocata in questa partita
+      // (vedi `Room.playedSchedaIds`: i pool sono piccoli e la ripetizione era
+      // frequente). Per i round successivi al primo, se non c'è una pending si
+      // pesca una scheda nuova.
       const fromPending = room.pendingSchedaId ? schede.get(room.pendingSchedaId) : undefined;
       const scheda =
-        fromPending ?? schede.random(room.gridSize, room.difficulty, Math.random, room.schedaVariant);
+        fromPending ??
+        schede.randomUnplayed(
+          room.gridSize,
+          room.difficulty,
+          Math.random,
+          room.schedaVariant,
+          room.playedSchedaIds,
+        );
       // La pending è consumata: il prossimo round ne pescherà una nuova.
       room.pendingSchedaId = null;
       const { grid, endsAt } = room.startRound(scheda);
@@ -1894,6 +1980,27 @@ httpServer.listen(PORT, () => {
   console.log(`  schede disponibili: ${schede.size.toLocaleString('it-IT')}`);
   const mem = (process.memoryUsage().rss / 1048576).toFixed(0);
   console.log(`  RSS all'avvio: ${mem} MB (nessun trie del solver: parole dalle schede)`);
+  /*
+   * `yt-dlp` si aggiorna da solo ALL'AVVIO, non solo al build dell'immagine.
+   *
+   * Perche': il Dockerfile scarica `releases/latest` al momento della BUILD, ma
+   * un deploy che resta in esecuzione per mesi conserva quella versione. YouTube
+   * cambia spesso e `yt-dlp` pubblica fix ogni poche settimane: un binario
+   * congelato e' la causa tipica di "l'aggiunta di musica da YouTube non
+   * funziona" a distanza di tempo dall'ultimo deploy.
+   *
+   * Non blocca l'avvio e non e' fatale: se l'aggiornamento fallisce (rete
+   * assente, filesystem in sola lettura) il server parte comunque con la
+   * versione installata, che quasi sempre funziona ancora.
+   */
+  void refreshYtDlp().then((result) => {
+    if (result.updated) console.log(`  yt-dlp aggiornato: ${result.from} → ${result.to}`);
+    else if (result.reason === 'unsupported') {
+      console.log('  yt-dlp: aggiornamento automatico non disponibile, uso la versione installata');
+    } else if (result.reason === 'failed') {
+      console.log(`  yt-dlp: aggiornamento non riuscito, uso la versione installata (${result.from})`);
+    }
+  });
 });
 
 /**

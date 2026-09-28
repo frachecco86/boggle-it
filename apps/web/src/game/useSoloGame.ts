@@ -13,7 +13,7 @@ import {
   type GridSize,
   type Scheda,
 } from '@boggle/shared';
-import { loadRandomScheda } from './schedeLoader.js';
+import { loadRandomScheda, markSchedaPlayed } from './schedeLoader.js';
 // Il passo dell'animazione del suggerimento vive in GridBoard (insieme alle
 // frecce): qui serve per calcolare quando spegnere il suggerimento.
 import { HINT_STEP_MS } from '../components/GridBoard.js';
@@ -234,6 +234,13 @@ export function useSoloGame(options: UseSoloGameOptions) {
         const next = await loadRandomScheda(gridSize, difficulty, useAppStore.getState().schedaVariantFor(gridSize));
         if (!next) throw new Error('Nessuna scheda disponibile');
         setScheda(next);
+        /*
+         * La scheda e' ora "giocata": il server la escludera' dalle prossime
+         * pescate di questo profilo (vedi `markSchedaPlayed`). Si segna QUI,
+         * quando la partita parte davvero, non quando la scheda viene pescata:
+         * una scheda caricata e mai usata resterebbe esclusa per sempre.
+         */
+        markSchedaPlayed(next.id);
         // Serve al catalogo Parole per il filtro "solo la scheda in corso".
         useAppStore.setState({ currentSchedaId: next.id });
         setFound([]);

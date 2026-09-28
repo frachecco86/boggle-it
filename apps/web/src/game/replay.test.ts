@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoundResultEntry } from '@boggle/shared';
-import { buildReplayPlan, revealedCountAt } from './replay.js';
+import { buildReplayPlan, rankingAt, revealedCountAt } from './replay.js';
 
 /** Un giocatore con la sua timeline (già in ordine cronologico). */
 function player(
@@ -96,5 +96,44 @@ describe('revealedCountAt', () => {
     expect(revealedCountAt(plan, plan.steps[0]!.atMs)).toBe(1);
     expect(revealedCountAt(plan, plan.steps[1]!.atMs)).toBe(2);
     expect(revealedCountAt(plan, plan.durationMs)).toBe(3);
+  });
+});
+
+/*
+ * Ordine dei riquadri durante il replay: deve seguire la classifica CORRENTE
+ * (chi ha segnato di più fino a quel momento), non quella finale. I riquadri
+ * erano fissi nell'ordine di fine round, quindi il primo era sempre il vincitore
+ * anche quando era ultimo.
+ */
+describe('rankingAt', () => {
+  const results: RoundResultEntry[] = [
+    player('a', 'Alice', 10, []),
+    player('b', 'Bob', 6, []),
+    player('c', 'Carla', 3, []),
+  ];
+
+  it('con tutti a zero conserva l\'ordine di arrivo (classifica finale)', () => {
+    const ordered = rankingAt(results, new Map([['a', 0], ['b', 0], ['c', 0]]));
+    expect(ordered.map((r) => r.playerId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('chi ha segnato di più sta in alto, anche se in classifica finale era ultimo', () => {
+    const ordered = rankingAt(results, new Map([['a', 0], ['b', 1], ['c', 8]]));
+    expect(ordered.map((r) => r.playerId)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('a parità di punteggio resta l\'ordine di arrivo (niente salti fra frame)', () => {
+    const ordered = rankingAt(results, new Map([['a', 4], ['b', 4], ['c', 1]]));
+    expect(ordered.map((r) => r.playerId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('un giocatore assente dalla mappa vale zero', () => {
+    const ordered = rankingAt(results, new Map([['c', 5]]));
+    expect(ordered.map((r) => r.playerId)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('alla fine coincide con la classifica definitiva (roundScore)', () => {
+    const final = rankingAt(results, new Map(results.map((r) => [r.playerId, r.roundScore])));
+    expect(final.map((r) => r.playerId)).toEqual(['a', 'b', 'c']);
   });
 });

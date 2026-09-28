@@ -3,13 +3,14 @@ import { DIFFICULTIES, SCHEDA_VARIANT_LABELS, type Difficulty, type GridSize } f
 import { useAppStore } from '../state/store.js';
 import { loadCatalog } from '../game/schedeLoader.js';
 import { consumeRoomCodeFromUrl } from '../net/roomLink.js';
-import { AudioSettings } from '../components/AudioSettings.js';
+import { canAutoJoinFromInvite } from '../net/invite.js';import { AudioSettings } from '../components/AudioSettings.js';
 import { AvatarPicker } from '../components/AvatarPicker.js';
 import { MatchSettings } from '../components/MatchSettings.js';
 import { User, Users } from '../components/icons.js';
 
 /** Modalità scelta nell'interruttore in cima alla home. */
 type HomeMode = 'solo' | 'multi';
+
 
 /** Schermata iniziale: profilo, modalità di gioco, impostazioni partita e audio. */
 export function HomeScreen() {
@@ -67,16 +68,48 @@ export function HomeScreen() {
   }, [refreshAppConfig]);
 
   /*
-   * Link di invito: se l'indirizzo contiene `?stanza=CODICE` il codice viene
-   * scritto nel campo "Entra" e si spiega cosa fare. Non si entra da soli:
-   * l'invitato può scegliere prima il proprio nome o il profilo, e un ingresso
-   * automatico con un nome sbagliato lo costringerebbe a uscire e rifare tutto.
+   * Link di invito: chi apre `?stanza=CODICE` entra DIRETTAMENTE nella stanza.
+   *
+   * Prima il codice veniva solo scritto nel campo "Entra" e si aspettava un
+   * tocco: chi riceveva l'invito vedeva la home e doveva capire da solo che
+   * bastava premere un tasto. Ora si entra e basta — è quello che ci si aspetta
+   * aprendo un invito.
+   *
+   * L'ingresso automatico avviene SOLO se c'è già un'identità (un profilo o un
+   * nome salvato dal dispositivo, vedi `partialize` nello store): entrare come
+   * "Giocatore" anonimo in una stanza dove ti aspettano con il tuo nome sarebbe
+   * peggio che chiedere. Senza identità resta il comportamento di prima: codice
+   * nel campo e invito scritto, così si sceglie il nome prima di entrare.
    */
   useEffect(() => {
     const fromLink = consumeRoomCodeFromUrl();
     if (!fromLink) return;
+    setMode('multi');
     setCode(fromLink);
     setInviteCode(fromLink);
+
+    const hasIdentity = canAutoJoinFromInvite(Boolean(profile), nickname);
+    if (!hasIdentity) return;
+
+    /*
+     * `void` e non `await`: l'effetto non deve diventare asincrono. Un errore
+     * (stanza piena, codice scaduto) viene già mostrato dallo store, quindi qui
+     * non c'è nulla da gestire: si resta in home con il messaggio.
+     */
+    void (async () => {
+      setBusy(true);
+      clearError();
+      try {
+        await joinRoom(fromLink);
+      } catch {
+        /* errore mostrato dallo store */
+      } finally {
+        setBusy(false);
+      }
+    })();
+    // Dipendenze volutamente vuote: l'invito si consuma UNA volta all'avvio,
+    // non a ogni cambio di `nickname` o `profile` (che rimonterebbero il join).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Impostazioni della partita (single player e stanza): le stesse per entrambe.
@@ -237,14 +270,20 @@ export function HomeScreen() {
         {/*
          * Modalità apprendimento: un tasto della home (solo single player).
          *
-         * Attiva la modalità E apre le impostazioni partita, così si scelgono
-         * griglia e difficoltà prima di iniziare. Il tasto è distinto da "Gioca
-         * da solo" perché è una modalità diversa, non un'opzione nascosta del
-         * menù: da qui la si trova senza aprire nulla.
+         * L'ETICHETTA NON CAMBIA: è sempre "Modalità apprendimento". Prima
+         * diventava "Apprendimento attivo · disattiva" quando era accesa, ma così
+         * il testo del tasto indicava ora COSA FA il tocco (attiva) ora CHE COSA
+         * SEI (attivo): due letture diverse dello stesso tasto, e il gesto di
+         * spegnimento sembrava un'altra azione invece del ritorno allo stato di
+         * partenza.
          *
-         * Ri-toccandolo si DISATTIVA (torna a partita a tempo): è l'unico posto
-         * dove si accende e si spegne, quindi il comportamento deve essere
-         * prevedibile come un interruttore.
+         * Lo stato acceso si legge dallo stile (`home__learn--active`) e da
+         * `aria-pressed` (per i lettori di schermo), non dal testo: è il
+         * comportamento standard di un interruttore.
+         *
+         * Il foglio delle impostazioni si apre SOLO attivando: serve a scegliere
+         * griglia e difficoltà prima di iniziare, e non c'è nulla da scegliere per
+         * tornare alla partita a tempo.
          */}
         {mode === 'solo' && (
           <button
@@ -258,8 +297,7 @@ export function HomeScreen() {
               if (next) setShowSettings(true);
             }}
           >
-            <span aria-hidden>💡</span>{' '}
-            {learningMode ? 'Apprendimento attivo · disattiva' : 'Modalità apprendimento'}
+            <span aria-hidden>💡</span> Modalità apprendimento
           </button>
         )}
 
@@ -309,7 +347,11 @@ export function HomeScreen() {
         )}
       </div>
 
-      {/* I tre volumi sono qui, sempre visibili e compatti: nessun menù da aprire. */}
+      {/*
+       * I tre volumi stanno dietro il tasto tondo in alto a destra: sempre
+       * raggiungibili, ma senza occupare una fascia della home (vedi
+       * `AudioSettings`).
+       */}
       <AudioSettings />
 
       <div className="home__links">
@@ -321,13 +363,13 @@ export function HomeScreen() {
         </button>
       </div>
 
-      <footer className="home__footer">
-        Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni
-        Wikizionario. Fasce di difficoltà: frequenza d'uso da FrequencyWords
-        (OpenSubtitles 2018, CC BY-SA 4.0).
-        <br />
-        Musica: “Happy Adventure” di TinyWorlds (CC0). Suoni generati nel browser.
-      </footer>
+      {/*
+       * Il footer con i crediti (dizionario, musica) è stato TOLTO dalla home:
+       * erano quattro righe di testo legale in fondo alla schermata, che
+       * spingevano i comandi fuori dallo schermo su telefoni bassi. I crediti
+       * delle licenze CC restano nei file di licenza del repository e nel
+       * README; la voce del dizionario non è un'informazione di gioco.
+       */}
 
       {/*
        * Menù delle impostazioni: si apre sopra la home (foglio sovrapposto), così
