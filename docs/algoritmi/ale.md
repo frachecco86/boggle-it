@@ -23,15 +23,17 @@ Codice: `packages/shared/src/schedaAle.ts`; generazione:
   frequenza è la frazione di voci di `Dict'` che contengono il token.
 - **`QU` è un TOKEN unico**: `quando` → `[QU, A, N, D, O]`, `acqua` →
   `[A, C, QU, A]`. L'alfabeto è di 26 simboli (nessuna `Q` isolata).
-- **Difficoltà = `0.25·R + 0.75·S`** (composita), non la sola composizione della
+- **Difficoltà = `0.5·R + 0.5·M`** (composita), non la sola composizione della
   griglia:
   - `R` = **rarità**, la quota di parole fuori da `Common` (`Common` = NVdB ∩ `Dict'`);
-  - `S` = **scarsità**, `1 − (parole − A) / (B − A)` per l'intervallo calibrato
-    `[A, B]`: 0 al massimo dell'intervallo, 1 al minimo. Così una griglia con poche
-    parole è difficile anche se le parole sono comuni, e una griglia fitta di
-    parole rare resta relativamente abbordabile.
+  - `M` = **ricchezza** della griglia, `1 − numero_parole / punteggio_board`: vale
+    **0** se tutte le parole valgono 1 punto (tutte da 3 lettere) e cresce verso
+    **1** quanto più il punteggio medio per parola è alto. Così una griglia di
+    parole corte e comuni è facile, e una con parole lunghe e rare è difficile.
 - **Limiti calibrati**: da un campione di griglie si derivano l'intervallo di
-  parole accettate (Tukey + `rho`) e le tre fasce di difficoltà (k-means k=3
+  parole accettate (Tukey ristretto verso la mediana con `rho = 0,35`, che
+  tiene la banda stretta: ~70% di griglie in-range) e le tre fasce di
+  difficoltà (k-means k=3
   sulla difficoltà COMPOSITA, con fallback ai tertili).
 
 **Pre-processing (`Dict → Dict'`):** accenti piegati, solo `a-z`, lunghezza ≥ 3
@@ -52,7 +54,7 @@ solo le forme il cui lemma è in `Common` (vedi sotto).
 
 Senza la radice la **rarità** `R` era gonfiata dalla morfologia (0,80/0,85/0,89);
 con la radice scende a valori realistici (**~0,56/0,58/0,59**). La difficoltà finale è
-però composita (rarità + scarsità): vedi sopra.
+però composita (rarità + ricchezza): vedi sopra.
 
 **Guard rails (ATTIVI, scelta di progetto):** banda vocali **30–60%**, **al più 3 token
 rari H/Z/QU in totale**, **nessuna riga o colonna senza soluzioni**. La spec li dà

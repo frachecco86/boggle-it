@@ -6,7 +6,7 @@
  *      non seguita da `u`);
  *   2. Frequenza dei token su `Dict'` (`QU` = un token);
  *   3. `Common` = NVdB ∩ `Dict'`;
- *   4. Calibrazione: 500 griglie → intervallo di parole (Tukey + rho) → 3 fasce
+ *   4. Calibrazione: 2000 griglie → intervallo di parole (Tukey + rho) → 3 fasce
  *      di difficoltà (k-means, con fallback ai tertili);
  *   5. Produzione: cicli di reiezione con seme, con targeting per fascia.
  *
@@ -24,7 +24,7 @@
  *   --size 4|5|6        dimensione (default: tutte)
  *   --difficolta <n>    facile|normale|difficile (default: tutte)
  *   --n <numero>        schede per fascia (default 15)
- *   --samples <numero>  griglie per la calibrazione (default 500)
+ *   --samples <numero>  griglie per la calibrazione (default 2000)
  *   --seed <numero>     seme master (default 1)
  *   --append            aggiunge alle esistenti invece di sovrascrivere le "ale"
  *   --replace           rigenera SOLO le "ale" e tiene le altre varianti
@@ -32,6 +32,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  ALE_CALIBRATION_RHO,
   calibrateAle,
   DEFAULT_ALE_GUARD_RAILS,
   DIFFICULTY_ORDER,
@@ -74,7 +75,7 @@ function main(): void {
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
   const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : DIFFICULTY_ORDER;
   const count = Number(arg('n', '15'));
-  const samples = Number(arg('samples', '500'));
+  const samples = Number(arg('samples', '2000'));
   const seed = Number(arg('seed', '1'));
   const append = hasFlag('append');
   const replace = hasFlag('replace');
@@ -95,7 +96,7 @@ function main(): void {
       guardRails: DEFAULT_ALE_GUARD_RAILS,
       dictSize: dictPrime.length,
       commonSize: common.size,
-      rho: 0.6,
+      rho: ALE_CALIBRATION_RHO,
     });
     calibrations.set(size, calibration);
     const wc = calibration.provenance.wordCount;

@@ -22,6 +22,8 @@ import { brotliDecompressSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ALE_CALIBRATION_RHO,
+  ALE_DIFFICULTY_WEIGHTS,
   buildAleCommon,
   buildAleLemmas,
   buildTrie,
@@ -192,6 +194,11 @@ function committedCalibration(size: GridSize): AleCalibration | null {
     if (!calibration) return null;
     const rails = calibration.provenance?.guardRails;
     if (JSON.stringify(rails) !== JSON.stringify(DEFAULT_ALE_GUARD_RAILS)) return null;
+    // Anche i pesi della difficoltà invalidano la calibrazione (cambiano i confini delle fasce).
+    const weights = calibration.provenance?.weights;
+    if (JSON.stringify(weights) !== JSON.stringify(ALE_DIFFICULTY_WEIGHTS)) return null;
+    // E anche rho: restringe l'intervallo di parole, quindi cambia la produzione.
+    if (calibration.provenance?.rho !== ALE_CALIBRATION_RHO) return null;
     return calibration;
   } catch {
     return null;
@@ -216,7 +223,7 @@ export function calibrationFor(size: GridSize, inputs: AleInputs, samples = 500,
     guardRails: DEFAULT_ALE_GUARD_RAILS,
     dictSize: inputs.dictPrime.length,
     commonSize: inputs.common.size,
-    rho: 0.6,
+    rho: ALE_CALIBRATION_RHO,
   });
   calibrationCache.set(size, calibration);
   return calibration;

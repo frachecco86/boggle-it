@@ -12,8 +12,8 @@ import {
   generateAleScheda,
   isAleCommon,
   mulberry32,
+  richnessFor,
   sampleAleBoards,
-  scarcityFor,
   tierForDifficulty,
   tokenizeAle,
   tokenGuardRailIssues,
@@ -194,34 +194,33 @@ describe('ale: calibrazione', () => {
     expect(tierForDifficulty(1, cal)).toBe('difficile');
   });
 });
-describe('ale: difficoltà composita 0.25·R + 0.75·S', () => {
-  it('S = 0 al massimo dell’intervallo, S = 1 al minimo', () => {
-    expect(scarcityFor(200, { lo: 100, hi: 200 })).toBe(0);
-    expect(scarcityFor(100, { lo: 100, hi: 200 })).toBe(1);
-    expect(scarcityFor(150, { lo: 100, hi: 200 })).toBeCloseTo(0.5);
+describe('ale: difficoltà composita 0.5·R + 0.5·M', () => {
+  it('M = 0 se ogni parola vale 1 punto, cresce con il punteggio medio', () => {
+    expect(richnessFor(100, 100)).toBe(0);
+    expect(richnessFor(100, 200)).toBeCloseTo(0.5);
+    expect(richnessFor(100, 400)).toBeCloseTo(0.75);
+    expect(richnessFor(0, 0)).toBe(0);
   });
 
-  it('combina rarità e scarsità con i pesi 0.25/0.75', () => {
-    const range = { lo: 100, hi: 200 };
-    // R = 0 (tutte comuni), S = 0 (massimo di parole) → 0
-    expect(compositeDifficulty(0, 200, range)).toBeCloseTo(0);
-    // R = 0, S = 1 (minimo di parole) → 0.75
-    expect(compositeDifficulty(0, 100, range)).toBeCloseTo(0.75);
-    // R = 1 (tutte rare), S = 1 → 1
-    expect(compositeDifficulty(1, 100, range)).toBeCloseTo(1);
-    // R = 1, S = 0 → 0.25
-    expect(compositeDifficulty(1, 200, range)).toBeCloseTo(0.25);
+  it('combina rarità e ricchezza con i pesi 0.5/0.5', () => {
+    // R = 0 (tutte comuni), M = 0 (punteggio = parole) → 0
+    expect(compositeDifficulty(0, 100, 100)).toBeCloseTo(0);
+    // R = 0, M = 0.5 → 0.25
+    expect(compositeDifficulty(0, 100, 200)).toBeCloseTo(0.25);
+    // R = 1 (tutte rare), M = 0.5 → 0.75
+    expect(compositeDifficulty(1, 100, 200)).toBeCloseTo(0.75);
+    // R = 1, M = 0 → 0.5
+    expect(compositeDifficulty(1, 100, 100)).toBeCloseTo(0.5);
   });
 
-  it('una griglia SCARSA ma di parole comuni batte una FITTA di parole rare', () => {
+  it('una griglia RICCA di parole comuni può pareggiare una POVERA di parole rare', () => {
     /*
-     * È il senso della nuova metrica: la scarsità pesa tre volte la rarità.
-     * Esempio: 0.75·1 = 0.75 contro 0.25·1 = 0.25.
+     * È il senso della nuova metrica: rarità e ricchezza pesano allo stesso modo.
+     * Esempio: 0.5·1 (rara, povera) contro 0.5·1 (comune, ricca).
      */
-    const range = { lo: 100, hi: 200 };
-    const scarsaComune = compositeDifficulty(0, 100, range);
-    const fittaRara = compositeDifficulty(1, 200, range);
-    expect(scarsaComune).toBeGreaterThan(fittaRara);
+    const povera = compositeDifficulty(0, 100, 100); // comune, povera (M=0)
+    const ricca = compositeDifficulty(1, 100, 100); // rara, povera anch'essa (M=0)
+    expect(ricca).toBeGreaterThan(povera);
   });
 });
 

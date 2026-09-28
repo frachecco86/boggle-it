@@ -21,8 +21,9 @@
  * valori: cambiarli invalida la calibrazione, come richiede la spec.
  *
  * La difficoltà di una griglia NON è più la sola quota di parole fuori dal
- * comune: è `0.25·R + 0.75·S`, dove `R` è quella quota (rarità) e `S` è la
- * SCARSITÀ di parole dentro l'intervallo calibrato. Vedi `compositeDifficulty`.
+ * comune: è `0.5·R + 0.5·M`, dove `R` è quella quota (rarità) e `M` è la
+ * RICCHEZZA della griglia (quanto il punteggio medio per parola supera il
+ * minimo di 1 punto). Vedi `compositeDifficulty`.
  */
 import type { Difficulty } from './difficulty.js';
 import { gridToRows, type Scheda } from './scheda.js';
@@ -424,46 +425,44 @@ export interface AleBoardStats {
  * Pesi della difficoltà composita.
  *
  * La difficoltà di una griglia non dipende più solo da QUANTO sono rare le
- * parole (R), ma anche da QUANTE ce ne sono (S): una griglia con poche parole è
- * difficile anche se le poche che ci sono sono comuni, e una fitta di parole
- * rare resta comunque giocabile. I pesi 0.25/0.75 danno più peso alla scarsità.
+ * parole (R), ma anche da QUANTO VALE la griglia in punti rispetto al numero di
+ * parole (M, ricchezza): una griglia con tante parole da 3 lettere (1 punto
+ * l'una) è più abbordabile di una con lo stesso numero di parole ma più lunghe.
+ * I pesi 0.5/0.5 danno lo stesso peso a rarità e ricchezza.
  *
  * Sono costanti ESPLICITE: cambiarle cambia i confini delle fasce, quindi
  * invalida `calibration.json` (che li registra in `provenance`).
  */
-export const ALE_DIFFICULTY_WEIGHTS = { rarity: 0.25, scarcity: 0.75 } as const;
+export const ALE_DIFFICULTY_WEIGHTS = { rarity: 0.5, richness: 0.5 } as const;
 
 /**
- * Scarsità `S` di parole dentro l'intervallo calibrato `[lo, hi]`.
+ * Ricchezza `M` della griglia: `1 − parole / punteggio`.
  *
- * `S = 0` se la griglia ha il MASSIMO di parole dell'intervallo (`hi`), `S = 1`
- * se ne ha il minimo (`lo`), lineare in mezzo. Il risultato è limitato a
- * `[0, 1]`: una griglia fuori dall'intervallo (sotto `lo` o sopra `hi`) è
- * rispettivamente "il massimo di difficile" o "il massimo di facile", invece di
- * estrapolare a valori negativi o > 1. In produzione conta solo per le griglie
- * DENTRO l'intervallo (le altre vengono scartate), ma cosi la metrica resta
- * ben definita e leggibile nel report.
+ * `M = 0` se ogni parola vale 1 punto (tutte da 3 lettere: `punteggio ===
+ * parole`), e cresce verso 1 quanto più il punteggio medio per parola supera
+ * il minimo (parole più lunghe valgono più punti). Il risultato è limitato a
+ * `[0, 1]`: `punteggio >= parole` sempre (ogni parola vale almeno 1 punto),
+ * quindi non serve un intervallo calibrato per questa componente.
  */
-export function scarcityFor(wordCount: number, wordRange: { lo: number; hi: number }): number {
-  const span = wordRange.hi - wordRange.lo;
-  if (span <= 0) return 0;
-  const raw = 1 - (wordCount - wordRange.lo) / span;
+export function richnessFor(wordCount: number, score: number): number {
+  if (score <= 0) return 0;
+  const raw = 1 - wordCount / score;
   return Math.min(1, Math.max(0, raw));
 }
 
 /**
- * Difficoltà composita: `wR · R + wS · S`.
+ * Difficoltà composita: `wR · R + wM · M`.
  *
- * `R` è la rarità (`1 − quota parole comuni`), `S` la scarsità di parole
- * nell'intervallo calibrato. Vedi `ALE_DIFFICULTY_WEIGHTS`.
+ * `R` è la rarità (`1 − quota parole comuni`), `M` la ricchezza della griglia
+ * (`richnessFor`). Vedi `ALE_DIFFICULTY_WEIGHTS`.
  */
 export function compositeDifficulty(
   rarity: number,
   wordCount: number,
-  wordRange: { lo: number; hi: number },
-  weights: { rarity: number; scarcity: number } = ALE_DIFFICULTY_WEIGHTS,
+  score: number,
+  weights: { rarity: number; richness: number } = ALE_DIFFICULTY_WEIGHTS,
 ): number {
-  return weights.rarity * rarity + weights.scarcity * scarcityFor(wordCount, wordRange);
+  return weights.rarity * rarity + weights.richness * richnessFor(wordCount, score);
 }
 
 /** Punteggio Boggle: `lunghezza − 2` (QU conta due lettere). */
@@ -505,6 +504,22 @@ export function scoreAleBoard(
 /* Calibrazione                                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Restringimento dell'intervallo Tukey verso la mediana (`ALE_CALIBRATION_RHO`).
+ *
+ * `rho=1` coincide con Tukey pieno; valori più bassi stringono la banda di
+ * parole accettate. Si usa **0.35** e non lo 0.6 della spec: con 0.6 la banda
+ * era troppo larga (su 4×4 [14, 203] parole, ~91% di griglie in-range), così
+ * le schede di una stessa fascia variavano troppo nel numero di parole. Con
+ * 0.35 la banda si dimezza circa (4×4 [51, 162]) e restano in-range ~67–70%
+ * dei campioni: gli scarti in più in produzione costano pochi tentativi di
+ * reiezione. Misure al variare di rho: `docs/algoritmi/report/ale.md`.
+ *
+ * È un parametro dell'algoritmo: cambiarlo invalida `calibration.json`
+ * (registrato in `provenance.rho`, verificato dal runtime in `ale.ts`).
+ */
+export const ALE_CALIBRATION_RHO = 0.35;
+
 /** Percentile con interpolazione lineare (come `numpy.percentile`). */
 export function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
@@ -534,7 +549,7 @@ export interface AleCalibration {
     wordCount: { min: number; q1: number; median: number; q3: number; max: number };
     rho: number;
     /** Pesi della difficoltà composita usati per la calibrazione. */
-    weights: { rarity: number; scarcity: number };
+    weights: { rarity: number; richness: number };
     /** true se i cluster k-means sono stati usati; false = fallback ai tertili. */
     usedKmeans: boolean;
   };
@@ -589,8 +604,8 @@ function kmeans1d(values: number[], k = 3, iterations = 100): number[] {
 /**
  * Calibra `wordRange` e le 3 fasce da un campione di statistiche di griglia.
  *
- * `rho` (default 0.6) restringe i quartili verso la mediana: `rho=0.6` conserva
- * circa il 60% delle griglie inlier, come da spec. `rho=1` coincide con Tukey pieno.
+ * `rho` (default `ALE_CALIBRATION_RHO` = 0.35) restringe i quartili verso la
+ * mediana. `rho=1` coincide con Tukey pieno.
  */
 export function calibrateAle(
   samples: AleBoardStats[],
@@ -599,10 +614,10 @@ export function calibrateAle(
     dictSize: number;
     commonSize: number;
     rho?: number;
-    weights?: { rarity: number; scarcity: number };
+    weights?: { rarity: number; richness: number };
   },
 ): AleCalibration {
-  const rho = provenance.rho ?? 0.6;
+  const rho = provenance.rho ?? ALE_CALIBRATION_RHO;
   const weights = provenance.weights ?? ALE_DIFFICULTY_WEIGHTS;
   const counts = samples.map((s) => s.wordCount).sort((a, b) => a - b);
   const q1 = percentile(counts, 25);
@@ -620,12 +635,12 @@ export function calibrateAle(
   const survivors = samples.filter((s) => s.wordCount >= lo && s.wordCount <= hi && s.wordCount > 0);
 
   /*
-   * Difficoltà COMPOSITA dei superstiti: `0.25·R + 0.75·S`. Serve l'intervallo
-   * già calibrato (S dipende da lo/hi), quindi si calcola QUI e non in
-   * `scoreAleBoard`.
+   * Difficoltà COMPOSITA dei superstiti: `0.5·R + 0.5·M` (M = ricchezza,
+   * indipendente dall'intervallo calibrato: dipende solo da parole e punteggio
+   * della griglia).
    */
   const difficultyValues = survivors
-    .map((s) => compositeDifficulty(s.rarity, s.wordCount, wordRange, weights))
+    .map((s) => compositeDifficulty(s.rarity, s.wordCount, s.score, weights))
     .sort((a, b) => a - b);
   let centroids = kmeans1d(difficultyValues, 3);
   // Validazione k=3: ogni cluster deve avere ≥ max(15, 10%). Altrimenti tertili.
@@ -762,8 +777,8 @@ export function generateAleScheda(options: GenerateAleOptions): Scheda {
     const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
 
     const inRange = stats_.wordCount >= calibration.wordRange.lo && stats_.wordCount <= calibration.wordRange.hi;
-    // Difficoltà COMPOSITA: rarità + scarsità di parole (vedi `compositeDifficulty`).
-    const boardDifficulty = compositeDifficulty(stats_.rarity, stats_.wordCount, calibration.wordRange);
+    // Difficoltà COMPOSITA: rarità + ricchezza (vedi `compositeDifficulty`).
+    const boardDifficulty = compositeDifficulty(stats_.rarity, stats_.wordCount, stats_.score);
     const distance =
       Math.abs(stats_.wordCount - (calibration.wordRange.lo + calibration.wordRange.hi) / 2) /
         Math.max(1, calibration.wordRange.hi) +

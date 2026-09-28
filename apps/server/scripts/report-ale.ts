@@ -3,7 +3,7 @@
  * PRIMA GENERAZIONE (quanti candidati sono stati scartati e perché).
  *
  * Uso:
- *   pnpm --filter @boggle/server report:ale                    # 5×5, 500 campioni, 15 schede per fascia
+ *   pnpm --filter @boggle/server report:ale                    # 5×5, 2000 campioni, 15 schede per fascia
  *   pnpm --filter @boggle/server report:ale -- --samples 2000
  *   pnpm --filter @boggle/server report:ale -- --size 4 --n 5
  *   pnpm --filter @boggle/server report:ale -- --all-sizes     # tutte e tre le dimensioni
@@ -17,6 +17,7 @@
  * Deterministico: stessi `--seed`/`--samples`/`--n` → stessi numeri.
  */
 import {
+  ALE_CALIBRATION_RHO,
   calibrateAle,
   compositeDifficulty,
   DEFAULT_ALE_GUARD_RAILS,
@@ -25,6 +26,7 @@ import {
   isAleCommon,
   newAleGenerationStats,
   percentile,
+  richnessFor,
   sampleAleBoards,
   schedaFileName,
   tierForDifficulty,
@@ -93,9 +95,9 @@ function loadCatalogAle(size: GridSize, difficulty: Difficulty): Scheda[] {
   return (parsed.schede ?? []).filter((s) => (s.variant ?? 'standard') === 'ale');
 }
 
-/** Difficoltà composita di una griglia (R e S ricavati dai suoi dati). */
-function boardDifficulty(board: AleBoardStats, wordRange: { lo: number; hi: number }): number {
-  return compositeDifficulty(board.rarity, board.wordCount, wordRange);
+/** Difficoltà composita di una griglia (R e M ricavati dai suoi dati). */
+function boardDifficulty(board: AleBoardStats): number {
+  return compositeDifficulty(board.rarity, board.wordCount, board.score);
 }
 
 function reportForSize(
@@ -134,14 +136,16 @@ function reportForSize(
     guardRails: DEFAULT_ALE_GUARD_RAILS,
     dictSize: dictPrime.length,
     commonSize: common.size,
-    rho: 0.6,
+    rho: ALE_CALIBRATION_RHO,
   });
 
   const counts = boards.map((b) => b.wordCount).sort((a, b) => a - b);
   const rarities = boards.map((b) => b.rarity).sort((a, b) => a - b);
-  const comq = boards.map((b) => boardDifficulty(b, calibration.wordRange)).sort((a, b) => a - b);
+  const richnesses = boards.map((b) => richnessFor(b.wordCount, b.score)).sort((a, b) => a - b);
+  const comq = boards.map((b) => boardDifficulty(b)).sort((a, b) => a - b);
   const { mean: meanWords } = meanSd(boards.map((b) => b.wordCount));
   const { mean: meanRarity, sd: sdRarity } = meanSd(boards.map((b) => b.rarity));
+  const { mean: meanRich, sd: sdRich } = meanSd(richnesses);
   const { mean: meanComq, sd: sdComq } = meanSd(comq);
 
   console.log('\n## Calibrazione');
@@ -170,15 +174,19 @@ function reportForSize(
       `max ${rarities[rarities.length - 1]?.toFixed(3)} (media ${meanRarity.toFixed(3)} ± ${sdRarity.toFixed(3)})`,
   );
   console.log(
+    `  ricchezza M           min ${richnesses[0]?.toFixed(3)} · mediana ${percentile(richnesses, 50).toFixed(3)} · ` +
+      `max ${richnesses[richnesses.length - 1]?.toFixed(3)} (media ${meanRich.toFixed(3)} ± ${sdRich.toFixed(3)})`,
+  );
+  console.log(
     `  difficoltà composita  min ${comq[0]?.toFixed(3)} · mediana ${percentile(comq, 50).toFixed(3)} · ` +
       `max ${comq[comq.length - 1]?.toFixed(3)} (media ${meanComq.toFixed(3)} ± ${sdComq.toFixed(3)})`,
   );
   console.log(
-    `  pesi usati            0.25·R + 0.75·S (R rarità, S scarsità nell'intervallo)`,
+    `  pesi usati            0.5·R + 0.5·M (R rarità, M ricchezza = 1 − parole/punteggio)`,
   );
   console.log(`  k-means k=3 usato: ${calibration.provenance.usedKmeans ? 'sì' : 'no (fallback ai tertili)'}`);
   for (const tier of calibration.tiers) {
-    const inTier = boards.filter((b) => tierForDifficulty(boardDifficulty(b, calibration.wordRange), calibration) === tier.difficulty).length;
+    const inTier = boards.filter((b) => tierForDifficulty(boardDifficulty(b), calibration) === tier.difficulty).length;
     console.log(
       `    ${tier.difficulty.padEnd(9)} centro ${tier.targetDifficulty.toFixed(3)} · intervallo ` +
         `[${tier.range.min.toFixed(3)}, ${tier.range.max.toFixed(3)}] · ${inTier} griglie del campione (${pct(inTier / Math.max(1, boards.length))})`,
@@ -274,7 +282,7 @@ function reportForSize(
     }
 
     const wc = produced.map((p) => p.wordCount);
-    const df = produced.map((p) => boardDifficulty(p, generationCalibration.wordRange));
+    const df = produced.map((p) => boardDifficulty(p));
     // Scarti aggregati per REGOLA (i messaggi contengono la misura).
     const byRule = new Map<string, number>();
     for (const [reason, n] of Object.entries(genStats.railRejections)) {
@@ -325,7 +333,7 @@ function main(): void {
   const sizes: GridSize[] = allSizes
     ? [4, 5, 6]
     : [Number(arg('size', '5')) as GridSize];
-  const samples = Number(arg('samples', '500'));
+  const samples = Number(arg('samples', '2000'));
   const count = Number(arg('n', '15'));
   const seed = Number(arg('seed', '1'));
   const maxAttempts = Number(arg('attempts', '500'));
