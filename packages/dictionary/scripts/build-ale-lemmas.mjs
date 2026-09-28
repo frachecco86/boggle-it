@@ -1,5 +1,6 @@
 /**
- * LEGACY: non più usato dall'algoritmo ale, vedi IMPLEMENTATION.md §1.2.
+ * LEGACY: non più usato dall'algoritmo ale, vedi
+ * docs/algoritmi/report/ale-full-implementazione.md §1.2.
  *
  * Costruisce `data/ale/lemmas.br`: le radici (forma → lemma) che servivano
  * all'algoritmo "ale" per contare una forma flessa come comune.
@@ -77,7 +78,9 @@ for (const line of readFileSync(NVDB, 'utf8').split('\n')) {
 }
 
 /*
- * Forma → lemma con la STESSA semantica di `buildAleLemmas` (in `schedaAle.ts`):
+ * Forma → lemma con la STESSA semantica di `buildAleLemmas` (rimosso da
+ * `schedaAle.ts` con la metrica ad anelli, vedi
+ * docs/algoritmi/report/ale-full-implementazione.md §1.2):
  * "prima analisi vince". Va applicata PRIMA del filtro sui lemmi comuni.
  *
  * PERCHÉ l'ordine è importante: se si filtrasse durante la scansione, una forma

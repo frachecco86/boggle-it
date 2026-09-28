@@ -1,14 +1,13 @@
-# IMPLEMENTATION — evoluzione algoritmo `ale` (branch `ale-full`)
+# Implementazione — evoluzione algoritmo `ale` (branch `ale-full`)
 
-> Implementazione del piano di `PLAN.md`, **inclusa** la definizione di
-> "parola comune": si adotta la **variante 4 dell'Appendice A** (metrica ad
-> anelli di frequenza pesati), che sostituisce la rarità binaria basata su
-> NVdB+lemmi.
+> Specifica di implementazione dell'evoluzione `ale-full`, **inclusa** la
+> definizione di "parola comune": si adotta la **variante 4** (metrica ad anelli
+> di frequenza pesati), che sostituisce la rarità binaria basata su NVdB+lemmi.
 >
 > Il documento è auto-contenuto: ogni formula, costante, file e ordine di
 > esecuzione è esplicitato. Quando qualcosa non è scritto qui, vale il
-> comportamento attuale di `packages/shared/src/schedaAle.ts` (branch
-> `ale-development`).
+> comportamento di `packages/shared/src/schedaAle.ts`. I numeri misurati e la
+> verifica di riproduzione sono in [`ale.md`](./ale.md).
 
 ---
 
@@ -387,7 +386,8 @@ export interface AleInputs {
   pipeline. **Non cancellare** il file né `data/ale/lemmas.br` /
   `data/ale/nvdb.words.txt` in questo branch: si aggiunge una riga in testa
   allo script ("LEGACY: non più usato dall'algoritmo ale, vedi
-  IMPLEMENTATION.md §1.2") e una nota in `docs/algoritmi/ale.md`.
+  docs/algoritmi/report/ale-full-implementazione.md §1.2") e una nota in
+  `docs/algoritmi/ale.md`.
 
 ---
 
@@ -443,8 +443,8 @@ export interface AleInputs {
    bande per fascia, generazione a tre secchi; sezione "Radice/lemma" marcata
    LEGACY con rimando a questo documento.
 2. `docs/algoritmi/report/ale.md`: **rigenerato** alla fine (Step 8.5).
-3. `PLAN.md`: barrare gli step completati; l'Appendice A resta come storico
-   della decisione (aggiungere in cima: "Deciso: variante 4").
+3. `PLAN.md` (rimosso dal repo): era il piano di lavoro da cui nasce questa
+   specifica; non serve più.
 4. `apps/web/src/version.ts`: nuova voce di changelog (card di riassunto +
    dettaglio tecnico: metrica ad anelli, nuovi rails, bande per fascia,
    generazione a secchi).

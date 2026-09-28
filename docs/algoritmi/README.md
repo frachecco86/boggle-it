@@ -35,7 +35,10 @@ di formato ≤ 2, senza il campo, valgono `standard`.
 - [full.md](./full.md) — i criteri completi;
 - [ale.md](./ale.md) — l’algoritmo ale (campionamento per frequenza e calibrazione);
 - [report/ale.md](./report/ale.md) — **numeri** della calibrazione e della prima generazione ale
-  (campioni respinti dai guard rails, fasce di difficoltà, verifica di riproduzione).
+  (campioni respinti dai guard rails, fasce di difficoltà, verifica di riproduzione);
+- [report/ale-full-implementazione.md](./report/ale-full-implementazione.md) — **specifica di
+  implementazione** dell’evoluzione `ale-full` (rarità ad anelli, nuovi guard rails, bande di
+  parole per fascia, generazione a tre secchi).
 
 In questo file: la **modalità apprendimento** (che usa le schede ale), la **taratura e
 verifica** degli algoritmi e la **verifica di fedeltà dei sorgenti**.

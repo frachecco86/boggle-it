@@ -66,7 +66,8 @@ del dizionario principale (vedi `comune.md`), ma non entrano più in `R`.
 ### Radice/lemma (LEGACY)
 
 > LEGACY: la definizione di "parola comune" basata su NVdB + radici/lemmi è stata
-> **sostituita** dalla metrica ad anelli (`rings-v1`, IMPLEMENTATION.md §1.2).
+> **sostituita** dalla metrica ad anelli (`rings-v1`,
+> [implementazione](./report/ale-full-implementazione.md) §1.2).
 > `build-ale-lemmas.mjs`, `data/ale/lemmas.br` e `data/ale/nvdb.words.txt` sono
 > conservati solo come storico e non sono più usati da `ale`.
 

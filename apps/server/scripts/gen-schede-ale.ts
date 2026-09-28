@@ -1,7 +1,7 @@
 /**
  * Genera le schede "ale" e le aggiunge al catalogo.
  *
- * Pipeline (IMPLEMENTATION.md, branch `ale-full`):
+ * Pipeline (docs/algoritmi/report/ale-full-implementazione.md, branch `ale-full`):
  *   1. Pre-processing: `words.txt` → `Dict'` (pulizia, accenti piegati, niente `q`
  *      non seguita da `u`);
  *   2. Frequenza dei token su `Dict'` (`QU` = un token);

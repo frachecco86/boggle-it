@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.38.0';
+export const APP_VERSION = '0.39.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -48,7 +48,7 @@ export interface ReleasePromo {
  */
 export const RELEASES: ReleaseEntry[] = [
   {
-    version: '0.38.0',
+    version: '0.39.0',
     date: '2026-09-29',
     title: 'Schede Ale più equilibrate: rarità a fasce di frequenza e parole ancora',
     promo: {
