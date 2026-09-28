@@ -59,3 +59,53 @@ describe('schedaVariantFor', () => {
     }
   });
 });
+
+/*
+ * URL delle tracce musicali.
+ *
+ * REGRESSIONE (APK): le tracce caricate dall'admin hanno `file` relativo al
+ * server (`/music/up-xxx/file`). Nell'APK la WebView serve il bundle da
+ * `https://localhost`, quindi un percorso relativo cercava il file DENTRO l'app
+ * invece che sul server: la musica "non si sentiva" senza alcun errore.
+ */
+describe('absoluteMusicTrack', () => {
+  it('rende assoluto il percorso delle tracce caricate', async () => {
+    const { absoluteMusicTrack } = await import('./store.js');
+    const track = absoluteMusicTrack({
+      id: 'up-1',
+      label: 'X',
+      mood: '',
+      credits: '',
+      file: '/music/up-1/file',
+      uploaded: true,
+    });
+    expect(track.file).not.toBe('/music/up-1/file');
+    expect(track.file.startsWith('http')).toBe(true);
+    expect(track.file.endsWith('/music/up-1/file')).toBe(true);
+  });
+
+  it('lascia relativo il percorso delle tracce del bundle', async () => {
+    const { absoluteMusicTrack } = await import('./store.js');
+    const track = absoluteMusicTrack({
+      id: 'classica',
+      label: 'Classica',
+      mood: '',
+      credits: '',
+      file: '/audio/tracks/classica.mp3',
+    });
+    expect(track.file).toBe('/audio/tracks/classica.mp3');
+  });
+
+  it('non tocca un URL già assoluto', async () => {
+    const { absoluteMusicTrack } = await import('./store.js');
+    const track = absoluteMusicTrack({
+      id: 'up-2',
+      label: 'Y',
+      mood: '',
+      credits: '',
+      file: 'https://cdn.example/music/y.mp3',
+      uploaded: true,
+    });
+    expect(track.file).toBe('https://cdn.example/music/y.mp3');
+  });
+});

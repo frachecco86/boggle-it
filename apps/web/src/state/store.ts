@@ -160,16 +160,39 @@ function emitSfxDebug(message: string, data: unknown): void {
   }
 }
 
+/**
+ * Catalogo musicale dal server, con i percorsi resi ASSOLUTI.
+ *
+ * PERCHÉ serve l'assolutizzazione: le tracce caricate dall'admin hanno `file`
+ * come percorso del server (`/music/up-xxx/file`), mentre quelle incluse nel
+ * bundle hanno un percorso del client (`/audio/tracks/classica.mp3`). Su web le
+ * due cose coincidono perché il client è servito dallo stesso host del server;
+ * nell'APK NO: l'origine della WebView è `https://localhost` e contiene il
+ * bundle dell'app, quindi un `<audio src="/music/up-xxx/file">` cercava il file
+ * dentro l'app invece che sul server — la musica caricata dall'admin non si
+ * sentiva, senza alcun errore visibile (solo silenzio).
+ *
+ * Si assolutizza SOLO ciò che non è già assoluto e che punta al server
+ * (`/music/...`): i percorsi del bundle restano relativi e continuano a
+ * funzionare anche senza rete.
+ */
+export function absoluteMusicTrack(track: MusicTrackMeta): MusicTrackMeta {
+  if (/^https?:/i.test(track.file) || !track.file.startsWith('/music/')) return track;
+  return { ...track, file: `${SERVER_BASE}${track.file}` };
+}
+
 async function loadMusicCatalog(): Promise<MusicTrackMeta[] | null> {
   try {
     const res = await fetch(`${SERVER_BASE}/music`);
     if (!res.ok) return null;
     const body = (await res.json()) as { tracks?: MusicTrackMeta[] };
-    return Array.isArray(body.tracks) && body.tracks.length > 0 ? body.tracks : null;
+    if (!Array.isArray(body.tracks) || body.tracks.length === 0) return null;
+    return body.tracks.map(absoluteMusicTrack);
   } catch {
     return null;
   }
 }
+
 import {
   activeToken,
   getActiveProfile,
