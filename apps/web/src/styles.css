@@ -519,7 +519,20 @@ body::before {
  * Da attivo il bordo e lo sfondo si intensificano (è un interruttore: lo stato
  * deve leggersi a colpo d'occhio).
  */
-.home__learn {
+/*
+ * Tasto della modalità apprendimento.
+ *
+ * L'etichetta non cambia mai (è sempre "Modalità apprendimento"): lo stato acceso
+ * si legge dal colore pieno e dal bordo continuo, mentre a riposo è un tratteggio.
+ * Così il tasto resta lo stesso elemento e non sembra diventare un altro comando.
+ *
+ * NOTA sulla specificità: `.btn` è dichiarata più sotto nel foglio e con la
+ * stessa specificità (una classe), quindi vinceva lei — `border: none` e il fondo
+ * neutro di `.btn` cancellavano ogni volta queste regole, e il tasto non si è mai
+ * distinto dagli altri. `button.home__learn` (classe + tipo) è più specifico e
+ * non dipende più dall'ORDINE delle regole nel file.
+ */
+button.home__learn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -530,15 +543,21 @@ body::before {
   font-weight: 700;
 }
 
-.home__learn:hover {
+button.home__learn:hover {
   border-color: #e0a800;
   background: color-mix(in srgb, #ffd54a 18%, var(--surface));
 }
 
-.home__learn--active {
+/*
+ * Stato ACCESO: fondo pieno e bordo continuo, più un anello esterno. Senza il
+ * testo "attivo" (tolto di proposito) è il colore a dover dire che la modalità è
+ * accesa: un solo tratteggio più scuro non bastava a distinguerla a colpo d'occhio.
+ */
+button.home__learn--active {
   border-style: solid;
-  border-color: #e0a800;
-  background: color-mix(in srgb, #ffd54a 26%, var(--surface));
+  border-color: #b8860b;
+  background: color-mix(in srgb, #ffd54a 42%, var(--surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, #e0a800 35%, transparent);
 }
 
 /* Riga audio: sempre visibile, quindi solo un filo di margine. */
