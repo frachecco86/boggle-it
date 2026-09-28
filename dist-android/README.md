@@ -8,7 +8,7 @@ chi clona il repo li trova già.
 
 | File | Versione | Note |
 |---|---|---|
-| `sbooble-0.38.0-debug.apk` | 0.38.0 | `versionCode 18` — chat vocale (permesso `MODIFY_AUDIO_SETTINGS`), musica caricata dall'admin, griglia dritta su tablet, voce per tutti, invito non piu' localhost, home compatta, invito che entra subito, tasto apprendimento |
+| `sbooble-0.38.0-debug.apk` | 0.38.0 | `versionCode 18` — chat vocale (permesso `MODIFY_AUDIO_SETTINGS`), musica caricata dall'admin, griglia dritta su tablet, voce per tutti, invito non piu' localhost, home compatta, invito che entra subito, tasto apprendimento, sfoglia come tab, schede gia' giocate |
 | `sbooble-0.37.1-debug.apk` | 0.37.1 | `versionCode 17` — la stanza usa le schede dell'admin |
 | `sbooble-0.37.0-debug.apk` | 0.37.0 | `versionCode 16` — regole e punteggi in una finestra a sé |
 | `sbooble-0.36.2-debug.apk` | 0.36.2 | `versionCode 15` — le schede Ale valgono su tutte le griglie |
