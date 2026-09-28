@@ -172,3 +172,35 @@ export function revealedCountAt(plan: ReplayPlan, elapsedMs: number): number {
   while (n < plan.steps.length && plan.steps[n]!.atMs <= elapsedMs) n++;
   return n;
 }
+
+/**
+ * Ordine dei giocatori IN BASE ALLA CLASSIFICA CORRENTE a un dato momento del
+ * replay, cioe' secondo il punteggio accumulato fino a quel punto.
+ *
+ * PERCHE' NON L'ORDINE FINALE: i riquadri dei concorrenti erano fissi
+ * nell'ordine della classifica di FINE round, quindi il primo riquadro era
+ * sempre chi avrebbe vinto — anche nei primi istanti, quando magari era ultimo.
+ * Il replay racconta una partita che si svolge: l'ordine deve seguire il
+ * punteggio che sale, come in una classifica che si aggiorna, e solo alla fine
+ * coincidere con quella definitiva.
+ *
+ * A parita' di punteggio si conserva l'ordine di arrivo dei `results` (che il
+ * server manda gia' ordinato per punteggio finale): cosi' l'ordine e' stabile e
+ * non "salta" fra due frame quando due giocatori sono a pari punti.
+ *
+ * `partial` e' il punteggio accumulato finora per giocatore (vedi il componente
+ * `RoundReplay`): i giocatori assenti dalla mappa valgono 0.
+ */
+export function rankingAt(
+  results: readonly RoundResultEntry[],
+  partial: ReadonlyMap<string, number>,
+): RoundResultEntry[] {
+  return results
+    .map((r, index) => ({ r, index }))
+    .sort((a, b) => {
+      const sa = partial.get(a.r.playerId) ?? 0;
+      const sb = partial.get(b.r.playerId) ?? 0;
+      return sb - sa || a.index - b.index;
+    })
+    .map((x) => x.r);
+}

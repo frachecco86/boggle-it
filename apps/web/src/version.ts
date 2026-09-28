@@ -71,6 +71,9 @@ export const RELEASES: ReleaseEntry[] = [
         kind: 'improvement',
         items: [
           '**La musica da YouTube continua a funzionare nel tempo.** Lo scaricatore di audio si aggiorna da solo all’avvio del server: prima aggiornava solo quando si ricostruiva l’immagine, quindi con il passare delle settimane YouTube cambiava e l’importazione smetteva di funzionare. L’aggiornamento non blocca l’avvio e, se fallisce, il server parte comunque.',
+          '**La home ha più respiro.** I tre cursori del volume erano sempre in linea e occupavano una fascia intera: ora stanno dietro un tasto “Volume” che apre i cursori quando servono. Il fondo della pagina con i crediti è stato tolto.',
+          '**L’elenco delle tracce musicali è più compatto.** Era una colonna con ogni voce alta tre righe (titolo, tipo, crediti): ora è una griglia con due voci per riga e il titolo su una riga sola. Le sei tracce si vedono quasi tutte senza scorrere. I crediti restano passando il dito sulla voce.',
+          '**A fine round i riquadri dei giocatori si riordinano mentre la partita scorre.** Prima restavano fissi nell’ordine della classifica finale, quindi il primo riquadro era sempre chi avrebbe vinto anche quando era ultimo. Ora l’ordine segue il punteggio che sale, come una classifica che si aggiorna, e solo alla fine coincide con quella definitiva.',
         ],
       },
       {
@@ -80,6 +83,8 @@ export const RELEASES: ReleaseEntry[] = [
           '`pickVictoryLine` sceglie il testo in base a chi ascolta e `speakVictory` riceve la frase già formata invece del nickname: la decisione non può divergere fra schermate. 6 test coprono vincitore, non vincitore e assenza di vincitore.',
           '`Room.playedSchedaIds` tiene lo storico delle schede giocate e `SchedaCatalog.randomUnplayed` sceglie fra quelle non ancora viste. 7 test fra catalogo e stanza.',
           '`publicAppHref` sostituisce le origini locali (`localhost`/`127.0.0.1`) con il server configurato quando si costruisce un invito: nell’APK la WebView ha origine `https://localhost` e il link era inutilizzabile. 5 test coprono APK, web, sviluppo e indirizzo non valido.',
+          '`rankingAt(results, punteggiParziali)` calcola l’ordine dei riquadri dalla classifica CORRENTE del replay: a parità di punteggio conserva l’ordine di arrivo (che il server manda già ordinato per punteggio finale), così l’ordine non “salta” fra due frame. 5 test lo coprono.',
+          '`AudioSettings` è ora un tasto con pannello (`home-audio__toggle`): gli angoli in alto della home erano già occupati dalla barra fissa (tema e Home a sinistra, Classifica/Parole/versione a destra), quindi il tasto resta nel flusso invece di sovrapporsi. Il pannello riusa `VolumeSliders`, lo stesso componente del tasto volumi in partita.',
           '`scripts/missing-definitions.ts` misura la copertura delle definizioni per variante di scheda: serviva a distinguere un bug da un buco della fonte. Il risultato è che la stragrande maggioranza delle parole senza definizione è assente da Wikizionario (voce con “definizione mancante” o assente), non un problema del gioco. La copertura dichiarata in 0.33.0 (92%) era una misura superata: oggi è ~81% per parola unica, ~85% pesata sulle occorrenze.',
         ],
       },

@@ -1,19 +1,45 @@
+import { useState } from 'react';
 import { VolumeSliders } from './VolumeSliders.js';
+import { Volume2 } from './icons.js';
 
 /**
- * Audio della home: i tre volumi (effetti, musica, chat vocale) SUBITO visibili.
+ * Audio della home: i tre volumi (effetti, musica, chat vocale) dietro un tasto
+ * compatto con pannello a discesa.
  *
- * Prima erano dentro un pannello che si apriva toccando "Audio": per alzare la
- * musica bisognava aprire un menù. Ora il blocco è sempre aperto, compatto (una
- * riga per volume, icona + cursore, senza scritte) e sta in alto nella home.
+ * PERCHÉ UN DROPDOWN E NON IL BLOCCO SEMPRE APERTO: i tre cursori sempre in linea
+ * occupavano una fascia intera della home (~90px), che è la schermata dove lo
+ * spazio è più conteso (profilo, modalità, tasti, codice stanza). Ora resta una
+ * sola riga con il tasto, e i cursori compaiono solo quando servono.
  *
- * I volumi fini stanno qui; in partita lo stesso mixer si alza dal tasto tondo
- * in basso a sinistra (vedi `FloatingControls`), così non serve tornare in home.
+ * PERCHÉ NON È UN TASTO FLOTTANTE: gli angoli in alto sono già presi dalla barra
+ * fissa (interruttore del tema e Home a sinistra, Classifica/Parole/versione a
+ * destra). Un tondo in più coprirebbe quei comandi o il titolo della home. Qui
+ * resta nel flusso, subito sotto le azioni di gioco.
+ *
+ * Il pannello riusa `VolumeSliders`: sono gli stessi cursori del tasto volumi in
+ * partita, quindi il mixer si comporta allo stesso modo nelle due schermate.
  */
 export function AudioSettings() {
+  const [open, setOpen] = useState(false);
+
   return (
-    <section className="audio-settings audio-settings--compact" aria-label="Volumi audio">
-      <VolumeSliders compact />
-    </section>
+    <div className={`home-audio${open ? ' home-audio--open' : ''}`}>
+      <button
+        type="button"
+        className="home-audio__toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? 'Chiudi i volumi' : 'Apri i volumi'}
+      >
+        <Volume2 size={16} aria-hidden />
+        <span>Volume</span>
+      </button>
+
+      {open && (
+        <div className="home-audio__panel" role="group" aria-label="Volumi audio">
+          <VolumeSliders compact />
+        </div>
+      )}
+    </div>
   );
 }

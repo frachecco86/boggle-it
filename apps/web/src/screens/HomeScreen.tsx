@@ -309,7 +309,11 @@ export function HomeScreen() {
         )}
       </div>
 
-      {/* I tre volumi sono qui, sempre visibili e compatti: nessun menù da aprire. */}
+      {/*
+       * I tre volumi stanno dietro il tasto tondo in alto a destra: sempre
+       * raggiungibili, ma senza occupare una fascia della home (vedi
+       * `AudioSettings`).
+       */}
       <AudioSettings />
 
       <div className="home__links">
@@ -321,13 +325,13 @@ export function HomeScreen() {
         </button>
       </div>
 
-      <footer className="home__footer">
-        Dizionario: Morph-it! (UniBO, CC BY-SA 2.0) + lessico comune + abbreviazioni
-        Wikizionario. Fasce di difficoltà: frequenza d'uso da FrequencyWords
-        (OpenSubtitles 2018, CC BY-SA 4.0).
-        <br />
-        Musica: “Happy Adventure” di TinyWorlds (CC0). Suoni generati nel browser.
-      </footer>
+      {/*
+       * Il footer con i crediti (dizionario, musica) è stato TOLTO dalla home:
+       * erano quattro righe di testo legale in fondo alla schermata, che
+       * spingevano i comandi fuori dallo schermo su telefoni bassi. I crediti
+       * delle licenze CC restano nei file di licenza del repository e nel
+       * README; la voce del dizionario non è un'informazione di gioco.
+       */}
 
       {/*
        * Menù delle impostazioni: si apre sopra la home (foglio sovrapposto), così
