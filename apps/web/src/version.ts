@@ -64,6 +64,7 @@ export const RELEASES: ReleaseEntry[] = [
           '**La voce di fine partita parla a tutti.** Prima la sentiva solo chi vinceva: in multiplayer la sentiva una persona sola. Ora chi vince sente la frase col proprio nome, e chi non ha vinto sente chi ha vinto, come uno speaker. Il testo per gli altri è in terza persona: la frase di vittoria dice “hai vinto”, quindi detta a chi ha perso avrebbe detto a tutti di aver vinto.',
           '**Mai più la stessa scheda due volte nella stessa partita.** I gruppi di schede sono piccoli (10-15 per griglia e difficoltà): su tre round capitava di rigiocare la stessa scheda in circa una partita su quattro. Ora il server ricorda quelle già giocate e non le ripropone. Se si fanno più round delle schede disponibili si riparte da capo, invece di fermare il gioco.',
           '**“sin dalla nascita” è una definizione, non un rimando.** Il filtro che scarta i rimandi del dizionario (“vedi …”, “variante di …”) scambiava per abbreviazione “sin.” anche le frasi che iniziano con “sin”: la definizione di *innato* spariva e il pannello diceva “definizione non disponibile”.',
+          '**Il link d’invito creato dall’app non è più `localhost`.** Dentro l’app l’indirizzo è quello interno del telefono, quindi il link condiviso non portava da nessuna parte. Ora l’invito punta all’indirizzo pubblico del gioco, che funziona anche per chi lo apre dal browser.',
         ],
       },
       {
@@ -78,6 +79,7 @@ export const RELEASES: ReleaseEntry[] = [
           'Le tracce della griglia usano `var(--cell)`, la lunghezza calcolata su larghezza **e** altezza, invece di `1fr` (che si allarga per riempire il contenitore e schiaccia le celle quadrate). Il test di regressione verifica che le tracce non contengano mai `1fr`.',
           '`pickVictoryLine` sceglie il testo in base a chi ascolta e `speakVictory` riceve la frase già formata invece del nickname: la decisione non può divergere fra schermate. 6 test coprono vincitore, non vincitore e assenza di vincitore.',
           '`Room.playedSchedaIds` tiene lo storico delle schede giocate e `SchedaCatalog.randomUnplayed` sceglie fra quelle non ancora viste. 7 test fra catalogo e stanza.',
+          '`publicAppHref` sostituisce le origini locali (`localhost`/`127.0.0.1`) con il server configurato quando si costruisce un invito: nell’APK la WebView ha origine `https://localhost` e il link era inutilizzabile. 5 test coprono APK, web, sviluppo e indirizzo non valido.',
           '`scripts/missing-definitions.ts` misura la copertura delle definizioni per variante di scheda: serviva a distinguere un bug da un buco della fonte. Il risultato è che la stragrande maggioranza delle parole senza definizione è assente da Wikizionario (voce con “definizione mancante” o assente), non un problema del gioco. La copertura dichiarata in 0.33.0 (92%) era una misura superata: oggi è ~81% per parola unica, ~85% pesata sulle occorrenze.',
         ],
       },
