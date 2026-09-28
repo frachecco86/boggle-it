@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.37.1';
+export const APP_VERSION = '0.38.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,42 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.38.0',
+    date: '2026-09-28',
+    title: 'Griglia dritta, voce per tutti e mai due volte la stessa scheda',
+    promo: {
+      emoji: '🧱',
+      headline: 'Griglia quadrata, voce per tutti',
+      text: 'Su tablet la griglia si vedeva allungata, con i quadrati stretti: ora sta dritta su ogni schermo. A fine partita la voce annuncia il vincitore a tutti, non solo a lui. E in multiplayer non capita più di rigiocare la stessa scheda due volte.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**La griglia non si allunga più su tablet.** Su schermi larghi e bassi le celle diventavano rettangoli alti e stretti e la griglia sembrava stirata. Ora le colonne seguono il lato calcolato — lo stesso che tiene conto anche dell’altezza — quindi i quadrati restano quadrati in ogni formato.',
+          '**La voce di fine partita parla a tutti.** Prima la sentiva solo chi vinceva: in multiplayer la sentiva una persona sola. Ora chi vince sente la frase col proprio nome, e chi non ha vinto sente chi ha vinto, come uno speaker. Il testo per gli altri è in terza persona: la frase di vittoria dice “hai vinto”, quindi detta a chi ha perso avrebbe detto a tutti di aver vinto.',
+          '**Mai più la stessa scheda due volte nella stessa partita.** I gruppi di schede sono piccoli (10-15 per griglia e difficoltà): su tre round capitava di rigiocare la stessa scheda in circa una partita su quattro. Ora il server ricorda quelle già giocate e non le ripropone. Se si fanno più round delle schede disponibili si riparte da capo, invece di fermare il gioco.',
+          '**“sin dalla nascita” è una definizione, non un rimando.** Il filtro che scarta i rimandi del dizionario (“vedi …”, “variante di …”) scambiava per abbreviazione “sin.” anche le frasi che iniziano con “sin”: la definizione di *innato* spariva e il pannello diceva “definizione non disponibile”.',
+        ],
+      },
+      {
+        kind: 'improvement',
+        items: [
+          '**La musica da YouTube continua a funzionare nel tempo.** Lo scaricatore di audio si aggiorna da solo all’avvio del server: prima aggiornava solo quando si ricostruiva l’immagine, quindi con il passare delle settimane YouTube cambiava e l’importazione smetteva di funzionare. L’aggiornamento non blocca l’avvio e, se fallisce, il server parte comunque.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Le tracce della griglia usano `var(--cell)`, la lunghezza calcolata su larghezza **e** altezza, invece di `1fr` (che si allarga per riempire il contenitore e schiaccia le celle quadrate). Il test di regressione verifica che le tracce non contengano mai `1fr`.',
+          '`pickVictoryLine` sceglie il testo in base a chi ascolta e `speakVictory` riceve la frase già formata invece del nickname: la decisione non può divergere fra schermate. 6 test coprono vincitore, non vincitore e assenza di vincitore.',
+          '`Room.playedSchedaIds` tiene lo storico delle schede giocate e `SchedaCatalog.randomUnplayed` sceglie fra quelle non ancora viste. 7 test fra catalogo e stanza.',
+          '`scripts/missing-definitions.ts` misura la copertura delle definizioni per variante di scheda: serviva a distinguere un bug da un buco della fonte. Il risultato è che la stragrande maggioranza delle parole senza definizione è assente da Wikizionario (voce con “definizione mancante” o assente), non un problema del gioco. La copertura dichiarata in 0.33.0 (92%) era una misura superata: oggi è ~81% per parola unica, ~85% pesata sulle occorrenze.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.37.1',
     date: '2026-09-27',

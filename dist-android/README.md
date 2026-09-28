@@ -8,6 +8,7 @@ chi clona il repo li trova già.
 
 | File | Versione | Note |
 |---|---|---|
+| `sbooble-0.38.0-debug.apk` | 0.38.0 | `versionCode 18` — chat vocale (permesso `MODIFY_AUDIO_SETTINGS`), musica caricata dall'admin, griglia dritta su tablet, voce per tutti |
 | `sbooble-0.37.1-debug.apk` | 0.37.1 | `versionCode 17` — la stanza usa le schede dell'admin |
 | `sbooble-0.37.0-debug.apk` | 0.37.0 | `versionCode 16` — regole e punteggi in una finestra a sé |
 | `sbooble-0.36.2-debug.apk` | 0.36.2 | `versionCode 15` — le schede Ale valgono su tutte le griglie |
@@ -23,6 +24,7 @@ Verifica integrità:
 
 ```bash
 sha256sum dist-android/*.apk
+# 4632b0034d91e77344a7f0d5ddebd2e09473ffcbc630c0434dfde79652a2889a  sbooble-0.38.0-debug.apk
 # b6ac7bb4a2078da9d88f3a431bc6062c6ab2d6f980a8706ef58ad1d8bbe46df9  sbooble-0.37.1-debug.apk
 # 71b477efe939828d779f1421e1d3c468f1428293448f7e88253bb57327ecd595  sbooble-0.37.0-debug.apk
 # edc7435a18793e48a9b828587ae9c6764701d4694f6d5421fcaeba073340a4eb  sbooble-0.36.2-debug.apk
@@ -34,7 +36,7 @@ sha256sum dist-android/*.apk
 Installazione sul telefono:
 
 ```bash
-adb install -r dist-android/sbooble-0.37.1-debug.apk
+adb install -r dist-android/sbooble-0.38.0-debug.apk
 ```
 
 Oppure copia l'APK sul dispositivo e aprilo (richiede "Installa app da fonti

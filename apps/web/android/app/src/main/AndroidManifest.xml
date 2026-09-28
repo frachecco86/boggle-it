@@ -39,19 +39,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!--
-     * Registrazione delle clip audio personali e chat vocale in stanza.
-     *
-     * `MODIFY_AUDIO_SETTINGS` NON è opzionale: `BridgeWebChromeClient` di
-     * Capacitor, su una richiesta `getUserMedia` con AUDIO_CAPTURE, chiede
-     * INSIEME `MODIFY_AUDIO_SETTINGS` e `RECORD_AUDIO`. Android valuta la
-     * richiesta come un blocco: se UNA delle permission non è dichiarata nel
-     * manifest viene negata senza chiedere nulla, e Capacitor risponde `deny()`
-     * al WebView anche se l'utente ha appena accettato il dialogo del microfono.
-     *
-     * Sintomo esatto del bug "la chat vocale non funziona nell'APK": il dialogo
-     * dei permessi compare, si accetta, e l'app risponde comunque che i permessi
-     * vanno dati nel browser — che non esiste, perché è una WebView.
-     */
+         Registrazione delle clip audio personali e chat vocale in stanza.
+
+         `MODIFY_AUDIO_SETTINGS` NON e' opzionale: `BridgeWebChromeClient` di
+         Capacitor, su una richiesta `getUserMedia` con AUDIO_CAPTURE, chiede
+         INSIEME `MODIFY_AUDIO_SETTINGS` e `RECORD_AUDIO`. Android valuta la
+         richiesta come un blocco: se UNA delle permission non e' dichiarata nel
+         manifest viene negata senza chiedere nulla, e Capacitor risponde `deny()`
+         al WebView anche se l'utente ha appena accettato il dialogo del microfono.
+
+         Sintomo esatto del bug "la chat vocale non funziona nell'APK": il dialogo
+         dei permessi compare, si accetta, e l'app risponde comunque che i permessi
+         vanno dati nel browser (che non esiste, perche' e' una WebView).
+
+         NOTA sullo stile: un commento XML si chiude con "-->" e non ammette
+         "--" al suo interno. Questo commento era scritto in stile Java
+         (chiuso con asterisco-slash): il manifest NON compilava affatto e
+         l'APK con questi permessi non e' mai stato prodotto.
+    -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Solo per la selezione della foto profilo: niente accesso alla galleria. -->
