@@ -6,26 +6,27 @@
  *  - le lettere NON sono composte a mano: si CAMPIONANO dalla frequenza dei
  *    token nel dizionario (con reimmissione);
  *  - `qu` è un TOKEN unico: `quando` → [QU, A, N, D, O];
- *  - la difficoltà di una griglia è la **quota di parole trovate che NON stanno
- *    nel vocabolario comune** (`Common` = NVdB ∩ Dict'), non la composizione;
- *  - i limiti (intervallo di parole accettate e le 3 fasce) si derivano da una
- *    CALIBRAZIONE su un campione di griglie (Tukey + clustering a 3 livelli).
+ *  - la difficoltà di una griglia è `0.5·R + 0.5·M`, dove `R` è la **rarità ad
+ *    anelli di frequenza** (vedi `aleRarityRings`: top-5000, 5001–20000, oltre)
+ *    e `M` è la RICCHEZZA della griglia (quanto il punteggio medio per parola
+ *    supera il minimo di 1 punto);
+ *  - i limiti (intervallo di parole accettate, bande per fascia e le 3 fasce) si
+ *    derivano da una CALIBRAZIONE su un campione di griglie (Tukey + clustering a
+ *    3 livelli).
  *
  * Il modulo è puro e deterministico: dato lo stesso seme e la stessa
  * configurazione produce le stesse griglie. La generazione del catalogo avviene
- * offline (`apps/server/scripts/gen-schede.ts --variant ale`).
+ * offline (`apps/server/scripts/gen-schede-ale.ts`, "a tre secchi").
  *
  * Guard rails (ATTIVI): banda vocali 30–60%, al più tre token rari H/Z/QU in
- * totale, nessuna riga o colonna che non sia attraversata da almeno una
- * soluzione. Sono applicati sia in calibrazione sia in produzione con gli stessi
- * valori: cambiarli invalida la calibrazione, come richiede la spec.
- *
- * La difficoltà di una griglia NON è più la sola quota di parole fuori dal
- * comune: è `0.5·R + 0.5·M`, dove `R` è quella quota (rarità) e `M` è la
- * RICCHEZZA della griglia (quanto il punteggio medio per parola supera il
- * minimo di 1 punto). Vedi `compositeDifficulty`.
+ * totale, struttura giocabile (`gridStructureIssues`), nessuna riga o colonna che
+ * non sia attraversata da almeno una soluzione, almeno una parola ancora
+ * (6/7/8+ lettere). Sono applicati sia in calibrazione sia in produzione con gli
+ * stessi valori: cambiarli invalida la calibrazione, come richiede la spec.
  */
 import type { Difficulty } from './difficulty.js';
+import { DIFFICULTY_ORDER } from './difficulty.js';
+import { gridStructureIssues } from './grid.js';
 import { gridToRows, type Scheda } from './scheda.js';
 import { solveGrid, solveGridCoverage, type TrieNode } from './solver.js';
 import type { Grid, GridSize, Tile } from './types.js';
@@ -35,6 +36,16 @@ export const ALE_TOKENS = [
   'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
   'n', 'o', 'p', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'qu',
 ] as const;
+
+/**
+ * Anelli di frequenza sulla lista `frequency-it.txt` (OpenSubtitles 2018).
+ *
+ * `easy` = prime 5000 voci valide dopo la pulizia; `medium` = prime 20000
+ * (include `easy`). Servono a costruire i due `Set` passati come `rings`; gli
+ * ANELLI veri e propri si ricavano per differenza al momento del conteggio
+ * (`aleRingOf`).
+ */
+export const ALE_RARITY_RINGS = { easy: 5000, medium: 20000 } as const;
 
 /** Token che contano come vocale (l'U dentro QU è incluso, come da spec). */
 const ALE_VOWEL_TOKENS = new Set(['a', 'e', 'i', 'o', 'u', 'qu']);
@@ -131,51 +142,46 @@ export function computeAleFrequency(dictPrime: string[]): AleFrequency {
   return { freq, ordered, dictSize };
 }
 
-/** Costruisce `Common` = NVdB ∩ Dict' (§3.2). */
-export function buildAleCommon(nvdbWords: Iterable<string>, dictPrime: Set<string>): Set<string> {
-  const common = new Set<string>();
-  for (const raw of nvdbWords) {
-    const w = cleanAleWord(raw);
-    if (w && dictPrime.has(w)) common.add(w);
-  }
-  return common;
+/* ------------------------------------------------------------------ */
+/* Anelli di frequenza e rarità                                        */
+/* ------------------------------------------------------------------ */
+
+/** Insiemi degli anelli: `easy` = top-5000, `medium` = top-20000 (include `easy`). */
+export interface AleRings {
+  easy: ReadonlySet<string>;
+  medium: ReadonlySet<string>;
 }
 
 /**
- * Mappa forma → lemma (radice), dal file Morph-it (`forma<TAB>lemma<TAB>tag`).
+ * Anello di frequenza di una parola: 0 = top-5000, 1 = 5001–20000, 2 = oltre.
  *
- * PERCHÉ SERVE: NVdB contiene i LEMMI (`amare`), non tutte le forme flesse
- * (`amo`, `amava`, `ameremo`). Senza la radice una forma comunissima come `amo`
- * risulterebbe "rara" solo perché il lemma non compare letteralmente. La
- * difficoltà di una griglia (quota di parole fuori dal comune) era quindi
- * gonfiata dalla morfologia, non dalla rarità reale.
+ * Gli insiemi sono ANNIDATI (`easy ⊆ medium`): una parola nel top-5000 è anello
+ * 0, una nel top-20000 ma non nel top-5000 è anello 1, tutte le altre anello 2.
  */
-export function buildAleLemmas(morphItText: string): Map<string, string> {
-  const lemmas = new Map<string, string>();
-  for (const line of morphItText.split('\n')) {
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-    const form = cleanAleWord(parts[0] ?? '');
-    const lemma = cleanAleWord(parts[1] ?? '');
-    if (!form || !lemma || form === lemma) continue;
-    // Prima analisi vince: è deterministica e sufficiente (una forma ha un lemma).
-    if (!lemmas.has(form)) lemmas.set(form, lemma);
-  }
-  return lemmas;
+export function aleRingOf(word: string, rings: AleRings): 0 | 1 | 2 {
+  if (rings.easy.has(word)) return 0;
+  if (rings.medium.has(word)) return 1;
+  return 2;
 }
 
 /**
- * true se la parola è "comune": lo è lei stessa OPPURE la sua RADICE (lemma).
- * Es. `amo` → lemma `amare` ∈ Common → comune.
+ * Conteggi per anello + rarità pesata `R = (f1 + 2·f2) / 2`.
+ *
+ * `f0/f1/f2` sono le quote di parole nei tre anelli (somma 1). Il peso doppio
+ * dell'anello "raro" rende `R` una misura graduata in `[0, 1]`. Con zero parole
+ * `R = 0` (come prima; il caso è comunque scartato dal range di parole).
  */
-export function isAleCommon(
-  word: string,
-  common: Set<string>,
-  lemmas: Map<string, string> | undefined,
-): boolean {
-  if (common.has(word)) return true;
-  const lemma = lemmas?.get(word);
-  return lemma !== undefined && common.has(lemma);
+export function aleRarityRings(words: readonly string[], rings: AleRings): {
+  ringCounts: [number, number, number];
+  rarity: number;
+} {
+  const ringCounts: [number, number, number] = [0, 0, 0];
+  for (const w of words) ringCounts[aleRingOf(w, rings)]++;
+  const wordCount = words.length;
+  if (wordCount === 0) return { ringCounts, rarity: 0 };
+  const f1 = ringCounts[1] / wordCount;
+  const f2 = ringCounts[2] / wordCount;
+  return { ringCounts, rarity: (f1 + 2 * f2) / 2 };
 }
 
 /* ------------------------------------------------------------------ */
@@ -199,6 +205,17 @@ export interface AleGuardRails {
    * copertura. Vedi `coverageIssues` e `solveGridCoverage`.
    */
   noUncoveredLines: boolean;
+  /**
+   * Struttura giocabile: applica `gridStructureIssues` (consonanti vicine a una
+   * vocale, righe/colonne con vocali, `h` con `c`/`g` accanto). `null`/`false` =
+   * disattivato; `true` = attivo (default).
+   */
+  structure: boolean;
+  /**
+   * Lunghezza minima della parola più lunga per dimensione: garantisce almeno
+   * una parola ANCORA (6 su 4×4, 7 su 5×5, 8 su 6×6). `null` = disattivato.
+   */
+  anchorMinLength: Record<GridSize, number> | null;
 }
 
 /** Guard rails ATTIVI, come concordato per il catalogo. */
@@ -206,6 +223,8 @@ export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   vowels: { min: 0.3, max: 0.6 },
   rareCap: 3,
   noUncoveredLines: true,
+  structure: true,
+  anchorMinLength: { 4: 6, 5: 7, 6: 8 },
 };
 
 /**
@@ -226,13 +245,17 @@ export interface AleGenerationStats {
   noGrid: number;
   /** Candidati scartati perché fuori dall'intervallo di parole calibrato. */
   wordCountOut: number;
-  /** Candidati scartati perché la difficoltà non è quella della fascia. */
-  difficultyOut: number;
+  /** Candidati scartati perché fuori dalla banda della propria fascia. */
+  tierBandOut: number;
+  /** Ripieghi usati per completare un secchio rimasto incompleto. */
+  fallbacks: number;
+  /** Tentativi (candidati) del flusso esterno. */
+  attempts: number;
   /** Numero del tentativo che ha prodotto una scheda valida (`null` = ripiego). */
   acceptedAttempt: number | null;
 }
 
-/** Contatori azzerati, pronti da passare a `generateAleGrid`/`generateAleScheda`. */
+/** Contatori azzerati, pronti da passare a `generateAleGrid`/`nextAleCandidate`. */
 export function newAleGenerationStats(): AleGenerationStats {
   return {
     sampled: 0,
@@ -240,7 +263,9 @@ export function newAleGenerationStats(): AleGenerationStats {
     railRejections: {},
     noGrid: 0,
     wordCountOut: 0,
-    difficultyOut: 0,
+    tierBandOut: 0,
+    fallbacks: 0,
+    attempts: 0,
     acceptedAttempt: null,
   };
 }
@@ -345,15 +370,18 @@ function buildAleGrid(size: GridSize, tokens: string[]): Grid {
 
 /**
  * Genera una griglia "ale" campionando token per frequenza e applicando TUTTI i
- * guard rails (token + copertura delle righe/colonne), con retry limitato.
+ * guard rails, con retry limitato.
  *
- * Il `trie` serve al guard rail di COPERTURA: una riga o colonna è valida solo
- * se è attraversata da almeno una soluzione, e questo dipende dal dizionario.
+ * Ordine dei controlli (dal più economico al più costoso):
+ *  1. token (vocali, tetto rari) — nessuna risoluzione;
+ *  2. struttura (`gridStructureIssues`) — costruisce la griglia ma nessuna
+ *     risoluzione;
+ *  3. copertura ed eventualmente ancora — richiede `solveGridCoverage`, che
+ *     restituisce anche `words`: la stessa solve serve a entrambi i rail, senza
+ *     costo aggiuntivo.
+ *
+ * Il `trie` serve ai guard rail di COPERTURA e ANCORA: dipendono dal dizionario.
  * Ritorna `null` se nessun tentativo li soddisfa.
- *
- * `maxTries` vale per i tentativi che superano i rail sui TOKEN (economici); la
- * copertura richiede una risoluzione, quindi non allunga il ciclo oltre il
- * necessario.
  */
 export function generateAleGrid(
   size: GridSize,
@@ -379,23 +407,46 @@ export function generateAleGrid(
 
     const grid = buildAleGrid(size, tokens);
 
-    /*
-     * Copertura: si risolve la griglia SOLO se i rail sui token sono passati,
-     * così la risoluzione (costosa) avviene sul numero minore di candidati.
-     * Il guard rail è disattivabile: senza copertura richiesta il candidato
-     * viene accettato subito, come prima.
-     */
-    if (rails.noUncoveredLines) {
-      const coverage = coverageIssues(
-        solveGridCoverage(grid, trie, { minLength: 3, limit: 100_000 }).used,
-        size,
-      );
-      if (coverage.length > 0) {
+    // 2. Struttura: proprietà dei token, ma serve la griglia per l'adiacenza.
+    if (rails.structure) {
+      const structure = gridStructureIssues(grid);
+      if (structure.length > 0) {
         if (stats) {
           stats.rejected++;
-          for (const issue of coverage) stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
+          for (const issue of structure) stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
         }
         continue;
+      }
+    }
+
+    /*
+     * 3. Copertura + ancora: si risolve la griglia UNA volta (solo se uno dei due
+     * rail la richiede) e si usano sia `used` sia `words`.
+     */
+    const needSolve = rails.noUncoveredLines || rails.anchorMinLength !== null;
+    if (needSolve) {
+      const solved = solveGridCoverage(grid, trie, { minLength: 3, limit: 100_000 });
+      if (rails.noUncoveredLines) {
+        const coverage = coverageIssues(solved.used, size);
+        if (coverage.length > 0) {
+          if (stats) {
+            stats.rejected++;
+            for (const issue of coverage) stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
+          }
+          continue;
+        }
+      }
+      if (rails.anchorMinLength) {
+        const minLength = rails.anchorMinLength[size];
+        const longest = solved.words.reduce((m, w) => Math.max(m, w.length), 0);
+        if (longest < minLength) {
+          const issue = `nessuna parola ≥ ${minLength} lettere`;
+          if (stats) {
+            stats.rejected++;
+            stats.railRejections[issue] = (stats.railRejections[issue] ?? 0) + 1;
+          }
+          continue;
+        }
       }
     }
 
@@ -411,10 +462,14 @@ export function generateAleGrid(
 export interface AleBoardStats {
   words: string[];
   wordCount: number;
-  commonCount: number;
   /**
-   * Rarità: quota di parole fuori da `Common` (0–1). È la "vecchia" difficoltà,
-   * usata come componente `R` di `compositeDifficulty`.
+   * Quante parole trovate cadono in ciascun anello di frequenza: `[0–5k,
+   * 5k–20k, >20k]`. Vedi `aleRarityRings`.
+   */
+  ringCounts: [number, number, number];
+  /**
+   * Rarità pesata sugli anelli di frequenza (0–1), vedi `aleRarityRings`. È la
+   * componente `R` di `compositeDifficulty`.
    */
   rarity: number;
   score: number;
@@ -453,7 +508,7 @@ export function richnessFor(wordCount: number, score: number): number {
 /**
  * Difficoltà composita: `wR · R + wM · M`.
  *
- * `R` è la rarità (`1 − quota parole comuni`), `M` la ricchezza della griglia
+ * `R` è la rarità ad anelli (`aleRarityRings`), `M` la ricchezza della griglia
  * (`richnessFor`). Vedi `ALE_DIFFICULTY_WEIGHTS`.
  */
 export function compositeDifficulty(
@@ -470,34 +525,29 @@ function pointsFor(word: string): number {
   return Math.max(0, word.length - 2);
 }
 
-/** Risolve la griglia e calcola le metriche della spec (§4.1). */
+/**
+ * Risolve la griglia e calcola le metriche della spec (§4.1).
+ *
+ * La rarità `R` è quella ad anelli di frequenza (`aleRarityRings`): `rings` è
+ * obbligatorio nel terzo argomento.
+ */
 export function scoreAleBoard(
   grid: Grid,
   trie: TrieNode,
-  common: Set<string>,
-  options: { minLength?: number; limit?: number; lemmas?: Map<string, string> } = {},
+  options: { minLength?: number; limit?: number; rings: AleRings },
 ): AleBoardStats {
   const words = solveGrid(grid, trie, {
     minLength: options.minLength ?? 3,
     limit: options.limit ?? 50_000,
   });
-  let commonCount = 0;
+  const { ringCounts, rarity } = aleRarityRings(words, options.rings);
   let score = 0;
   let longest = 0;
   for (const w of words) {
-    // Comune se lo è la parola o la sua RADICE (lemma): `amo` ← `amare`.
-    if (isAleCommon(w, common, options.lemmas)) commonCount++;
     score += pointsFor(w);
     if (w.length > longest) longest = w.length;
   }
-  return {
-    words,
-    wordCount: words.length,
-    commonCount,
-    rarity: words.length > 0 ? 1 - commonCount / words.length : 0,
-    score,
-    longest,
-  };
+  return { words, wordCount: words.length, ringCounts, rarity, score, longest };
 }
 
 /* ------------------------------------------------------------------ */
@@ -533,25 +583,32 @@ export function percentile(sorted: number[], p: number): number {
 export interface AleCalibration {
   /** Intervallo di parole accettate `[lo, hi]` (Tukey + rho). */
   wordRange: { lo: number; hi: number };
-  /** Le tre fasce, con il centro di difficoltà e i confini di ciascuna. */
+  /** Le tre fasce, con il centro di difficoltà, i confini e la banda di parole. */
   tiers: {
     difficulty: Difficulty;
     /** Centro del cluster (difficoltà COMPOSITA, vedi `compositeDifficulty`). */
     targetDifficulty: number;
     range: { min: number; max: number };
+    /** Banda di parole della fascia (Tukey+rho sui soli membri, tagliata al range globale). */
+    wordRange: { lo: number; hi: number };
   }[];
   /** Metadati della calibrazione (provenienza). */
   provenance: {
     samples: number;
     guardRails: AleGuardRails;
     dictSize: number;
-    commonSize: number;
+    /** Anelli di frequenza usati (top-5000 / top-20000). */
+    rings: { easy: number; medium: number };
+    /** Identifica la definizione di rarità: anelli pesati, versione 1. */
+    metric: 'rings-v1';
     wordCount: { min: number; q1: number; median: number; q3: number; max: number };
     rho: number;
     /** Pesi della difficoltà composita usati per la calibrazione. */
     weights: { rarity: number; richness: number };
     /** true se i cluster k-means sono stati usati; false = fallback ai tertili. */
     usedKmeans: boolean;
+    /** true se una fascia ha usato il range globale (meno di 30 membri). */
+    perTierFallback: boolean;
   };
 }
 
@@ -612,7 +669,7 @@ export function calibrateAle(
   provenance: {
     guardRails: AleGuardRails;
     dictSize: number;
-    commonSize: number;
+    rings: { easy: number; medium: number };
     rho?: number;
     weights?: { rarity: number; richness: number };
   },
@@ -664,14 +721,46 @@ export function calibrateAle(
     return { difficulty: labels[i]!, targetDifficulty: c, range: { min, max } };
   });
 
+  /*
+   * Bande di parole per fascia (§1.5): stessa procedura Tukey+rho applicata ai
+   * soli membri della fascia, poi tagliata al range globale. Se una fascia ha
+   * meno di 30 membri si usa il range globale e si marca `perTierFallback`.
+   */
+  let perTierFallback = false;
+  const tiersWithBands = tiers.map((tier) => {
+    const members = survivors.filter(
+      (s) =>
+        tierForDifficulty(compositeDifficulty(s.rarity, s.wordCount, s.score, weights), { tiers }) ===
+        tier.difficulty,
+    );
+    if (members.length < 30) {
+      perTierFallback = true;
+      return { ...tier, wordRange: { lo: wordRange.lo, hi: wordRange.hi } };
+    }
+    const memberCounts = members.map((s) => s.wordCount).sort((a, b) => a - b);
+    const mq1 = percentile(memberCounts, 25);
+    const mmed = percentile(memberCounts, 50);
+    const mq3 = percentile(memberCounts, 75);
+    const miqr = mq3 - mq1;
+    const mtukeyLo = mq1 - 1.5 * miqr;
+    const mtukeyHi = mq3 + 1.5 * miqr;
+    const tierLo = Math.max(1, Math.round(mmed - (mmed - mtukeyLo) * rho));
+    const tierHi = Math.round(mmed + (mtukeyHi - mmed) * rho);
+    return {
+      ...tier,
+      wordRange: { lo: Math.max(tierLo, wordRange.lo), hi: Math.min(tierHi, wordRange.hi) },
+    };
+  });
+
   return {
     wordRange,
-    tiers,
+    tiers: tiersWithBands,
     provenance: {
       samples: samples.length,
       guardRails: provenance.guardRails,
       dictSize: provenance.dictSize,
-      commonSize: provenance.commonSize,
+      rings: provenance.rings,
+      metric: 'rings-v1',
       wordCount: {
         min: counts[0] ?? 0,
         q1,
@@ -682,12 +771,22 @@ export function calibrateAle(
       rho,
       weights,
       usedKmeans,
+      perTierFallback,
     },
   };
 }
 
 /** Fascia di una griglia in base alla sua difficoltà e ai confini calibrati. */
-export function tierForDifficulty(difficulty: number, calibration: AleCalibration): Difficulty {
+export function tierForDifficulty(
+  difficulty: number,
+  calibration: {
+    tiers: readonly {
+      difficulty: Difficulty;
+      targetDifficulty: number;
+      range: { min: number; max: number };
+    }[];
+  },
+): Difficulty {
   for (const tier of calibration.tiers) {
     if (difficulty >= tier.range.min && difficulty <= tier.range.max) return tier.difficulty;
   }
@@ -707,141 +806,189 @@ export function tierForDifficulty(difficulty: number, calibration: AleCalibratio
 /* Produzione                                                          */
 /* ------------------------------------------------------------------ */
 
-export interface GenerateAleOptions {
-  size: GridSize;
-  /** Fascia da produrre (targeting). */
+/**
+ * Un candidato classificato: griglia valida + stats + fascia naturale.
+ *
+ * `difficulty` è la fascia assegnata da `tierForDifficulty`; `distance` è la
+ * distanza dal centro della fascia (serve ai ripieghi di `generateAleBuckets`).
+ */
+export interface AleCandidate {
+  grid: Grid;
+  stats: AleBoardStats;
   difficulty: Difficulty;
-  freq: AleFrequency;
-  trie: TrieNode;
-  common: Set<string>;
-  /** Forma → lemma: una parola è comune se lo è la sua radice (vedi `isAleCommon`). */
-  lemmas?: Map<string, string>;
-  calibration: AleCalibration;
-  /** Seme della prima griglia; i tentativi usano `seed + attempt`. */
-  seed: number;
-  /** Prefisso dell'id (es. `5-facile`). */
-  idPrefix: string;
-  /** Numero del primo id (default 1). Le schede "ale" usano un offset per non collidere. */
-  idStart?: number;
-  /**
-   * Indice della scheda nella serie (0-based): determina l'id. Distinto dai
-   * tentativi di reiezione: se si usasse il numero del tentativo, due schede
-   * diverse potrebbero nascere con lo stesso id.
-   */
-  idIndex?: number;
-  maxAttempts?: number;
-  rails?: AleGuardRails;
-  /** Contatori della generazione (per il report): vedi `AleGenerationStats`. */
-  stats?: AleGenerationStats;
+  distance: number;
 }
 
 /**
- * Produce una scheda "ale" per la fascia richiesta.
+ * Il PROSSIMO candidato del flusso deterministico.
  *
- * Ciclo di reiezione della spec (§7): si parte dal seme `seed` e si prova
- * `seed + attempt`; si accetta la prima griglia che soddisfa guard rails,
- * intervallo di parole calibrato e fascia di difficoltà. Se `maxAttempts` si
- * esaurisce si restituisce il candidato più vicino (mai `null` silenzioso).
- *
- * Le parole ATTESE (`words`) coincidono con le ACCETTATE (`allWords`) e con
- * tutte le soluzioni del dizionario: qui non esiste una fascia di frequenza.
+ * `attempt` è il contatore globale del flusso: il seme della griglia è
+ * `seed + attempt`. Ritorna `null` se il candidato non è accettabile (guard
+ * rails, range globale o banda della sua fascia). Il chiamante incrementa
+ * `attempt` e riprova.
  */
-export function generateAleScheda(options: GenerateAleOptions): Scheda {
+export function nextAleCandidate(options: {
+  size: GridSize;
+  freq: AleFrequency;
+  trie: TrieNode;
+  rings: AleRings;
+  calibration: AleCalibration;
+  seed: number;
+  attempt: number;
+  rails?: AleGuardRails;
+  stats?: AleGenerationStats;
+}): AleCandidate | null {
   const {
     size,
-    difficulty,
     freq,
     trie,
-    common,
-    lemmas,
+    rings,
     calibration,
     seed,
-    idPrefix,
-    idStart = 1,
-    idIndex = 0,
-    maxAttempts = 500,
+    attempt,
     rails = DEFAULT_ALE_GUARD_RAILS,
     stats,
   } = options;
 
-  const tier = calibration.tiers.find((t) => t.difficulty === difficulty) ?? calibration.tiers[1]!;
-  let best: { stats: AleBoardStats; grid: Grid; distance: number } | null = null;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const rng = mulberry32((seed + attempt) >>> 0);
-    const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats);
-    if (!grid) {
-      if (stats) stats.noGrid++;
-      continue;
-    }
-    const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
-
-    const inRange = stats_.wordCount >= calibration.wordRange.lo && stats_.wordCount <= calibration.wordRange.hi;
-    // Difficoltà COMPOSITA: rarità + ricchezza (vedi `compositeDifficulty`).
-    const boardDifficulty = compositeDifficulty(stats_.rarity, stats_.wordCount, stats_.score);
-    const distance =
-      Math.abs(stats_.wordCount - (calibration.wordRange.lo + calibration.wordRange.hi) / 2) /
-        Math.max(1, calibration.wordRange.hi) +
-      Math.abs(boardDifficulty - tier.targetDifficulty);
-
-    if (!best || distance < best.distance) best = { stats: stats_, grid, distance };
-
-    if (!inRange) {
-      if (stats) stats.wordCountOut++;
-      continue;
-    }
-    const tierLabel = tierForDifficulty(boardDifficulty, calibration);
-    if (tierLabel !== difficulty) {
-      if (stats) stats.difficultyOut++;
-      continue;
-    }
-
-    if (stats) stats.acceptedAttempt = attempt;
-    return toAleScheda(size, difficulty, idPrefix, idStart, idIndex, grid, stats_);
+  const rng = mulberry32((seed + attempt) >>> 0);
+  if (stats) stats.attempts++;
+  const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats);
+  if (!grid) {
+    if (stats) stats.noGrid++;
+    return null;
   }
 
-  // Ripiego: il candidato più vicino (loggato dallo script di generazione).
-  const fallback = best ?? (() => {
-    // Nessun candidato utile: genera comunque una griglia valida al primo colpo.
-    const rng = mulberry32(seed >>> 0);
-    const grid = generateAleGrid(size, freq, rng, trie, rails, 200, stats) ?? buildAleGridFallback(size, freq, rng);
-    const stats_ = scoreAleBoard(grid, trie, common, { minLength: 3, lemmas });
-    return { stats: stats_, grid, distance: Infinity };
-  })();
-  return toAleScheda(size, difficulty, idPrefix, idStart, idIndex, fallback.grid, fallback.stats);
+  const board = scoreAleBoard(grid, trie, { minLength: 3, limit: 50_000, rings });
+  const { lo, hi } = calibration.wordRange;
+  if (board.wordCount < lo || board.wordCount > hi) {
+    if (stats) stats.wordCountOut++;
+    return null;
+  }
+
+  const difficulty = tierForDifficulty(
+    compositeDifficulty(board.rarity, board.wordCount, board.score),
+    calibration,
+  );
+  const tier = calibration.tiers.find((t) => t.difficulty === difficulty)!;
+  if (board.wordCount < tier.wordRange.lo || board.wordCount > tier.wordRange.hi) {
+    if (stats) stats.tierBandOut++;
+    return null;
+  }
+
+  const distance = Math.abs(
+    compositeDifficulty(board.rarity, board.wordCount, board.score) - tier.targetDifficulty,
+  );
+  return { grid, stats: board, difficulty, distance };
 }
 
-/** Ultima spiaggia: griglia campionata senza guard rails (non dovrebbe servire). */
-function buildAleGridFallback(size: GridSize, freq: AleFrequency, rng: () => number): Grid {
-  const total = size * size;
-  const tokens = sampleTokens(freq, total, rng);
-  return {
+/**
+ * Riempie i tre secchi (facile/normale/difficile) con `perTier` schede ciascuno,
+ * pescando dal flusso. Deterministica: stesso `(seed, perTier, size)` → stesse
+ * schede con gli stessi id (contigui per fascia).
+ *
+ * I candidati accettati entrano nel secchio della loro fascia solo se non è
+ * pieno; i candidati in banda di una fascia già piena sono tenuti come ripiego.
+ * Se un secchio resta incompleto, lo si completa prima con quei candidati e poi
+ * rilanciando il flusso con i soli rails + range globale.
+ */
+export function generateAleBuckets(options: {
+  size: GridSize;
+  perTier: number;
+  freq: AleFrequency;
+  trie: TrieNode;
+  rings: AleRings;
+  calibration: AleCalibration;
+  seed: number;
+  idStart: number;
+  maxAttempts?: number;
+  rails?: AleGuardRails;
+  stats?: AleGenerationStats;
+}): Record<Difficulty, Scheda[]> {
+  const {
     size,
-    tiles: tokens.map((token, index) => {
-      const letter = token === 'qu' ? 'q' : token;
-      return {
-        index,
-        row: Math.floor(index / size),
-        col: index % size,
-        letter,
-        display: letter === 'q' ? 'Qu' : letter.toUpperCase(),
-      };
-    }),
-  };
+    perTier,
+    freq,
+    trie,
+    rings,
+    calibration,
+    seed,
+    idStart,
+    maxAttempts = 500 * perTier,
+    rails = DEFAULT_ALE_GUARD_RAILS,
+    stats,
+  } = options;
+
+  const buckets: Record<Difficulty, Scheda[]> = { facile: [], normale: [], difficile: [] };
+  const overflow: Record<Difficulty, AleCandidate[]> = { facile: [], normale: [], difficile: [] };
+  const isFull = () => DIFFICULTY_ORDER.every((d) => buckets[d].length >= perTier);
+
+  let attempt = 0;
+  while (attempt < maxAttempts && !isFull()) {
+    const candidate = nextAleCandidate({ size, freq, trie, rings, calibration, seed, attempt, rails, stats });
+    attempt++;
+    if (!candidate) continue;
+    const bucket = buckets[candidate.difficulty];
+    if (bucket.length < perTier) {
+      bucket.push(toAleScheda(size, candidate.difficulty, idStart, bucket.length, candidate.grid, candidate.stats));
+      if (stats) stats.acceptedAttempt = attempt;
+    } else {
+      overflow[candidate.difficulty].push(candidate);
+    }
+  }
+
+  // Ripiego: completa i secchi rimasti incompleti.
+  for (const difficulty of DIFFICULTY_ORDER) {
+    if (buckets[difficulty].length >= perTier) continue;
+    if (stats) stats.fallbacks++;
+    // 1) candidati validi (in banda) visti ma non collocati perché il secchio era pieno.
+    for (const candidate of [...overflow[difficulty]].sort((a, b) => a.distance - b.distance)) {
+      if (buckets[difficulty].length >= perTier) break;
+      buckets[difficulty].push(
+        toAleScheda(size, difficulty, idStart, buckets[difficulty].length, candidate.grid, candidate.stats),
+      );
+    }
+    // 2) rilancio del flusso con i soli rails + range globale (banda di fascia ignorata).
+    const relaxed: AleCalibration = {
+      ...calibration,
+      tiers: calibration.tiers.map((t) => ({ ...t, wordRange: { ...calibration.wordRange } })),
+    };
+    let extra = 0;
+    while (buckets[difficulty].length < perTier && extra < maxAttempts) {
+      const candidate = nextAleCandidate({
+        size,
+        freq,
+        trie,
+        rings,
+        calibration: relaxed,
+        seed,
+        attempt: attempt + extra,
+        rails,
+        stats,
+      });
+      extra++;
+      if (candidate && candidate.difficulty === difficulty) {
+        buckets[difficulty].push(
+          toAleScheda(size, difficulty, idStart, buckets[difficulty].length, candidate.grid, candidate.stats),
+        );
+      }
+    }
+  }
+
+  return buckets;
 }
 
-function toAleScheda(
+/** Costruisce la `Scheda` finale. `position` è la posizione di riempimento del secchio (0-based). */
+export function toAleScheda(
   size: GridSize,
   difficulty: Difficulty,
-  idPrefix: string,
   idStart: number,
-  idIndex: number,
+  position: number,
   grid: Grid,
   stats: AleBoardStats,
 ): Scheda {
   const words = [...stats.words].sort((a, b) => b.length - a.length || a.localeCompare(b, 'it'));
   return {
-    id: `${idPrefix}-${String(idStart + idIndex).padStart(3, '0')}`,
+    id: `${size}-${difficulty}-${String(idStart + position).padStart(3, '0')}`,
     size,
     difficulty,
     variant: 'ale',
@@ -852,16 +999,20 @@ function toAleScheda(
   };
 }
 
-/** Utilità per lo script di generazione: campione di statistiche su `n` griglie. */
+/**
+ * Utilità per gli script: campione di statistiche su `n` griglie.
+ *
+ * Firma aggiornata (niente `common`/`lemmas`, dentro `rings`):
+ * `sampleAleBoards(size, freq, trie, rings, n, masterSeed, rails, stats)`.
+ */
 export function sampleAleBoards(
   size: GridSize,
   freq: AleFrequency,
   trie: TrieNode,
-  common: Set<string>,
+  rings: AleRings,
   n: number,
   masterSeed = 0,
   rails: AleGuardRails = DEFAULT_ALE_GUARD_RAILS,
-  lemmas?: Map<string, string>,
   stats?: AleGenerationStats,
 ): AleBoardStats[] {
   const out: AleBoardStats[] = [];
@@ -872,7 +1023,7 @@ export function sampleAleBoards(
       if (stats) stats.noGrid++;
       continue;
     }
-    out.push(scoreAleBoard(grid, trie, common, { minLength: 3, lemmas }));
+    out.push(scoreAleBoard(grid, trie, { minLength: 3, limit: 50_000, rings }));
   }
   return out;
 }

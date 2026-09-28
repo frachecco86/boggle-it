@@ -270,6 +270,11 @@ Pipeline di build (`packages/dictionary/scripts/`):
 3. `build-frequency.mjs` ritaglia dalla lista di frequenza le prime 60.000 parole **giocabili**
    e scrive `frequency-it.txt` (versionato): sono le fasce usate dal generatore delle schede.
 
+**Nota (branch `ale-full`):** NVdB/Morph-it restano fonti del **dizionario principale**
+(forme flesse), ma non entrano più nella pipeline delle schede **ale**, che misura la rarità
+con le fasce di frequenza d'uso di `frequency-it.txt` (top-5000 / top-20000 / oltre).
+La vecchia pipeline a lemmi (`lemmas.br`, `nvdb.words.txt`) è conservata solo come storico.
+
 Risultato tipico: **386.946 parole**, 4,3 MB raw → **616 KB Brotli** (14%).
 
 ---
@@ -290,7 +295,7 @@ Guida completa in [`docs/DEPLOY.md`](docs/DEPLOY.md). Due opzioni:
 |---|---|
 | Avvio (dizionario + catalogo schede in memoria) | ~230 MB |
 | Generazione schede standard/full dall'admin (trie completo) | picco ~350 MB |
-| Generazione schede **ale** dall'admin (trie 16 lettere + radici) | picco ~450 MB, rilasciato subito dopo |
+| Generazione schede **ale** dall'admin (trie 16 lettere + anelli di frequenza) | picco ~450 MB, rilasciato subito dopo |
 
 Il trie del **solver non esiste più a runtime**: le parole valide arrivano dalle schede,
 quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione delle schede

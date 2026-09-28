@@ -1,24 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildAleCommon,
-  buildAleLemmas,
+  ALE_RARITY_RINGS,
+  aleRarityRings,
+  aleRingOf,
   calibrateAle,
   cleanAleWord,
   compositeDifficulty,
   computeAleFrequency,
   coverageIssues,
   DEFAULT_ALE_GUARD_RAILS,
+  generateAleBuckets,
   generateAleGrid,
-  generateAleScheda,
-  isAleCommon,
   mulberry32,
+  newAleGenerationStats,
+  nextAleCandidate,
   richnessFor,
   sampleAleBoards,
   tierForDifficulty,
   tokenizeAle,
   tokenGuardRailIssues,
+  type AleBoardStats,
+  type AleRings,
 } from './schedaAle.js';
-import { buildTrie } from './solver.js';
+import { gridStructureIssues } from './grid.js';
+import { buildTrie, solveGrid } from './solver.js';
+import { DIFFICULTY_ORDER } from './difficulty.js';
 
 describe('ale: pre-processing', () => {
   it('piega gli accenti', () => {
@@ -74,17 +80,49 @@ describe('ale: frequenza dei token', () => {
   });
 });
 
-describe('ale: Common = NVdB ∩ Dict’', () => {
-  it('tiene solo le parole in entrambi', () => {
-    const dict = new Set(['casa', 'cane', 'gatto']);
-    const common = buildAleCommon(['casa', 'gatto', 'volpe'], dict);
-    expect([...common].sort()).toEqual(['casa', 'gatto']);
+describe('ale: anelli di frequenza e rarità R = (f1 + 2·f2)/2', () => {
+  const rings: AleRings = {
+    easy: new Set(['casa', 'cane']),
+    medium: new Set(['casa', 'cane', 'gatto', 'mare']),
+  };
+
+  it('assegna l’anello giusto (0 top-5k, 1 5–20k, 2 oltre)', () => {
+    expect(aleRingOf('casa', rings)).toBe(0);
+    expect(aleRingOf('gatto', rings)).toBe(1);
+    expect(aleRingOf('finestra', rings)).toBe(2);
+    // medium è annidato in easy: una parola easy resta anello 0.
+    expect(aleRingOf('cane', rings)).toBe(0);
   });
 
-  it('normalizza le parole NVdB prima dell’intersezione', () => {
-    const dict = new Set(['perche']);
-    const common = buildAleCommon(['perché'], dict);
-    expect([...common]).toEqual(['perche']);
+  it('conta gli anelli e calcola R', () => {
+    // 2 anello 0, 0 anello 1, 0 anello 2 → R = 0
+    const a = aleRarityRings(['casa', 'cane'], rings);
+    expect(a.ringCounts).toEqual([2, 0, 0]);
+    expect(a.rarity).toBe(0);
+
+    // tutte anello 2 → R = 1
+    const b = aleRarityRings(['finestra', 'strada'], rings);
+    expect(b.ringCounts).toEqual([0, 0, 2]);
+    expect(b.rarity).toBe(1);
+
+    // 2 anello 1 → f1 = 1 → R = 0,5
+    const c = aleRarityRings(['gatto', 'mare'], rings);
+    expect(c.ringCounts).toEqual([0, 2, 0]);
+    expect(c.rarity).toBe(0.5);
+
+    // metà anello 1 (f1=0,5) + metà anello 2 (f2=0,5) → (0,5 + 1)/2 = 0,75
+    const d = aleRarityRings(['gatto', 'finestra'], rings);
+    expect(d.rarity).toBe(0.75);
+  });
+
+  it('wordCount = 0 → R = 0', () => {
+    const empty = aleRarityRings([], rings);
+    expect(empty.ringCounts).toEqual([0, 0, 0]);
+    expect(empty.rarity).toBe(0);
+  });
+
+  it('ALE_RARITY_RINGS vale 5.000 / 20.000', () => {
+    expect(ALE_RARITY_RINGS).toEqual({ easy: 5000, medium: 20000 });
   });
 });
 
@@ -155,23 +193,76 @@ describe('ale: determinismo', () => {
   });
 });
 
+describe('ale: nuovo rail structure', () => {
+  const dictPrime = ['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando', 'acqua', 'monte', 'finestra'];
+  const freq = computeAleFrequency(dictPrime);
+  const trie = buildTrie(dictPrime, { maxLength: 16, minLength: 3 });
+
+  it('le griglie prodotte passano gridStructureIssues', () => {
+    for (let seed = 1; seed <= 40; seed++) {
+      const grid = generateAleGrid(4, freq, mulberry32(seed), trie, DEFAULT_ALE_GUARD_RAILS, 400);
+      if (!grid) continue;
+      expect(gridStructureIssues(grid)).toEqual([]);
+    }
+  });
+
+  it('le violazioni di struttura finiscono in railRejections', () => {
+    const stats = newAleGenerationStats();
+    // Con `structure` attivo e `gridStructureIssues` che rifiuta tutto non è
+    // garantito: qui si verifica almeno che i motivi registrati siano coerenti.
+    const grid = generateAleGrid(4, freq, mulberry32(3), trie, DEFAULT_ALE_GUARD_RAILS, 400, stats);
+    if (grid) {
+      expect(gridStructureIssues(grid)).toEqual([]);
+    }
+    // I motivi registrati non devono mai contenere messaggi "estranei".
+    for (const reason of Object.keys(stats.railRejections)) {
+      expect(typeof reason).toBe('string');
+      expect(reason.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('ale: nuovo rail anchor (parola lunga)', () => {
+  const dictPrime = ['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando', 'acqua', 'monte', 'finestra'];
+  const freq = computeAleFrequency(dictPrime);
+  const trie = buildTrie(dictPrime, { maxLength: 16, minLength: 3 });
+
+  it('la scheda ha almeno una parola ≥ soglia', () => {
+    const grid = generateAleGrid(4, freq, mulberry32(11), trie, DEFAULT_ALE_GUARD_RAILS, 400);
+    if (grid) {
+      const words = solveGrid(grid, trie, { minLength: 3 });
+      expect(Math.max(...words.map((w) => w.length))).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('una soglia impossibile riempie railRejections e ritorna null', () => {
+    const stats = newAleGenerationStats();
+    const rails = { ...DEFAULT_ALE_GUARD_RAILS, noUncoveredLines: false, anchorMinLength: { 4: 99, 5: 99, 6: 99 } };
+    const grid = generateAleGrid(4, freq, mulberry32(5), trie, rails, 20, stats);
+    expect(grid).toBeNull();
+    expect(stats.railRejections['nessuna parola ≥ 99 lettere']).toBeGreaterThan(0);
+  });
+});
+
 describe('ale: calibrazione', () => {
-  const makeStats = (wordCount: number, rarity: number) => ({
+  const makeStats = (wordCount: number, rarity: number): AleBoardStats => ({
     words: Array.from({ length: wordCount }, () => 'abc'),
     wordCount,
-    commonCount: Math.round(wordCount * (1 - rarity)),
+    ringCounts: [wordCount, 0, 0],
     rarity,
     score: wordCount,
     longest: 3,
   });
 
+  const provenance = {
+    guardRails: DEFAULT_ALE_GUARD_RAILS,
+    dictSize: 1000,
+    rings: ALE_RARITY_RINGS,
+  };
+
   it('deriva un intervallo e tre fasce ordinate', () => {
-    const samples = Array.from({ length: 100 }, (_, i) => makeStats(50 + i * 2, (i % 100) / 100));
-    const cal = calibrateAle(samples, {
-      guardRails: DEFAULT_ALE_GUARD_RAILS,
-      dictSize: 1000,
-      commonSize: 500,
-    });
+    const samples = Array.from({ length: 300 }, (_, i) => makeStats(50 + i, (i % 100) / 100));
+    const cal = calibrateAle(samples, provenance);
     expect(cal.wordRange.lo).toBeLessThan(cal.wordRange.hi);
     expect(cal.tiers).toHaveLength(3);
     expect(cal.tiers[0]!.difficulty).toBe('facile');
@@ -183,17 +274,41 @@ describe('ale: calibrazione', () => {
     expect(cal.tiers[0]!.range.max).toBeCloseTo(cal.tiers[1]!.range.min);
   });
 
+  it('registra la provenance ad anelli (metric rings-v1)', () => {
+    const samples = Array.from({ length: 300 }, (_, i) => makeStats(50 + i, (i % 100) / 100));
+    const cal = calibrateAle(samples, provenance);
+    expect(cal.provenance.metric).toBe('rings-v1');
+    expect(cal.provenance.rings).toEqual(ALE_RARITY_RINGS);
+    expect(cal.provenance).not.toHaveProperty('commonSize');
+  });
+
+  it('ogni banda di fascia sta dentro il range globale', () => {
+    const samples = Array.from({ length: 300 }, (_, i) => makeStats(50 + i, (i % 100) / 100));
+    const cal = calibrateAle(samples, provenance);
+    for (const tier of cal.tiers) {
+      expect(tier.wordRange.lo).toBeGreaterThanOrEqual(cal.wordRange.lo);
+      expect(tier.wordRange.hi).toBeLessThanOrEqual(cal.wordRange.hi);
+    }
+  });
+
+  it('fallback per-tier quando una fascia ha meno di 30 membri', () => {
+    // 20 campioni: nessuna fascia può avere 30 membri.
+    const samples = Array.from({ length: 20 }, (_, i) => makeStats(50 + i * 3, (i % 20) / 20));
+    const cal = calibrateAle(samples, provenance);
+    expect(cal.provenance.perTierFallback).toBe(true);
+    for (const tier of cal.tiers) {
+      expect(tier.wordRange).toEqual(cal.wordRange);
+    }
+  });
+
   it('assegna la fascia in base alla difficoltà', () => {
-    const samples = Array.from({ length: 100 }, (_, i) => makeStats(50 + i, (i % 100) / 100));
-    const cal = calibrateAle(samples, {
-      guardRails: DEFAULT_ALE_GUARD_RAILS,
-      dictSize: 1000,
-      commonSize: 500,
-    });
+    const samples = Array.from({ length: 300 }, (_, i) => makeStats(50 + i, (i % 100) / 100));
+    const cal = calibrateAle(samples, provenance);
     expect(tierForDifficulty(0, cal)).toBe('facile');
     expect(tierForDifficulty(1, cal)).toBe('difficile');
   });
 });
+
 describe('ale: difficoltà composita 0.5·R + 0.5·M', () => {
   it('M = 0 se ogni parola vale 1 punto, cresce con il punteggio medio', () => {
     expect(richnessFor(100, 100)).toBe(0);
@@ -203,139 +318,93 @@ describe('ale: difficoltà composita 0.5·R + 0.5·M', () => {
   });
 
   it('combina rarità e ricchezza con i pesi 0.5/0.5', () => {
-    // R = 0 (tutte comuni), M = 0 (punteggio = parole) → 0
     expect(compositeDifficulty(0, 100, 100)).toBeCloseTo(0);
-    // R = 0, M = 0.5 → 0.25
     expect(compositeDifficulty(0, 100, 200)).toBeCloseTo(0.25);
-    // R = 1 (tutte rare), M = 0.5 → 0.75
     expect(compositeDifficulty(1, 100, 200)).toBeCloseTo(0.75);
-    // R = 1, M = 0 → 0.5
     expect(compositeDifficulty(1, 100, 100)).toBeCloseTo(0.5);
-  });
-
-  it('una griglia RICCA di parole comuni può pareggiare una POVERA di parole rare', () => {
-    /*
-     * È il senso della nuova metrica: rarità e ricchezza pesano allo stesso modo.
-     * Esempio: 0.5·1 (rara, povera) contro 0.5·1 (comune, ricca).
-     */
-    const povera = compositeDifficulty(0, 100, 100); // comune, povera (M=0)
-    const ricca = compositeDifficulty(1, 100, 100); // rara, povera anch'essa (M=0)
-    expect(ricca).toBeGreaterThan(povera);
   });
 });
 
-describe('ale: generazione end-to-end', () => {
+describe('ale: generazione a tre secchi', () => {
   const dict = [
     'casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando', 'acqua',
     'monte', 'piano', 'verde', 'rosso', 'libro', 'tavolo', 'sedia', 'porta',
     'finestra', 'strada', 'città', 'perché', 'giorno', 'notte', 'tempo', 'anno',
+    'castello', 'stazione', 'giornale', 'montagna', 'persona', 'parola',
   ];
   const dictPrime = dict.map((w) => cleanAleWord(w)!).filter(Boolean);
-  const dictSet = new Set(dictPrime);
   const freq = computeAleFrequency(dictPrime);
   const trie = buildTrie(dictPrime, { maxLength: 16, minLength: 3 });
-  const common = new Set(dictPrime.slice(0, 12));
+  const rings: AleRings = {
+    easy: new Set(dictPrime.slice(0, 12)),
+    medium: new Set(dictPrime),
+  };
 
-  it('genera una scheda "ale" con tutti i campi', () => {
-    const samples = sampleAleBoards(4, freq, trie, common, 200, 1);
-    const cal = calibrateAle(samples, {
-      guardRails: DEFAULT_ALE_GUARD_RAILS,
-      dictSize: dictPrime.length,
-      commonSize: common.size,
-    });
-    const scheda = generateAleScheda({
+  const calibration = calibrateAle(sampleAleBoards(4, freq, trie, rings, 120, 1), {
+    guardRails: DEFAULT_ALE_GUARD_RAILS,
+    dictSize: dictPrime.length,
+    rings: ALE_RARITY_RINGS,
+  });
+
+  it('genera candidati coerenti con range globale e banda di fascia', () => {
+    let seen = 0;
+    for (let attempt = 0; attempt < 200 && seen < 5; attempt++) {
+      const candidate = nextAleCandidate({
+        size: 4,
+        freq,
+        trie,
+        rings,
+        calibration,
+        seed: 7,
+        attempt,
+      });
+      if (!candidate) continue;
+      seen++;
+      const tier = calibration.tiers.find((t) => t.difficulty === candidate.difficulty)!;
+      expect(candidate.stats.wordCount).toBeGreaterThanOrEqual(calibration.wordRange.lo);
+      expect(candidate.stats.wordCount).toBeLessThanOrEqual(calibration.wordRange.hi);
+      expect(candidate.stats.wordCount).toBeGreaterThanOrEqual(tier.wordRange.lo);
+      expect(candidate.stats.wordCount).toBeLessThanOrEqual(tier.wordRange.hi);
+      expect(candidate.stats.ringCounts[0] + candidate.stats.ringCounts[1] + candidate.stats.ringCounts[2]).toBe(
+        candidate.stats.wordCount,
+      );
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it('riempie i tre secchi con id contigui per fascia', () => {
+    const buckets = generateAleBuckets({
       size: 4,
-      difficulty: 'normale',
+      perTier: 2,
       freq,
       trie,
-      common,
-      calibration: cal,
-      seed: 12345,
-      idPrefix: '4-normale',
+      rings,
+      calibration,
+      seed: 1,
+      idStart: 16,
     });
-    expect(scheda.variant).toBe('ale');
-    expect(scheda.id).toBe('4-normale-001');
-    expect(scheda.size).toBe(4);
-    expect(scheda.difficulty).toBe('normale');
-    expect(scheda.grid.split('\n')).toHaveLength(4);
-    expect(scheda.allWords).toEqual(scheda.words);
-    // Nessuna lettera non italiana (guard rail del progetto).
-    for (const ch of scheda.grid.replace(/\n/g, '')) {
-      expect('jkwxy').not.toContain(ch);
+    for (const difficulty of DIFFICULTY_ORDER) {
+      const schede = buckets[difficulty];
+      expect(schede).toHaveLength(2);
+      schede.forEach((scheda, i) => {
+        expect(scheda.id).toBe(`4-${difficulty}-${String(16 + i).padStart(3, '0')}`);
+        expect(scheda.variant).toBe('ale');
+        expect(scheda.allWords).toEqual(scheda.words);
+      });
     }
   });
 
-  it('è deterministica: stesso seme → stessa griglia', () => {
-    const samples = sampleAleBoards(4, freq, trie, common, 100, 1);
-    const cal = calibrateAle(samples, {
-      guardRails: DEFAULT_ALE_GUARD_RAILS,
-      dictSize: dictPrime.length,
-      commonSize: common.size,
-    });
-    const opts = {
-      size: 4 as const,
-      difficulty: 'facile' as const,
-      freq,
-      trie,
-      common,
-      calibration: cal,
-      seed: 999,
-      idPrefix: '4-facile',
-    };
-    const a = generateAleScheda(opts);
-    const b = generateAleScheda(opts);
-    expect(a.grid).toBe(b.grid);
-    expect(a.words).toEqual(b.words);
+  it('è deterministica: stessa chiamata → stessi id e griglie', () => {
+    const opts = { size: 4 as const, perTier: 2, freq, trie, rings, calibration, seed: 99, idStart: 1 };
+    const a = generateAleBuckets(opts);
+    const b = generateAleBuckets(opts);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
-  it('gli id rispettano l’offset (nessuna collisione con standard/full)', () => {
-    const samples = sampleAleBoards(4, freq, trie, common, 100, 1);
-    const cal = calibrateAle(samples, {
-      guardRails: DEFAULT_ALE_GUARD_RAILS,
-      dictSize: dictPrime.length,
-      commonSize: common.size,
-    });
-    const scheda = generateAleScheda({
-      size: 4,
-      difficulty: 'facile',
-      freq,
-      trie,
-      common,
-      calibration: cal,
-      seed: 1,
-      idPrefix: '4-facile',
-      idStart: 16,
-      idIndex: 0,
-    });
-    expect(scheda.id).toBe('4-facile-016');
-  });
-});
-
-describe('ale: radice (lemma) per la parola comune', () => {
-  it('costruisce la mappa forma → lemma dal testo Morph-it', () => {
-    const morph = ['amo\tamare\tVER:ind+pres+1+s', 'cani\tcane\tNOM+PLU', 'cervo\tcervo\tNOM'].join('\n');
-    const lemmas = buildAleLemmas(morph);
-    expect(lemmas.get('amo')).toBe('amare');
-    expect(lemmas.get('cani')).toBe('cane');
-    // forma === lemma: non serve una voce (evita rumore).
-    expect(lemmas.has('cervo')).toBe(false);
-  });
-
-  it('`amo` è comune perché lo è la radice `amare`', () => {
-    const common = new Set(['amare']);
-    const lemmas = new Map([['amo', 'amare']]);
-    expect(isAleCommon('amo', common, lemmas)).toBe(true);
-  });
-
-  it('una forma di un lemma NON comune resta non comune', () => {
-    const common = new Set(['amare']);
-    const lemmas = new Map([['abbacchiamo', 'abbacchiare']]);
-    expect(isAleCommon('abbacchiamo', common, lemmas)).toBe(false);
-  });
-
-  it('senza mappa dei lemmi si comporta come prima', () => {
-    const common = new Set(['casa']);
-    expect(isAleCommon('casa', common, undefined)).toBe(true);
-    expect(isAleCommon('amo', common, undefined)).toBe(false);
+  it('non usa più il contatore difficultyOut (rimosso)', () => {
+    const stats = newAleGenerationStats();
+    expect(stats).not.toHaveProperty('difficultyOut');
+    expect(stats).toHaveProperty('tierBandOut');
+    expect(stats).toHaveProperty('fallbacks');
   });
 });

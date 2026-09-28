@@ -454,9 +454,13 @@ export function AdminScreen() {
             <p className="admin__hint">
               {genVariant === 'ale' ? (
                 <>
-                  Le schede <strong>Ale</strong> usano la calibrazione e il vocabolario NVdB: la
-                  prima generazione carica il dizionario (qualche secondo), poi è immediata.
-                  Vengono salvate in <code>schede-ale/</code>, separate dalle altre.
+                  Le schede <strong>Ale</strong> usano la calibrazione ad anelli di
+                  frequenza (<code>frequency-it.txt</code>) e il dizionario: la prima generazione
+                  carica gli ingressi (qualche secondo), poi è immediata. La generazione è{' '}
+                  <strong>a tre secchi</strong>: produce sempre tutte e tre le fasce insieme, quindi
+                  la difficoltà scelta qui viene ignorata (le schede delle altre fasce sono
+                  semplicemente scartate). Vengono salvate in <code>schede-ale/</code>, separate
+                  dalle altre.
                 </>
               ) : (
                 <>

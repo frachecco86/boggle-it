@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.37.1';
+export const APP_VERSION = '0.38.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,35 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.38.0',
+    date: '2026-09-29',
+    title: 'Schede Ale più equilibrate: rarità a fasce di frequenza e parole ancora',
+    promo: {
+      emoji: '🎯',
+      headline: 'Ale capisce meglio quanto è difficile una griglia',
+      text: 'Le schede Ale valutavano quanto è “rara” una parola con un sì/no. Ora usano tre fasce di frequenza d’uso (le 5.000 più comuni, poi fino a 20.000, poi il resto): una griglia con parole rare ma riconoscibili non viene più trattata come una con parole oscure. In più ogni scheda ha almeno una parola lunga da trovare e una struttura senza celle morte, e ogni fascia di difficoltà ha la sua quantità di parole giusta.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Difficoltà Ale più fine (rarità ad anelli di frequenza).** La componente di rarità non è più “dentro o fuori dal vocabolario comune”: ogni parola trovata è nella fascia delle **5.000 più usate**, in quella **fino a 20.000** o **oltre**; la rarità pesa l’anello più raro il doppio (`R = (f1 + 2·f2)/2`). Una griglia di parole rare ma d’uso reale non viene più confusa con una di parole oscure.',
+          '**Ogni scheda Ale ha almeno una parola ancora**: 6 lettere su 4×4, 7 su 5×5, 8 su 6×6. Le schede “piatte” (solo parole corte) non esistono più.',
+          '**Struttura giocabile garantita**: niente `h` isolata senza `c`/`g` accanto, consonanti non troppo lontane da una vocale, al più una riga o colonna senza vocali. Erano le zone che il giocatore percepiva come “celle morte”.',
+          '**Ogni fascia di difficoltà ha la sua banda di parole**: dopo la calibrazione, facile/normale/difficile hanno un intervallo di parole proprio (più stretto di quello globale). Le schede della stessa fascia restano così più omogenee nel numero di parole, senza scambiare “facile” con “poche parole”.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La rarità ora usa `frequency-it.txt` (OpenSubtitles 2018) al posto di NVdB + lemmi: la pipeline Ale **non dipende più da `lemmas.br`, `nvdb.words.txt` né Morph-it**, che restano solo fonti storiche del dizionario principale.',
+          '**Generazione a tre secchi**: un solo flusso di candidati; ognuno finisce nella fascia in cui cade naturalmente, senza più scartare griglie “di difficoltà sbagliata” (il contatore `difficultyOut` è stato rimosso). Gli id restano contigui per fascia, dopo standard/full.',
+          'Calibrazione rifatta su **2000 griglie per dimensione** con i nuovi guard rails e bande per fascia: k-means k=3 converge ovunque, nessun fallback ai tertili, **15/15 schede per fascia in banda, zero ripieghi**, riproduzione 15/15 rispetto al catalogo. Numeri in `docs/algoritmi/report/ale.md`.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.37.1',
     date: '2026-09-27',

@@ -1,15 +1,21 @@
 # PLAN — evoluzione algoritmo `ale` (branch `ale-full`)
 
-> Stato: **piano approvato, da implementare**. Basato sullo studio del
-> 28/09/2026 (campioni misurati: 2000 griglie/dimensione per la calibrazione,
-> 300/dimensione per le analisi; numeri in `docs/algoritmi/report/ale.md` e
-> nell'appendice in fondo).
+> Stato: **IMPLEMENTATO** (29/09/2026). Tutti gli step (1–4) e la decisione
+> sull'Appendice A (variante 4) sono nel codice: nuovi guard rails `structure` e
+> `anchorMinLength`, bande di parole per fascia, generazione a tre secchi,
+> calibrazione a 2000 campioni e catalogo rigenerato. Numeri verificati in
+> `docs/algoritmi/report/ale.md` (riproduzione 15/15 per fascia, zero ripieghi).
+> La specifica di implementazione dettagliata è in
+> [`IMPLEMENTATION.md`](../IMPLEMENTATION.md).
 >
-> Contesto: l'algoritmo `ale` oggi campiona le lettere per frequenza dei token,
-> applica guard rails (vocali 30–60%, ≤3 token rari H/Z/QU, copertura
-> righe/colonne), calibra l'intervallo di parole (Tukey + ρ=0,35 su 2000
+> Basato sullo studio del 28/09/2026 (campioni misurati: 2000 griglie/dimensione
+> per la calibrazione, 300/dimensione per le analisi).
+>
+> Contesto: l'algoritmo `ale` campiona le lettere per frequenza dei token,
+> applica guard rails (vocali 30–60%, ≤3 token rari H/Z/QU, struttura, copertura
+> righe/colonne, ancora), calibra l'intervallo di parole (Tukey + ρ=0,35 su 2000
 > griglie) e assegna la difficoltà con k-means su `D = 0.5·R + 0.5·M`
-> (R = rarità vs NVdB, M = ricchezza = 1 − parole/punteggio).
+> (R = rarità ad anelli di frequenza, M = ricchezza = 1 − parole/punteggio).
 > Questo piano estende l'algoritmo con quattro interventi studiati e misurati.
 > **La definizione di "parola comune" (componente R) NON è in questo piano**:
 > la decisione è sospesa e il confronto dettagliato è in [Appendice A](#appendice-a).

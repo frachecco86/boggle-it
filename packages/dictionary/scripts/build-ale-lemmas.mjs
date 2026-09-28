@@ -1,16 +1,21 @@
 /**
- * Costruisce `data/ale/lemmas.br`: le radici (forma → lemma) che servono
+ * LEGACY: non più usato dall'algoritmo ale, vedi IMPLEMENTATION.md §1.2.
+ *
+ * Costruisce `data/ale/lemmas.br`: le radici (forma → lemma) che servivano
  * all'algoritmo "ale" per contare una forma flessa come comune.
  *
- * PERCHÉ NON SI VERSIONA MORPH-IT: la fonte è `morph-it_048.txt` (19 MB, in
- * ISO-8859-1, gitignored). Serve SOLO a questa trasformazione: per stabilire se
- * una forma è "comune" basta sapere quale LEMMA ha, e un lemma conta solo se è
- * già in `Common` (NVdB ∩ Dict'). Quindi si tengono unicamente le forme il cui
- * lemma è comune: da 366.846 coppie a ~110.000, e il file compresso scende a
- * ~185 KB — versionabile, e sufficiente a far girare la pipeline ale sia in
- * locale sia nel container (generazione dall'admin) senza la fonte grezza.
+ * Dalla metrica ad anelli di frequenza (`rings-v1`) la definizione di "parola
+ * comune" basata su NVdB + lemmi è stata **sostituita**: NVdB, `lemmas.br` e
+ * Morph-it non entrano più nella pipeline ale. Questo script e i file che
+ * produce sono conservati solo come storico e non vanno più rigenerati.
  *
- * Uso: node scripts/build-ale-lemmas.mjs
+ * PERCHÉ NON SI VERSIONA MORPH-IT: la fonte è `morph-it_048.txt` (19 MB, in
+ * ISO-8859-1, gitignored). Serviva SOLO a questa trasformazione: per stabilire se
+ * una forma era "comune" bastava sapere quale LEMMA aveva, e un lemma contava solo
+ * se era già in `Common` (NVdB ∩ Dict'). Si tenevano unicamente le forme il cui
+ * lemma era comune.
+ *
+ * Uso (storico): node scripts/build-ale-lemmas.mjs
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { brotliCompressSync, constants } from 'node:zlib';
