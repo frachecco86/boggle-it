@@ -18,15 +18,17 @@
  * configurazione produce le stesse griglie. La generazione del catalogo avviene
  * offline (`apps/server/scripts/gen-schede-ale.ts`, "a tre secchi").
  *
- * Guard rails (ATTIVI): banda vocali 30–60%, al più tre token rari H/Z/QU in
- * totale, struttura giocabile (`gridStructureIssues`), nessuna riga o colonna che
- * non sia attraversata da almeno una soluzione, almeno una parola ancora
- * (6/7/8+ lettere). Sono applicati sia in calibrazione sia in produzione con gli
+ * Guard rails (ATTIVI): banda vocali 30–60% (`qu` NON è vocale), al più tre token
+ * rari H/Z/QU in totale, struttura giocabile (`gridStructureIssues`), nessuna riga
+ * o colonna che non sia attraversata da almeno una soluzione, almeno una parola
+ * ancora (6/7/8+ lettere). Per le rare ci sono anche un floor di campionamento
+ * (`tokenFloor`, in quota di cella) e un gate di presenza per fascia
+ * (`rareByTier`). Sono applicati sia in calibrazione sia in produzione con gli
  * stessi valori: cambiarli invalida la calibrazione, come richiede la spec.
  */
 import type { Difficulty } from './difficulty.js';
 import { DIFFICULTY_ORDER } from './difficulty.js';
-import { gridStructureIssues } from './grid.js';
+import { FOREIGN_LETTERS, gridStructureIssues } from './grid.js';
 import { gridToRows, type Scheda } from './scheda.js';
 import { solveGrid, solveGridCoverage, type TrieNode } from './solver.js';
 import type { Grid, GridSize, Tile } from './types.js';
@@ -47,8 +49,8 @@ export const ALE_TOKENS = [
  */
 export const ALE_RARITY_RINGS = { easy: 5000, medium: 20000 } as const;
 
-/** Token che contano come vocale (l'U dentro QU è incluso, come da spec). */
-const ALE_VOWEL_TOKENS = new Set(['a', 'e', 'i', 'o', 'u', 'qu']);
+/** Token che contano come vocale. `qu` NON è una vocale (come nel full). */
+const ALE_VOWEL_TOKENS = new Set(['a', 'e', 'i', 'o', 'u']);
 
 /** Token con tetto complessivo per griglia (guard rail della spec): H/Z/QU. */
 const ALE_RARE_TOKENS = new Set(['h', 'z', 'qu']);
@@ -192,6 +194,32 @@ export interface AleGuardRails {
   /** Banda della quota di vocali (0–1). `null` = disattivato. */
   vowels: { min: number; max: number } | null;
   /**
+   * Floor di campionamento per token, in QUOTA DI CELLA (0–1), non in frequenza
+   * di dizionario. Es. `{ qu: 0.003 }` = una cella su 333 è `qu`. Il peso si
+   * converte con `w = p·(Σf−f_t)/(1−p)`, così la quota realizzata è esattamente
+   * `p`. Ha effetto solo se il floor supera la quota naturale del token.
+   */
+  tokenFloor: Partial<Record<'h' | 'z' | 'qu', number>> | null;
+  /**
+   * Presenza di token rari (h+z+qu) PER FASCIA, applicata DOPO che la fascia
+   * naturale è stata assegnata. `{ facile: {max:1}, difficile: {min:1} }`.
+   * `null` = nessun vincolo. È un filtro di accettazione: non cambia `D` né i
+   * confini delle fasce, quindi non richiede una calibrazione a due passate.
+   */
+  rareByTier: Record<Difficulty, { min?: number; max?: number }> | null;
+  /**
+   * Se true, la `h` è piazzata solo su celle adiacenti a `c`/`g` (peso
+   * posizionale): la struttura non la scarta e la sua frequenza aggregata resta
+   * quella naturale (vedi `hBoost`).
+   */
+  hNearCG: boolean;
+  /**
+   * Moltiplicatore della marginale naturale di cella di `h` (1 = frequenza
+   * naturale). Tenuto basso: serve a distribuire le `h` in posizioni valide, non
+   * a gonfiarne la frequenza.
+   */
+  hBoost?: number;
+  /**
    * Numero massimo di token rari (`h`, `z`, `qu`) IN TOTALE nella griglia.
    * `null` = disattivato. Non è un tetto per singolo token: "al più tre tra
    * H/Z/QU" vuol dire che la somma dei tre non supera `rareCap`.
@@ -221,6 +249,10 @@ export interface AleGuardRails {
 /** Guard rails ATTIVI, come concordato per il catalogo. */
 export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   vowels: { min: 0.3, max: 0.6 },
+  tokenFloor: { qu: 0.003 },
+  rareByTier: { facile: { max: 1 }, normale: {}, difficile: { min: 1 } },
+  hNearCG: true,
+  hBoost: 1,
   rareCap: 3,
   noUncoveredLines: true,
   structure: true,
@@ -247,6 +279,8 @@ export interface AleGenerationStats {
   wordCountOut: number;
   /** Candidati scartati perché fuori dalla banda della propria fascia. */
   tierBandOut: number;
+  /** Candidati scartati dal gate di presenza rari della propria fascia. */
+  tierRareOut: number;
   /** Ripieghi usati per completare un secchio rimasto incompleto. */
   fallbacks: number;
   /** Tentativi (candidati) del flusso esterno. */
@@ -264,6 +298,7 @@ export function newAleGenerationStats(): AleGenerationStats {
     noGrid: 0,
     wordCountOut: 0,
     tierBandOut: 0,
+    tierRareOut: 0,
     fallbacks: 0,
     attempts: 0,
     acceptedAttempt: null,
@@ -282,12 +317,57 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-/** Estrae `count` token da `freq` con reimmissione, pesati per frequenza. */
-export function sampleTokens(freq: AleFrequency, count: number, rng: () => number): string[] {
+/**
+ * Pesi di campionamento dei token, applicando i floor in QUOTA DI CELLA.
+ *
+ * Per i token floored il peso naturale `f` è sostituito da `w = p·W` con
+ * `W = S_o/(1−Σp)` (`S_o` = somma dei pesi naturali dei soli token NON floored):
+ * la quota realizzata è esattamente `p`. Il floor si applica solo se supera la
+ * quota naturale del token (`p > f/Σf`), così non abbassa mai una lettera.
+ *
+ * L'unità è la CELLA, non il dizionario: usare `p` come peso diretto sarebbe
+ * sbagliato di un fattore `Σf` (~7,5).
+ */
+function tokenSamplingWeights(
+  freq: AleFrequency,
+  floors?: Partial<Record<string, number>>,
+  omit?: ReadonlySet<string>,
+): number[] {
+  const base = freq.ordered.map(({ token, freq: f }) => (omit?.has(token) ? 0 : f));
+  const totalBase = base.reduce((a, f) => a + f, 0);
+  if (totalBase <= 0) return base;
+  const active: { index: number; p: number }[] = [];
+  if (floors) {
+    freq.ordered.forEach(({ token, freq: f }, index) => {
+      if (omit?.has(token)) return;
+      const p = floors[token];
+      if (p !== undefined && p > 0 && p > f / totalBase) active.push({ index, p });
+    });
+  }
+  if (active.length === 0) return base;
+  const sumP = active.reduce((a, x) => a + x.p, 0);
+  if (sumP >= 1) return base;
+  const activeIdx = new Set(active.map((x) => x.index));
+  const sOther = base.reduce((a, f, i) => a + (activeIdx.has(i) ? 0 : f), 0);
+  const totalTarget = sOther / (1 - sumP);
+  const out = [...base];
+  for (const { index, p } of active) out[index] = p * totalTarget;
+  return out;
+}
+
+/** Estrae `count` token da `freq` con reimmissione, pesati per frequenza (con floor opzionali). */
+export function sampleTokens(
+  freq: AleFrequency,
+  count: number,
+  rng: () => number,
+  floors?: Partial<Record<string, number>>,
+  omit?: ReadonlySet<string>,
+): string[] {
+  const weights = tokenSamplingWeights(freq, floors, omit);
   const cumulative: number[] = [];
   let total = 0;
-  for (const { freq: f } of freq.ordered) {
-    total += f;
+  for (const w of weights) {
+    total += w;
     cumulative.push(total);
   }
   const tokens: string[] = [];
@@ -298,6 +378,88 @@ export function sampleTokens(freq: AleFrequency, count: number, rng: () => numbe
     while (idx < cumulative.length - 1 && r > cumulative[idx]!) idx++;
     tokens.push(freq.ordered[idx]!.token);
   }
+  return tokens;
+}
+
+/** Token escluso dalla fase 1 del piazzamento posizionale di `h`. */
+const H_TOKENS = new Set(['h']);
+
+/**
+ * True se una cella può essere “sacrificata” per piazzare una `h`: consonante
+ * comune, non `c`/`g` (che fanno da ancora), non rara (`h`/`z`/`qu`) e non
+ * straniera. Escluderle preserva le frequenze naturali delle altre lettere.
+ */
+function isHPromotableToken(token: string): boolean {
+  if (token === 'qu') return false;
+  if (ALE_VOWEL_TOKENS.has(token)) return false;
+  if (token === 'c' || token === 'g' || token === 'h' || token === 'z') return false;
+  if ((FOREIGN_LETTERS as readonly string[]).includes(token)) return false;
+  return true;
+}
+
+/**
+ * Piazzamento posizionale di `h` (Tappa 2), calibrato sulla frequenza naturale.
+ *
+ * `tokens` arriva dalla FASE 1 (campionata senza `h`). Si promuovono a `h` le
+ * celle sacrificabili adiacenti a una `c`/`g` con probabilità
+ * `q = hBoost · m_h / P`, dove `m_h = f_h/Σf` è la marginale naturale di cella
+ * di `h` e `P` la frazione di celle sacrificabili della griglia. Così
+ * `E[#h] = N · m_h · hBoost` — la frequenza aggregata di `h` resta quella
+ * naturale — ma ogni `h` cade accanto a `c`/`g` e non viene scartata dalla
+ * struttura. Le `c`/`g` non sono mai promosse: restano le ancore.
+ */
+export function placePositionalH(
+  tokens: string[],
+  size: number,
+  freq: AleFrequency,
+  rng: () => number,
+  hBoost = 1,
+): void {
+  const total = tokens.length;
+  if (total === 0) return;
+  const totalBase = freq.ordered.reduce((a, x) => a + x.freq, 0);
+  const naturalH = totalBase > 0 ? (freq.freq.get('h') ?? 0) / totalBase : 0;
+  const target = naturalH * hBoost;
+  if (target <= 0) return;
+
+  const promotable: number[] = [];
+  for (let i = 0; i < total; i++) {
+    if (!isHPromotableToken(tokens[i]!)) continue;
+    const row = Math.floor(i / size);
+    const col = i % size;
+    let near = false;
+    for (let dr = -1; dr <= 1 && !near; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const r = row + dr;
+        const c = col + dc;
+        if (r < 0 || c < 0 || r >= size || c >= size) continue;
+        const n = tokens[r * size + c]!;
+        if (n === 'c' || n === 'g') {
+          near = true;
+          break;
+        }
+      }
+    }
+    if (near) promotable.push(i);
+  }
+  if (promotable.length === 0) return;
+  const q = Math.min(1, target / (promotable.length / total));
+  for (const i of promotable) {
+    if (rng() < q) tokens[i] = 'h';
+  }
+}
+
+/** Fase 1 (senza `h`) + piazzamento posizionale di `h` (Tappa 2). */
+export function sampleTokensWithPositionalH(
+  size: GridSize,
+  freq: AleFrequency,
+  rng: () => number,
+  floors?: Partial<Record<string, number>>,
+  hBoost = 1,
+): string[] {
+  const tokens = sampleTokens(freq, size * size, rng, floors, H_TOKENS);
+  placePositionalH(tokens, size, freq, rng, hBoost);
   return tokens;
 }
 
@@ -326,6 +488,16 @@ export function tokenGuardRailIssues(tokens: string[], size: number, rails: AleG
   }
 
   return issues;
+}
+
+/** Numero di token rari (`h`/`z`/`qu`) in una griglia (`q` = token `qu`). */
+export function countRareTokens(grid: Grid): number {
+  let n = 0;
+  for (const tile of grid.tiles) {
+    const token = tile.letter === 'q' ? 'qu' : tile.letter;
+    if (ALE_RARE_TOKENS.has(token)) n++;
+  }
+  return n;
 }
 
 /**
@@ -394,7 +566,9 @@ export function generateAleGrid(
 ): Grid | null {
   const total = size * size;
   for (let attempt = 0; attempt < maxTries; attempt++) {
-    const tokens = sampleTokens(freq, total, rng);
+    const tokens = rails.hNearCG
+      ? sampleTokensWithPositionalH(size, freq, rng, rails.tokenFloor ?? undefined, rails.hBoost ?? 1)
+      : sampleTokens(freq, total, rng, rails.tokenFloor ?? undefined);
     const issues = tokenGuardRailIssues(tokens, size, rails);
     if (stats) {
       stats.sampled++;
@@ -873,6 +1047,16 @@ export function nextAleCandidate(options: {
   if (board.wordCount < tier.wordRange.lo || board.wordCount > tier.wordRange.hi) {
     if (stats) stats.tierBandOut++;
     return null;
+  }
+
+  // Gate di presenza rari per fascia (dopo la classificazione: `D` non cambia).
+  if (rails.rareByTier) {
+    const rule = rails.rareByTier[difficulty];
+    const rare = countRareTokens(grid);
+    if ((rule.min !== undefined && rare < rule.min) || (rule.max !== undefined && rare > rule.max)) {
+      if (stats) stats.tierRareOut++;
+      return null;
+    }
   }
 
   const distance = Math.abs(

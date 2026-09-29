@@ -98,6 +98,27 @@ function loadCatalogAle(size: GridSize, difficulty: Difficulty): Scheda[] {
   return (parsed.schede ?? []).filter((s) => (s.variant ?? 'standard') === 'ale');
 }
 
+/** Presenza delle lettere rare (`q` = token `qu`) nelle schede prodotte. */
+function rarePresence(schede: Scheda[]): { qu: number; h: number; z: number; any: number; mean: number } {
+  let qu = 0;
+  let h = 0;
+  let z = 0;
+  let any = 0;
+  let sum = 0;
+  for (const scheda of schede) {
+    const chars = String(scheda.grid).replace(/\s/g, '').toLowerCase().split('');
+    const hasQu = chars.includes('q');
+    const hasH = chars.includes('h');
+    const hasZ = chars.includes('z');
+    if (hasQu) qu++;
+    if (hasH) h++;
+    if (hasZ) z++;
+    if (hasQu || hasH || hasZ) any++;
+    sum += chars.filter((c) => c === 'q' || c === 'h' || c === 'z').length;
+  }
+  return { qu, h, z, any, mean: schede.length ? sum / schede.length : 0 };
+}
+
 /** Difficoltà composita di una griglia (R e M ricavati dai suoi dati). */
 function boardDifficulty(board: AleBoardStats): number {
   return compositeDifficulty(board.rarity, board.wordCount, board.score);
@@ -129,6 +150,13 @@ function reportForSize(
   const railText = [
     rails.vowels ? `vocali ${pct(rails.vowels.min)}–${pct(rails.vowels.max)}` : 'vocali libere',
     rails.rareCap !== null ? `al più ${rails.rareCap} token rari H/Z/QU in totale` : 'nessun tetto sui token rari',
+    rails.tokenFloor
+      ? `floor ${Object.entries(rails.tokenFloor)
+          .map(([t, p]) => `${t} ${pct(p!)}`)
+          .join(', ')}`
+      : 'nessun floor',
+    rails.rareByTier ? 'gate rari per fascia' : 'nessun gate rari',
+    rails.hNearCG ? `h posizionale (hBoost ${rails.hBoost ?? 1})` : 'h libera',
     rails.structure ? 'struttura giocabile' : 'struttura libera',
     rails.noUncoveredLines ? 'nessuna riga/colonna senza soluzioni' : 'righe/colonne libere',
     rails.anchorMinLength
@@ -271,7 +299,8 @@ function reportForSize(
   );
   console.log(
     `  reiezioni esterne     fuori range globale ${genStats.wordCountOut.toLocaleString('it-IT')} · ` +
-      `fuori banda fascia ${genStats.tierBandOut.toLocaleString('it-IT')} · ripieghi ${genStats.fallbacks}`,
+      `fuori banda fascia ${genStats.tierBandOut.toLocaleString('it-IT')} · ` +
+      `gate rari fascia ${genStats.tierRareOut.toLocaleString('it-IT')} · ripieghi ${genStats.fallbacks}`,
   );
   console.log(`  violazioni guard rails ${railTotal.toLocaleString('it-IT')} (un campione può violarne più di una)`);
   for (const [rule, n] of [...byRule.entries()].sort((a, b) => b[1] - a[1])) {
@@ -301,7 +330,14 @@ function reportForSize(
       );
     }).length;
     const meanRarity = rarities.reduce((a, b) => a + b, 0) / Math.max(1, rarities.length);
+    const presence = rarePresence(schede);
     console.log(`\n  ${difficulty.toUpperCase()} — ${schede.length} schede`);
+    console.log(
+      `    rare                  Qu ${pct(presence.qu / Math.max(1, schede.length))} · ` +
+        `h ${pct(presence.h / Math.max(1, schede.length))} · ` +
+        `z ${pct(presence.z / Math.max(1, schede.length))} · ` +
+        `almeno una ${pct(presence.any / Math.max(1, schede.length))} · media ${presence.mean.toFixed(2)}`,
+    );
     console.log(
       `    parole                ${Math.min(...wordCounts)}–${Math.max(...wordCounts)} (media ${(wordCounts.reduce((a, b) => a + b, 0) / Math.max(1, wordCounts.length)).toFixed(0)}) · ` +
         `banda fascia [${tier.wordRange.lo}, ${tier.wordRange.hi}] · in banda ${inBand}/${schede.length}`,

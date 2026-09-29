@@ -1,11 +1,25 @@
 {
-  "generatedAt": "2026-09-28T22:59:51.885Z",
+  "generatedAt": "2026-09-29T01:53:36.750Z",
   "seed": 1,
   "guardRails": {
     "vowels": {
       "min": 0.3,
       "max": 0.6
     },
+    "tokenFloor": {
+      "qu": 0.003
+    },
+    "rareByTier": {
+      "facile": {
+        "max": 1
+      },
+      "normale": {},
+      "difficile": {
+        "min": 1
+      }
+    },
+    "hNearCG": true,
+    "hBoost": 1,
     "rareCap": 3,
     "noUncoveredLines": true,
     "structure": true,
@@ -18,54 +32,68 @@
   "bySize": {
     "4": {
       "wordRange": {
-        "lo": 60,
-        "hi": 171
+        "lo": 61,
+        "hi": 167
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.5834597959378237,
+          "targetDifficulty": 0.5831910561639131,
           "range": {
             "min": 0,
-            "max": 0.6079173754620061
+            "max": 0.6083182886149309
           },
           "wordRange": {
-            "lo": 62,
-            "hi": 102
+            "lo": 64,
+            "hi": 103
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6323749549861885,
+          "targetDifficulty": 0.6334455210659486,
           "range": {
-            "min": 0.6079173754620061,
-            "max": 0.6557210101555933
+            "min": 0.6083182886149309,
+            "max": 0.6564715342790264
           },
           "wordRange": {
-            "lo": 74,
+            "lo": 78,
             "hi": 136
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.6790670653249982,
+          "targetDifficulty": 0.679497547492104,
           "range": {
-            "min": 0.6557210101555933,
+            "min": 0.6564715342790264,
             "max": 1
           },
           "wordRange": {
             "lo": 95,
-            "hi": 161
+            "hi": 156
           }
         }
       ],
       "provenance": {
-        "samples": 2000,
+        "samples": 5000,
         "guardRails": {
           "vowels": {
             "min": 0.3,
             "max": 0.6
           },
+          "tokenFloor": {
+            "qu": 0.003
+          },
+          "rareByTier": {
+            "facile": {
+              "max": 1
+            },
+            "normale": {},
+            "difficile": {
+              "min": 1
+            }
+          },
+          "hNearCG": true,
+          "hBoost": 1,
           "rareCap": 3,
           "noUncoveredLines": true,
           "structure": true,
@@ -82,11 +110,11 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 16,
-          "q1": 80,
-          "median": 113,
-          "q3": 159,
-          "max": 444
+          "min": 10,
+          "q1": 79,
+          "median": 112,
+          "q3": 155,
+          "max": 492
         },
         "rho": 0.35,
         "weights": {
@@ -99,54 +127,68 @@
     },
     "5": {
       "wordRange": {
-        "lo": 155,
-        "hi": 376
+        "lo": 152,
+        "hi": 366
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.6427563647764247,
+          "targetDifficulty": 0.6406760675170927,
           "range": {
             "min": 0,
-            "max": 0.6620436366474319
+            "max": 0.6601488697226323
           },
           "wordRange": {
-            "lo": 163,
-            "hi": 237
+            "lo": 157,
+            "hi": 233
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6813309085184391,
+          "targetDifficulty": 0.6796216719281718,
           "range": {
-            "min": 0.6620436366474319,
-            "max": 0.6986499292325655
+            "min": 0.6601488697226323,
+            "max": 0.6968887174746469
           },
           "wordRange": {
-            "lo": 193,
-            "hi": 319
+            "lo": 191,
+            "hi": 303
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7159689499466919,
+          "targetDifficulty": 0.7141557630211219,
           "range": {
-            "min": 0.6986499292325655,
+            "min": 0.6968887174746469,
             "max": 1
           },
           "wordRange": {
-            "lo": 234,
-            "hi": 356
+            "lo": 232,
+            "hi": 347
           }
         }
       ],
       "provenance": {
-        "samples": 2000,
+        "samples": 5000,
         "guardRails": {
           "vowels": {
             "min": 0.3,
             "max": 0.6
           },
+          "tokenFloor": {
+            "qu": 0.003
+          },
+          "rareByTier": {
+            "facile": {
+              "max": 1
+            },
+            "normale": {},
+            "difficile": {
+              "min": 1
+            }
+          },
+          "hNearCG": true,
+          "hBoost": 1,
           "rareCap": 3,
           "noUncoveredLines": true,
           "structure": true,
@@ -163,11 +205,11 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 43,
-          "q1": 192,
-          "median": 262,
-          "q3": 350,
-          "max": 827
+          "min": 33,
+          "q1": 187,
+          "median": 256,
+          "q3": 340,
+          "max": 1086
         },
         "rho": 0.35,
         "weights": {
@@ -180,54 +222,68 @@
     },
     "6": {
       "wordRange": {
-        "lo": 300,
-        "hi": 650
+        "lo": 295,
+        "hi": 641
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.6767209125924328,
+          "targetDifficulty": 0.6763974667717451,
           "range": {
             "min": 0,
-            "max": 0.6918981484654779
+            "max": 0.69180718072436
           },
           "wordRange": {
-            "lo": 302,
-            "hi": 440
+            "lo": 310,
+            "hi": 442
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.707075384338523,
+          "targetDifficulty": 0.707216894676975,
           "range": {
-            "min": 0.6918981484654779,
-            "max": 0.7221449756338418
+            "min": 0.69180718072436,
+            "max": 0.7219108828013223
           },
           "wordRange": {
-            "lo": 371,
-            "hi": 543
+            "lo": 360,
+            "hi": 546
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7372145669291607,
+          "targetDifficulty": 0.7366048709256697,
           "range": {
-            "min": 0.7221449756338418,
+            "min": 0.7219108828013223,
             "max": 1
           },
           "wordRange": {
-            "lo": 444,
-            "hi": 615
+            "lo": 432,
+            "hi": 616
           }
         }
       ],
       "provenance": {
-        "samples": 2000,
+        "samples": 5000,
         "guardRails": {
           "vowels": {
             "min": 0.3,
             "max": 0.6
           },
+          "tokenFloor": {
+            "qu": 0.003
+          },
+          "rareByTier": {
+            "facile": {
+              "max": 1
+            },
+            "normale": {},
+            "difficile": {
+              "min": 1
+            }
+          },
+          "hNearCG": true,
+          "hBoost": 1,
           "rareCap": 3,
           "noUncoveredLines": true,
           "structure": true,
@@ -244,11 +300,11 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 96,
-          "q1": 357,
-          "median": 471.5,
-          "q3": 607,
-          "max": 1439
+          "min": 83,
+          "q1": 353,
+          "median": 463,
+          "q3": 600,
+          "max": 1804
         },
         "rho": 0.35,
         "weights": {

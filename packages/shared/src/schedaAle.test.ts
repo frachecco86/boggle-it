@@ -7,6 +7,7 @@ import {
   cleanAleWord,
   compositeDifficulty,
   computeAleFrequency,
+  countRareTokens,
   coverageIssues,
   DEFAULT_ALE_GUARD_RAILS,
   generateAleBuckets,
@@ -16,13 +17,15 @@ import {
   nextAleCandidate,
   richnessFor,
   sampleAleBoards,
+  sampleTokens,
+  sampleTokensWithPositionalH,
   tierForDifficulty,
   tokenizeAle,
   tokenGuardRailIssues,
   type AleBoardStats,
   type AleRings,
 } from './schedaAle.js';
-import { gridStructureIssues } from './grid.js';
+import { buildGrid, gridStructureIssues } from './grid.js';
 import { buildTrie, solveGrid } from './solver.js';
 import { DIFFICULTY_ORDER } from './difficulty.js';
 
@@ -123,6 +126,67 @@ describe('ale: anelli di frequenza e rarità R = (f1 + 2·f2)/2', () => {
 
   it('ALE_RARITY_RINGS vale 5.000 / 20.000', () => {
     expect(ALE_RARITY_RINGS).toEqual({ easy: 5000, medium: 20000 });
+  });
+});
+
+describe('ale: tokenFloor in quota di cella', () => {
+  it('alza la quota realizzata del token al valore richiesto', () => {
+    const freq = computeAleFrequency(['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando']);
+    const tokens = sampleTokens(freq, 20000, mulberry32(1), { qu: 0.2 });
+    const share = tokens.filter((t) => t === 'qu').length / tokens.length;
+    expect(share).toBeGreaterThan(0.17);
+    expect(share).toBeLessThan(0.23);
+  });
+
+  it('senza floor la quota naturale resta bassa', () => {
+    const freq = computeAleFrequency(['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando']);
+    const tokens = sampleTokens(freq, 20000, mulberry32(1));
+    const share = tokens.filter((t) => t === 'qu').length / tokens.length;
+    expect(share).toBeLessThan(0.05);
+  });
+});
+
+describe('ale: piazzamento posizionale di h (Tappa 2)', () => {
+  const dictPrime = ['casa', 'cane', 'gatto', 'mare', 'sole', 'luna', 'quando', 'chi', 'che', 'ghi', 'ghe', 'hotel', 'hobby'];
+  const freq = computeAleFrequency(dictPrime);
+
+  it('mette ogni h accanto a c/g e ne rispetta la frequenza naturale', () => {
+    let hTotal = 0;
+    let cells = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const tokens = sampleTokensWithPositionalH(4, freq, mulberry32(seed), { qu: 0.04 }, 1);
+      const grid = buildGrid(4, tokens.map((t) => (t === 'qu' ? 'q' : t)));
+      for (const tile of grid.tiles) {
+        if (tile.letter !== 'h') continue;
+        const near = grid.tiles.some(
+          (o) =>
+            (o.row !== tile.row || o.col !== tile.col) &&
+            Math.abs(o.row - tile.row) <= 1 &&
+            Math.abs(o.col - tile.col) <= 1 &&
+            (o.letter === 'c' || o.letter === 'g'),
+        );
+        expect(near).toBe(true);
+      }
+      hTotal += tokens.filter((t) => t === 'h').length;
+      cells += 16;
+    }
+    const totalBase = freq.ordered.reduce((a, x) => a + x.freq, 0);
+    const naturalH = freq.freq.get('h')! / totalBase;
+    expect(hTotal / cells).toBeGreaterThan(naturalH * 0.5);
+    expect(hTotal / cells).toBeLessThan(naturalH * 2);
+  });
+
+  it('hBoost scala la presenza di h', () => {
+    const count = (boost: number) => {
+      let n = 0;
+      for (let seed = 1; seed <= 200; seed++) {
+        n += sampleTokensWithPositionalH(4, freq, mulberry32(seed), { qu: 0.04 }, boost).filter(
+          (t) => t === 'h',
+        ).length;
+      }
+      return n;
+    };
+    expect(count(3)).toBeGreaterThan(count(1));
   });
 });
 
@@ -392,6 +456,20 @@ describe('ale: generazione a tre secchi', () => {
         expect(scheda.allWords).toEqual(scheda.words);
       });
     }
+  });
+
+  it('applica il gate rareByTier della fascia naturale', () => {
+    let checked = 0;
+    for (let attempt = 0; attempt < 400 && checked < 20; attempt++) {
+      const candidate = nextAleCandidate({ size: 4, freq, trie, rings, calibration, seed: 5, attempt });
+      if (!candidate) continue;
+      checked++;
+      const rare = countRareTokens(candidate.grid);
+      const rule = DEFAULT_ALE_GUARD_RAILS.rareByTier![candidate.difficulty];
+      if (rule.min !== undefined) expect(rare).toBeGreaterThanOrEqual(rule.min);
+      if (rule.max !== undefined) expect(rare).toBeLessThanOrEqual(rule.max);
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('è deterministica: stessa chiamata → stessi id e griglie', () => {
