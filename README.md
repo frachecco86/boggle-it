@@ -130,6 +130,11 @@ node tools/gen-icon.mjs     # rigenera icone Android e web (margherita), senza d
 Il numero di versione sta in `apps/web/src/version.ts` insieme alle note di rilascio;
 nell'app compare in alto a destra e apre la pagina **Novità**.
 
+**Regola:** ogni commit porta la versione **almeno +0.1** (minor avanti di uno:
+`0.41.0` → `0.42.0`) e aggiunge la sua voce in `RELEASES`: niente numero senza
+changelog. Il controllo è `pnpm check:version` (confronta con `origin/master`;
+con `--base <ref>` si confronta con un altro riferimento).
+
 ### App Android
 
 ```bash
@@ -193,6 +198,7 @@ deployato — `node tools/rigenera-ale-server.mjs` (dry-run di default) e la pro
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
 | `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
+| `pnpm check:version` | Verifica che la versione sia avanzata di almeno 0.1 e abbia la sua voce |
 
 ### Feedback sonoro
 

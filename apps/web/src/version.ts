@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.41.0';
+export const APP_VERSION = '0.42.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,33 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.42.0',
+    date: '2026-09-29',
+    title: 'Schede Ale del server: si allineano al metodo nuovo con un comando solo',
+    promo: {
+      emoji: '🧹',
+      headline: 'Anche le schede Ale nate dal pannello si aggiornano',
+      text: 'Le schede Ale create dal pannello admin vivono sul server e non seguivano gli aggiornamenti: dopo un cambio di difficoltà o di punteggi restavano tarate sul metodo vecchio. Ora si svuotano e si rigenerano con un comando solo, con backup automatico e controllo delle lettere rare.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le schede Ale generate dal pannello non restano più indietro.** Sono salvate sul server (non nel codice) e quindi continuavano a usare la calibrazione del giorno in cui erano nate: dopo il passaggio agli **anelli di frequenza**, ai **rail delle lettere rare** e alla **scala Boggle classica**, la difficoltà non era più omogenea con il resto del catalogo. Ora si azzerano e si rigenerano con il metodo in esecuzione, così “facile”, “normale” e “difficile” vogliono dire la stessa cosa per tutte le schede.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Nuovo strumento **`tools/rigenera-ale-server.mjs`**: fa login, scarica un **backup JSON** di tutte le schede Ale, svuota la cartella delle Ale generate a runtime (`schede-ale/`), rigenera i lotti e verifica che le lettere rare rispettino le fasce. È **dry-run di default** (`--apply` per eseguire) e **rifiuta di procedere** se il server non usa ancora la scala classica dei punteggi. Le credenziali arrivano solo da variabili d’ambiente.',
+          'Procedura, alternative dal pannello e ripristino documentati in **`docs/ALE-RUNTIME-SERVER.md`** (collegato da `DEPLOY.md` e dal README).',
+          'Nuovo controllo **`pnpm check:version`**: la versione dell’app deve avanzare di **almeno 0.1** rispetto al commit precedente e avere la sua voce nella pagina Novità — così una release non può restare senza numero.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.41.0',
     date: '2026-09-29',

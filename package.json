@@ -13,7 +13,8 @@
     "test": "pnpm -r test",
     "test:e2e": "node tests/e2e/run-all.mjs",
     "typecheck": "pnpm -r typecheck",
-    "check:context": "node tools/check-context.mjs"
+    "check:context": "node tools/check-context.mjs",
+    "check:version": "node tools/check-version.mjs"
   },
   "packageManager": "pnpm@10.8.1",
   "engines": {
