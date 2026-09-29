@@ -91,139 +91,233 @@ assente.
 
 ## 4. Proposta
 
-### 4.1 Nuovi campi di `AleGuardRails` (bozza)
+> **Principio guida.** Due livelli distinti, da non confondere:
+> - **livello CAMPIONE** (quanti token rari *entrano* nella griglia): è qui che
+>   agiscono frequenze e quote. Decide il carattere della griglia.
+> - **livello VERIFICA** (quali griglie si *accettano*): i guard rails attuali.
+>
+> La raccomandazione pratica è lavorare **sul campione** (probabilità per token,
+> per difficoltà), tenendo i guard rails come rete di sicurezza. Questo evita la
+> circolarità di §4.6 perché `D` si calcola normalmente dopo.
+
+### 4.0 Vocabolario: "iniettare" vs "floored probability"
+
+Prima di tutto, chiarire cosa vuol dire "iniettare" — è il punto che genera
+confusione.
+
+- **Floored probability (`pMin`)**: NON si tocca il campione a posteriori. Si
+  cambia il *peso* con cui un token può uscire dall'urna. Oggi il peso di `qu` è
+  la sua frequenza in `Dict'` (1,31%, che dopo la normalizzazione sui 26 token
+  diventa **0,18%** di probabilità per cella). Con un floor `pMin(qu) = 3%` ogni
+  cella ha il 3% di probabilità di essere `qu` invece dello 0,18%: nessuna
+  garanzia, solo molto più probabile. Resta **campionamento**, quindi la
+  distribuzione delle altre lettere non cambia (a meno di rinormalizzare), e non
+  serve alcuna logica di sostituzione.
+- **Iniezione**: si campiona normalmente e POI, se il token richiesto manca, si
+  **sovrascrive** una cella esistente (scelta con l'rng tra quelle "sacrificabili",
+  es. consonanti non rare e non in `c`/`g`). È una garanzia dura: a fine
+  iniezione la griglia contiene quel token. Costa poco ed è deterministica; il
+  prezzo è che la cella sovrascritta perde la lettera che aveva (e quindi qualche
+  parola che quella cella abilitava).
+- **`hqChance` stile full**: è un ibrido — con probabilità `p` si decide che la
+  griglia DEVE avere `qu` (e/o `h`); il come (iniezione) è un dettaglio.
+
+**Non si inietta "prima del campionamento"**: l'iniezione avviene sempre DOPO
+(il campionamento occupa tutte le celle, non c'è posto "prima"). Quello che si
+può fare *prima* è cambiare i **pesi** (floored probability) — ed è l'opzione più
+pulita.
+
+### 4.1 Cosa vuol dire "mettere una `h` vicino a `c`/`g`"
+
+La regola di struttura (`gridStructureIssues`) scarta una `h` che non ha una
+`c` o una `g` in una delle 8 celle adiacenti. Quindi una `h` "da sola" è una
+cella morta e viene buttata. Due modi per rispettare la regola:
+
+1. **Bias posizionale nel campionamento (preferito)**: invece di aumentare solo
+   `p(h)`, si aumenta la probabilità di `h` **solo quando** la cella è adiacente
+   a una `c`/`g` già presente. In pratica si campiona cella per cella: il peso di
+   `h` è `pMin(h)` se vicino a `c`/`g`, altrimenti `p(h)` naturale (o zero). Così
+   le `h` che escono sono quasi tutte valide e non si sprecano tentativi. Richiede
+   di campionare in ordine (non più `sampleTokens` indipendente per cella) e di
+   guardare il vicinato già riempito — più codice, ma nessuna sovrascrittura.
+2. **Iniezione della coppia (semplice)**: dopo il campionamento, si cerca una
+   `c`/`g` e si sovrascrive una cella adiacente libera con `h`. Garantisce la
+   coppia in un colpo solo. Meno elegante (cambia una cella), ma banale da
+   implementare e testare.
+
+In entrambi i casi la `h` non va contata come vocale (non lo è) e concorre al
+`rareCap` proporzionale.
+
+### 4.2 `qu` NON è una vocale (decisione)
+
+**Proposta: rimuovere `qu` da `ALE_VOWEL_TOKENS`.** Oggi `ALE_VOWEL_TOKENS` =
+`{a,e,i,o,u,qu}` e `ALE_RARE_TOKENS` = `{h,z,qu}`: `qu` è in entrambi.
+Conseguenze di tenerlo vocale:
+
+- ogni `qu` che si aggiunge spinge la **quota vocali** verso l'alto (un token in
+  più, e su 4×4 ogni token è il 6,25%: due `qu` fanno +12,5%);
+- la banda 30–60% diventa un vincolo che **limita** la presenza di `qu`: più
+  `qu` ⟹ più griglie respinte per "vocali fuori banda". È esattamente il motivo
+  per cui forzare `qu` oggi è difficile.
+
+Rimuoverlo dalla banda vocali:
+
+- allinea `ale` al **full**, dove `VOWELS = a e i o u` e la `q` **non** conta
+  come vocale nella regola di struttura (la nota in `gridStructureIssues` lo dice
+  esplicitamente);
+- libera la presenza di `qu` dal vincolo, quindi il floor `pMin(qu)` non sfora la
+  banda;
+- `qu` resta un **raro** a tutti gli effetti (conta in `rareRate`), coerente con
+  il suo effetto sul gioco (poche parole con `qu`).
+
+Rischio: cambiare `ALE_VOWEL_TOKENS` cambia la banda effettiva di un po' di
+griglie → i confini delle fasce cambiano → **va rifatta la calibrazione** (come
+per ogni rail). È un cambio piccolo ma va messo nello stesso passo della
+presenza, non dopo.
+
+### 4.3 Cap proporzionale (obiettivo B) — misurato: da solo non cambia nulla
+
+Dati reali (5000 griglie valide per dimensione, campione con i rail attuali):
+
+| dim | 0 rare | 1 | 2 | 3 | media | max osservato |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4×4 | 76,7% | 20,6% | 2,6% | 0,1% | **0,26** | 3 |
+| 5×5 | 65,8% | 27,7% | 5,7% | 0,8% | **0,42** | 3 |
+| 6×6 | 52,2% | 34,4% | 11,1% | 2,3% | **0,63** | 3 |
+
+Con `rareCap(size) = clamp(round(rareRate·cells), min, max)` e `rareRate = 0.10`:
+
+| dim | celle | cap OGGI | cap proposto | quota oggi | quota proposta |
+| --- | --- | --- | --- | --- | --- |
+| 4×4 | 16 | 3 | **2** | 18,8% | 12,5% |
+| 5×5 | 25 | 3 | **3** | 12,0% | 12,0% |
+| 6×6 | 36 | 3 | **4** | 8,3% | 11,1% |
+
+**Il cap attuale non morde mai** (max osservato = 3, raggiunto nello 0,1–2,3% dei
+casi). Quindi il cap proporzionale, **da solo, è un no-op comportamentale**: serve
+solo a dare una semantica uniforme. Diventa rilevante **solo dopo aver alzato la
+presenza** (`pMin`/iniezione): a quel punto i conteggi si avvicinano al cap e il
+valore proporzionale decide quante rare si vedono davvero. Va quindi tarato
+**insieme** al floor, non prima.
+
+### 4.4 Presenza: le tre leve e quando usarle
+
+| leva | garanzia | costo | quando |
+| --- | --- | --- | --- |
+| **floored probability** (`tokenFloor`) | morbida (più probabile, non certo) | ~0 (cambia i pesi) | default per `qu`/`h`/`z` |
+| **bias posizionale** (`hNearCG`) | morbida, ma quasi tutte valide | medio (campionamento in ordine) | `h` |
+| **iniezione** (`presence`) | dura (≥ N) | basso, ma sacrifica una cella | quando serve la garanzia |
+
+### 4.5 Numeri indicativi per i floor (da tarare)
+
+Dati misurati (campionamento naturale, validi):
+
+| token | peso normalizzato (prob. cella) | celle attese 4×4 / 6×6 | P(≥1) 4×4 / 6×6 (osservata) |
+| --- | --- | --- | --- |
+| `z` | 1,29% | 0,21 / 0,46 | 17,9% / 37,1% |
+| `h` | 0,93% | 0,15 / 0,33 | 4,2% / 11,1% |
+| `qu` | **0,18%** | 0,029 / 0,065 | **2,5% / 5,9%** |
+
+Per portare `qu` al 50% delle griglie: su 4×4 serve una prob. cella ≈
+`1 − 0,5^(1/16)` ≈ **4,2%** (≈23× il naturale); su 6×6 ≈ **1,9%**. Ecco perché
+il floor va **per dimensione o comunque alto**.
+
+Proposta di floor **per difficoltà** (da validare con una run di misura):
+
+| fascia | `pMin(qu)` | `pMin(h)` | `pMin(z)` | note |
+| --- | --- | --- | --- | --- |
+| facile | 0 | 0,5% | 0 | poche rare, come oggi |
+| normale | 1,5% | 2% | 0 | qualche `qu`/`h` |
+| difficile | 4% | 3% | 0 | `qu` garantito in pratica |
+
+Questi floor sono "di campionamento", quindi **non circolari**: `D` si calcola
+dopo, normalmente. È la versione "C" a basso rischio (il gate post-hoc di §4.6
+resta l'alternativa pesante).
+
+### 4.6 Gate per fascia post-hoc (solo se i floor non bastano)
+
+La fascia è un **risultato**, quindi regole "per difficoltà" applicate DOPO
+(dentro `nextAleCandidate`) sono auto-referenziali: se il gate cambia quali
+griglie finiscono in una fascia, i confini k-means calcolati senza gate non
+valgono più. Serve una **calibrazione auto-consistente a due passate**:
+
+1. campione con i rail di generazione (senza gate) → k-means → fasce provvisorie;
+2. applica i gate `byTier` usando le fasce provvisorie, ricalcola range/k-means/bande;
+3. ripeti (2) finché i confini non si muovono (1–2 iterazioni).
+
+Raccomandazione: **implementare prima i floor (4.5)**, che non hanno questo
+problema; usare i gate solo se i floor non danno la separazione voluta.
+
+### 4.7 Tabella indicativa complessiva (da tarare)
+
+| fascia | rare (h+z+qu) | `qu` | `h` | `z` |
+| --- | --- | --- | --- | --- |
+| facile | 0–1 | raro | raro | libero (come oggi) |
+| normale | 1–2 | qualche | qualche | libero |
+| difficile | 2–`rareCap` | frequente | frequente, vicino a c/g | ≥ 1 |
+
+### 4.8 Nuovi campi di `AleGuardRails` (bozza)
 
 ```ts
 export interface AleGuardRails {
   vowels: { min: number; max: number } | null;
 
-  /** Tetto alle celle rare (h+z+qu). Proporzionale al numero di celle. */
-  rareRate: number | null;        // es. 0.10 → 4×4≈2, 5×5≈3, 6×6≈4
-  rareCapMin: number;             // clamp inferiore (es. 1)
-  rareCapMax: number | null;      // clamp superiore opzionale
+  /**
+   * Floor di probabilità per token, in quota di CELLA (non di dizionario).
+   * Sostituisce/aumenta temporaneamente il peso di campionamento.
+   * Es. { qu: 0.02, h: 0.03, z: 0.02 }.
+   */
+  tokenFloor: Partial<Record<'qu' | 'h' | 'z', number>> | null;
 
-  /** Presenza minima (difficulty-blind, vale per tutte le fasce). */
+  /** Se true, la `h` sale di peso solo vicino a c/g (bias posizionale). */
+  hNearCG: boolean;
+
+  /**
+   * Presenza garantita via iniezione (dopo il campionamento), indipendente
+   * dalla difficoltà. `null` = nessuna garanzia dura.
+   */
   presence: { qu?: number; h?: number; z?: number } | null;
 
-  /** Probabilità di forzare una coppia h+q (stile full), difficulty-blind. */
-  hqChance: number | null;
+  /** Tetto alle celle rare (h+z+qu), proporzionale al numero di celle. */
+  rareRate: number | null;
+  rareCapMin: number;
+  rareCapMax: number | null;
 
   structure: boolean;
   noUncoveredLines: boolean;
   anchorMinLength: Record<GridSize, number> | null;
 
-  /** Override per fascia, applicati DOPO l'assegnazione naturale della fascia. */
+  /** Override per fascia applicati DOPO la fascia naturale (solo se serve, §4.6). */
   byTier?: Record<Difficulty, {
-    rareRange?: { min: number; max: number };  // celle rare totali
+    tokenFloor?: Partial<Record<'qu' | 'h' | 'z', number>>;
     presence?: { qu?: number; h?: number; z?: number };
+    rareRange?: { min: number; max: number };
   }> | null;
 }
 ```
 
-### 4.2 Cap proporzionale (obiettivo B)
-
-```ts
-rareCap(size) = clamp(round(rareRate * size * size), rareCapMin, rareCapMax)
-```
-
-- Risolve l'incoerenza attuale: **3 celle** = 18,8% su 4×4, 8,3% su 6×6.
-- Con `rareRate = 0.10`: 4×4→2, 5×5→3 (2,5 arrotondato), 6×6→4.
-- È lo stesso principio di `rareMax` del full (quota), ma su `h+z+qu`.
-- Da tarare sui dati: misurare la distribuzione attuale di `h+z+qu` per
-  dimensione e scegliere `rareRate`/clamp per **non** cambiare troppo le griglie
-  già buone.
-
-### 4.3 Presenza minima / `hqChance` (obiettivo A)
-
-Due leve complementari:
-
-- **`hqChance`** (probabilistico, come il full): con probabilità `p` la griglia
-  deve contenere una `qu` (e/o una `h`). Implementazione: se assente dopo il
-  campionamento, **iniezione** di `qu` (+ eventuale `c`/`g` per la `h`).
-- **`presence`** (deterministico): minimi `qu?`, `h?`, `z?` sempre richiesti.
-
-Pseudo-codice dentro `generateAleGrid` (dopo il campionamento, prima della
-struttura):
-
-```
-tokens = sampleTokens(...)
-if (rng() < hqChance && !tokens.includes('qu')) injectQu(tokens)
-if (presence?.qu && count(tokens,'qu') < presence.qu) injectQu(tokens, ...)
-if (presence?.h  && count(tokens,'h')  < presence.h)  injectH(tokens) // + c/g
-if (presence?.z  && count(tokens,'z')  < presence.z)  injectZ(tokens)
-// poi: rail vocali (ricalcolato), rareCap proporzionale, struttura, copertura, ancora
-```
-
-`injectQu`/`injectH` scelgono celle a basso costo (non vocali, non rare) usando
-l'rng, e ricalcolano i contatori. Se non c'è spazio, il candidato si scarta.
-
-**Decisione su `qu`**: propongo di **contarlo solo come raro** per la banda
-vocali (oggi è anche vocale). Altrimenti forzare `qu` rischia di sforare il 60% di
-vocali su griglie piccole. In alternativa, banda vocali leggermente allargata.
-
-### 4.4 Dipendenza dalla difficoltà (obiettivo C) — il punto critico
-
-La fascia è un **risultato**, quindi distinguo due famiglie:
-
-- **(C1) Vincoli di composizione decisi prima** (token/celle). Possono dipendere
-  dalla difficoltà solo se questa è un **target** in ingresso. Ma la generazione
-  attuale è a tre secchi, senza target: si assegna la fascia naturale. Imporre
-  composizioni diverse per fascia **non separa `D`** (misurato: `corr(#rare, D)`
-  ≈ −0,11…−0,18). Quindi C1 da solo non basta.
-- **(C2) Gate applicati DOPO l'assegnazione naturale**, dentro `nextAleCandidate`:
-  dopo aver calcolato `D` e la fascia, si accetta il candidato solo se rispetta
-  il vincolo di quella fascia (`byTier.rareRange`/`presence`).
-
-**Circolarità (C2)**: se il gate cambia quali griglie finiscono in una fascia, la
-distribuzione di `D` di quella fascia cambia → i confini k-means calcolati senza
-gate non valgono più. Serve una **calibrazione auto-consistente** a due passate:
-
-1. **Passata 1**: campione con i rail di generazione (senza gate) → k-means →
-   fasce provvisorie.
-2. **Passata 2**: applica i gate `byTier` al campione usando le fasce provvisorie,
-   **ricalcola** range globale / k-means / bande per fascia sui superstiti.
-3. Ripeti (2) finché i confini non si muovono (in pratica 1–2 iterazioni), oppure
-   fissa i gate a un **proxy** stabile e accetta lo scostamento.
-
-Questa logica va implementata in `calibrateAle` (o in una funzione
-`calibrateAleWithTiers`) e usata **identicamente** in calibrazione e produzione,
-pena l'invalidamento della provenance.
-
-**Raccomandazione**: implementare prima A e B (difficulty-blind), che sono
-semplici e non circolari; solo dopo valutare C con la calibrazione a due passate.
-Se C non porta un guadagno misurabile sulla qualità delle schede, tenerla fuori.
-
-### 4.5 Tabella indicativa (da tarare con misure)
-
-| fascia | rare (h+z+qu) | presenza |
-| --- | --- | --- |
-| facile | 0–1 | — |
-| normale | 1–2 | `qu` **oppure** `h` |
-| difficile | 2–4 (dipende dalla dimensione) | `qu` o `h`, preferibilmente una `z` |
-
-Numeri puramente indicativi: vanno scelti dopo aver misurato la distribuzione
-reale e l'effetto su `R`, `M`, parole e ancore.
-
----
 
 ## 5. Piano di implementazione a tappe
 
 Ogni tappa: **cambio rail → test → ricalibrazione 5000 → report → misura**.
 
-1. **Tappa B — cap proporzionale**
-   - `rareRate`/clamp in `AleGuardRails`; `rareCapOf(size)`.
-   - Misurare la distribuzione attuale di `h+z+qu` per dimensione e scegliere i
-     valori; aggiornare `provenance.guardRails`.
-2. **Tappa A — presenza (`hqChance`, `presence`)**
-   - Iniezione deterministica con rng; contesto per la `h`; decisione su `qu`
-     come vocale/raro.
-   - Verifica: quota di schede con `Qu`/`h`/`z` per fascia e dimensione.
-3. **Tappa C — gate per fascia + calibrazione auto-consistente**
-   - `byTier` in `nextAleCandidate` (dopo la fascia naturale) e in `calibrateAle`
-     (due passate). Solo se A+B non bastano.
-4. **Chiusura**: `report:ale` aggiornato (presence per fascia, rare per fascia),
-   docs (`docs/algoritmi/ale.md`, `report/ale.md`, implementazione), changelog,
-   test.
+1. **Tappa 0 — `qu` fuori dalla banda vocali** (§4.2)
+   - `ALE_VOWEL_TOKENS = {a,e,i,o,u}`; test aggiornati; misura della deriva delle
+     bande. È il prerequisito dei floor su `qu`.
+2. **Tappa 1 — floor di probabilità (`tokenFloor`, `hNearCG`)** (§4.0, §4.4)
+   - Pesi per token con floor, per dimensione; bias `h` vicino a `c`/`g`.
+   - Verifica: quota di schede con `Qu`/`h`/`z` per dimensione (senza difficoltà).
+3. **Tappa 2 — floor per difficoltà** (§4.5)
+   - `byTier.tokenFloor`: nessuna circolarità (agisce al campionamento). È la
+     versione leggera della dipendenza dalla difficoltà.
+4. **Tappa 3 — cap proporzionale** (§4.3)
+   - `rareRate`/clamp; da tarare **dopo** i floor, quando il cap inizia a mordere.
+5. **Tappa 4 — iniezione/presenza dura** (§4.1, §4.4) — solo se i floor non
+   bastano a garantire `Qu`/`h` sulla fascia difficile.
+6. **Tappa 5 — gate per fascia post-hoc** (§4.6) — solo se serve separare la
+   difficoltà per composizione; richiede la calibrazione a due passate.
+7. **Chiusura**: `report:ale` aggiornato (presence per fascia, rare per fascia),
+   docs (`docs/algoritmi/ale.md`, `report/ale.md`, questo piano), changelog, test.
 
 ---
 
