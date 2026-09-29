@@ -9,40 +9,38 @@ const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
 });
 
 describe('scoring', () => {
-  it('assegna 1 punto per 3 lettere, poi 1 per lettera in più', () => {
+  it('segue la scala Boggle classica a soglie', () => {
     expect(scoreForWord('ab')).toBe(0); // sotto il minimo
-    // Regola Boggle: lunghezza − 2.
-    expect(scoreForWord('abc')).toBe(1);
-    expect(scoreForWord('abcd')).toBe(2);
-    expect(scoreForWord('abcde')).toBe(3);
-    expect(scoreForWord('abcdef')).toBe(4);
-    expect(scoreForWord('abcdefg')).toBe(5);
-    expect(scoreForWord('abcdefgh')).toBe(6);
-    expect(scoreForWord('abcdefghi')).toBe(7);
-    expect(scoreForWord('abcdefghij')).toBe(8);
-    expect(scoreForWord('abcdefghijklmnop')).toBe(14);
+    expect(scoreForWord('abc')).toBe(1); // 3 lettere
+    expect(scoreForWord('abcd')).toBe(1); // 4 lettere
+    expect(scoreForWord('abcde')).toBe(2); // 5
+    expect(scoreForWord('abcdef')).toBe(3); // 6
+    expect(scoreForWord('abcdefg')).toBe(5); // 7
+    expect(scoreForWord('abcdefgh')).toBe(11); // 8
+    expect(scoreForWord('abcdefghi')).toBe(11); // 9
+    expect(scoreForWord('abcdefghij')).toBe(11); // 10
+    expect(scoreForWord('abcdefghijklmnop')).toBe(11); // 16, tetto
   });
 
   it('le parole lunghe valgono molto più delle corte', () => {
-    // Il motivo della formula: con una piatta (⌊len/3⌋) una parola da 9 lettere
-    // valeva 3 punti, come tre parole da 3. Ora ne vale 7.
-    const nove = scoreForWord('abcdefghi');
+    // Il senso della scala classica: la parola da 8+ vale 11 volte una da 3.
+    const lunga = scoreForWord('abcdefgh');
     const tre = scoreForWord('abc');
-    expect(nove).toBe(7);
-    expect(nove / tre).toBe(7);
-    // La crescita è lineare: ogni lettera in più vale 1 punto.
-    for (let len = 4; len <= 15; len++) {
-      expect(scoreForWord('x'.repeat(len)) - scoreForWord('x'.repeat(len - 1))).toBe(1);
+    expect(lunga).toBe(11);
+    expect(lunga / tre).toBe(11);
+    // Da 8 lettere in su il tetto resta 11: non cresce più con la lunghezza.
+    for (let len = 8; len <= 16; len++) {
+      expect(scoreForWord('x'.repeat(len))).toBe(11);
     }
   });
 
   it('raddoppia i punti per una parola trovata da un solo giocatore', () => {
-    // 'casa' = 4 lettere → 2 punti, doppio = 4.
-    expect(scoreForRound('casa')).toBe(2);
-    expect(scoreForRound('casa', { unique: true })).toBe(4);
-    // 'strada' = 6 lettere → 4 punti, doppio = 8.
-    expect(scoreForRound('strada')).toBe(4);
-    expect(scoreForRound('strada', { unique: true })).toBe(8);
+    // 'casa' = 4 lettere → 1 punto, doppio = 2.
+    expect(scoreForRound('casa')).toBe(1);
+    expect(scoreForRound('casa', { unique: true })).toBe(2);
+    // 'strada' = 6 lettere → 3 punti, doppio = 6.
+    expect(scoreForRound('strada')).toBe(3);
+    expect(scoreForRound('strada', { unique: true })).toBe(6);
   });
   it('normalizza accenti e simboli', () => {
     expect(normalizeWord('Perché')).toBe('perche');

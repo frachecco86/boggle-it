@@ -32,17 +32,20 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   /*
-   * I punti sono DERIVATI da `scoreForWord`, non scritti a mano: se la formula
+   * I punti sono DERIVATI da `scoreForWord`, non scritti a mano: se la scala
    * cambia, il pannello si aggiorna da solo. Scriverli a mano è il modo sicuro
    * per farli divergere dal gioco (è già successo con la validazione difficoltà).
+   *
+   * Da 8 lettere in su la scala classica ha un tetto unico (11 punti), quindi
+   * l'ultima riga è "8 o più" invece di elencare 8, 9, 10 identici.
    */
-  const rows = Array.from({ length: 8 }, (_, i) => {
-    const length = i + 3; // da 3 a 10
-    return {
-      label: length === 10 ? '10 o più' : `${length} lettere`,
+  const rows = [
+    ...[3, 4, 5, 6, 7].map((length) => ({
+      label: `${length} lettere`,
       points: scoreForWord('x'.repeat(length)),
-    };
-  });
+    })),
+    { label: '8 o più', points: scoreForWord('x'.repeat(8)) },
+  ];
 
   /*
    * Escape chiude. È il gesto atteso da un pannello sovrapposto, e senza questo
@@ -146,14 +149,13 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
                     <span className="rules__row-label">{r.label}</span>
                     <span className="rules__row-dots" aria-hidden />
                     <span className="rules__row-points">
-                      {r.label === '10 o più' ? `${r.points}+` : r.points}{' '}
-                      {r.points === 1 ? 'punto' : 'punti'}
+                      {r.points} {r.points === 1 ? 'punto' : 'punti'}
                     </span>
                   </div>
                 ))}
                 <p className="rules__note">
-                  Più lunga è la parola, più vale: una da 9 lettere vale{' '}
-                  <strong>7 volte</strong> una da 3.
+                  Più lunga è la parola, più vale: una da 8 lettere vale{' '}
+                  <strong>11 volte</strong> una da 3.
                 </p>
               </div>
 
@@ -166,8 +168,8 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
                     normali.
                   </p>
                   <p className="rules__how-line rules__example">
-                    Esempio: <em>strada</em> (6 lettere) → <strong>4 punti</strong>, oppure{' '}
-                    <strong>8</strong> se la trovi solo tu.
+                    Esempio: <em>strada</em> (6 lettere) → <strong>3 punti</strong>, oppure{' '}
+                    <strong>6</strong> se la trovi solo tu.
                   </p>
                 </div>
               )}

@@ -325,8 +325,8 @@ describe('catalogo parole', () => {
     expect(casa).toBeDefined();
     expect(casa!.occurrences).toBe(2);
     expect(casa!.length).toBe(4);
-    // Punteggio = lunghezza - 2.
-    expect(casa!.points).toBe(2);
+    // Punteggio = scala Boggle classica (4 lettere → 1).
+    expect(casa!.points).toBe(1);
   });
 
   it('filtra per dimensione e difficoltà', () => {

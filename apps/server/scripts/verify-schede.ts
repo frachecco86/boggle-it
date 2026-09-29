@@ -30,6 +30,7 @@ import {
   SCHEDA_CRITERIA,
   schedaFileName,
   schedaVariantOf,
+  schedaWordPoints,
   SCHEDA_VARIANT_LABELS,
   SPECS,
   gridStructureIssues,
@@ -155,7 +156,7 @@ function checkScheda(
   let anchors = 0;
   let totalLength = 0;
   for (const w of accepted) {
-    score += w.length - 2;
+    score += schedaWordPoints(w.length);
     if (w.length > longest) longest = w.length;
     if (anchor && w.length >= anchor.length) anchors++;
     totalLength += w.length;

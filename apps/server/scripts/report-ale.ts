@@ -24,6 +24,7 @@ import {
   richnessFor,
   sampleAleBoards,
   schedaFileName,
+  scoreForWord,
   tierForDifficulty,
   type AleBoardStats,
   type AleCalibration,
@@ -288,7 +289,7 @@ function reportForSize(
     const rarities = words.map((w) => aleRarityRings(w, rings).rarity);
     const diffs = schede.map((s, i) => {
       const wc = wordCounts[i]!;
-      const score = words[i]!.reduce((a, w) => a + Math.max(0, w.length - 2), 0);
+      const score = words[i]!.reduce((a, w) => a + scoreForWord(w), 0);
       return compositeDifficulty(rarities[i]!, wc, score);
     });
     const inBand = schede.filter((s, i) => {

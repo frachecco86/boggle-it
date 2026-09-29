@@ -59,8 +59,9 @@ pipeline ale.**
 
 ### 1.3 Ricchezza `M` e difficoltà `D` (invariate come formule)
 
-- `M = 1 − wordCount / score`, con `score = Σ (lunghezza − 2)`; `M = 0` se
-  `score ≤ 0`.
+- `M = 1 − wordCount / score`, con `score = Σ punti(parola)` secondo la
+  **scala Boggle classica** (`scoreForWord`: 3–4 → 1, 5 → 2, 6 → 3, 7 → 5,
+  8+ → 11); `M = 0` se `score ≤ 0`.
 - `D = 0.5·R + 0.5·M` con `ALE_DIFFICULTY_WEIGHTS = { rarity: 0.5, richness: 0.5 }`
   (invariati).
 
@@ -497,7 +498,9 @@ export interface AleInputs {
 - Alfabeto di 26 token con `QU` unico e campionamento per frequenza dei token.
 - Guard rails esistenti (vocali 30–60%, ≤3 rari, copertura righe/colonne).
 - Intervallo globale di parole: Tukey + ρ=0,35 su 2000 campioni, seed 1.
-- Punteggio `lunghezza − 2`, pesi di D (0,5/0,5), ρ (0,35).
+- Pesi di D (0,5/0,5), ρ (0,35).
+- La **scala dei punteggi** è cambiata in un ramo separato (`nonlinear-score`):
+  questo documento descrive l'evoluzione `ale`, non la scala.
 - Endpoint HTTP, protocollo Socket.IO, client (tranne changelog).
 - `words` nel riepilogo resta uguale ad `allWords` anche per ale (l'idea B del
   brainstorming — riepilogo con sole parole attese — **non** è in questo

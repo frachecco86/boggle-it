@@ -116,11 +116,11 @@ describe('generatore schede', () => {
     expect(wordFromPath(grid, [0, 1])).toBe('qua');
   });
 
-  it('scoreForWord cresce di 1 punto per lettera anche oltre le 8', () => {
-    // 'cassaforte' = 10 lettere → 8 punti (lunghezza − 2).
-    expect(scoreForWord('cassaforte')).toBe(8);
-    // 16 lettere → 14 punti.
-    expect(scoreForWord('x'.repeat(16))).toBe(14);
+  it('scoreForWord usa la scala Boggle classica anche oltre le 8 (tetto 11)', () => {
+    // 'cassaforte' = 10 lettere → 11 punti (8+).
+    expect(scoreForWord('cassaforte')).toBe(11);
+    // 16 lettere → sempre 11.
+    expect(scoreForWord('x'.repeat(16))).toBe(11);
   });
 });
 

@@ -1,20 +1,22 @@
 /**
- * Punteggio Boggle: 1 punto per una parola di 3 lettere, poi un punto in più per
- * ogni lettera aggiuntiva.
+ * Punteggio Boggle CLASSICO (scala non lineare a soglie).
  *
- * Formula: lunghezza − 2
- *   3 lettere  → 1 punto
- *   4          → 2
- *   5          → 3
- *   6          → 4
- *   7          → 5
- *   8          → 6
- *   9          → 7
- *   10         → 8
+ * Tabella:
+ *   3 lettere   → 1 punto
+ *   4 lettere   → 1 punto
+ *   5 lettere   → 2 punti
+ *   6 lettere   → 3 punti
+ *   7 lettere   → 5 punti
+ *   8 o più     → 11 punti
  *
- * Perché non una formula più piatta: con ⌊lunghezza/3⌋ una parola da 9 lettere
- * valeva solo 3 punti, come tre parole da 3 lettere, pur essendo molto più
- * difficile da trovare. Le parole lunghe vanno premiate: sono il cuore del gioco.
+ * PERCHÉ a soglie: la parola lunga è il momento memorabile del gioco e deve
+ * pesare molto più di due parole corte. La scala lineare `lunghezza − 2`
+ * premiava troppo poco le parole da 8+ (una da 8 valeva 6 punti, meno di tre
+ * parole da 4). La tabella è quella classica del Boggle ed è riconoscibile da
+ * chi ha già giocato: nessuna regola da imparare.
+ *
+ * Da 8 lettere in su i punti NON crescono più (9, 10, 13 valgono tutte 11):
+ * è il tetto della scala classica.
  *
  * Nel multiplayer una parola trovata da UN SOLO giocatore vale doppio (vedi
  * `scoreForRound`).
@@ -23,10 +25,18 @@ export const MIN_WORD_LENGTH = 3;
 export const MAX_WORD_LENGTH = 16;
 
 /** Punti base per una parola di data lunghezza (0 se non valida). */
+export function scoreForLength(length: number): number {
+  if (length < MIN_WORD_LENGTH) return 0;
+  if (length <= 4) return 1;
+  if (length === 5) return 2;
+  if (length === 6) return 3;
+  if (length === 7) return 5;
+  return 11; // 8 o più
+}
+
+/** Punti base per una parola di data lunghezza (0 se non valida). */
 export function scoreForWord(word: string): number {
-  const len = word.length;
-  if (len < MIN_WORD_LENGTH) return 0;
-  return len - 2;
+  return scoreForLength(word.length);
 }
 
 /**
