@@ -1,5 +1,10 @@
 # Integrazione delle lettere rare su `ale-full` (score lineare)
 
+> **SUPERATO.** Documento storico del lavoro sulle rare (PR #1). Lo score non è
+> più lineare: la scala è ora la **Boggle classica** (`0.41.0`, PR #2) e il
+> catalogo è stato rigenerato con entrambe le modifiche. I numeri aggiornati
+> stanno in [`ale.md`](./ale.md).
+
 > Piano operativo per portare le modifiche di `rare-letters` sul branch `ale-full`
 > **senza cambiare il metodo di calcolo dello score** (lineare, `lunghezza − 2`).
 > Nessuna modifica al codice in questo documento.

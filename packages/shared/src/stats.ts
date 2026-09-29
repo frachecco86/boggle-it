@@ -10,6 +10,7 @@
  * punteggio, parole trovate, difficoltà, dimensione e data.
  */
 import type { Difficulty } from './difficulty.js';
+import { scoreForLength } from './scoring.js';
 import type { GridSize } from './types.js';
 
 /** Modalità di gioco che generano una partita classificabile. */
@@ -252,7 +253,7 @@ export interface WordCatalogEntry {
   length: number;
   /** Numero di schede in cui la parola è componibile. */
   occurrences: number;
-  /** Punteggio che vale (lunghezza - 2, come nel Boggle). */
+  /** Punteggio che vale (scala Boggle classica, vedi `scoreForLength`). */
   points: number;
   /**
    * Categoria grammaticale abbreviata (`sost`, `verb`, `agg`, …) da Morph-it o
@@ -372,7 +373,7 @@ export interface SchedaStats {
   gamesPlayed: number;
 }
 
-/** Punteggio di una parola: 1 punto per 3 lettere, poi 1 per lettera in più. */
+/** Punteggio di una parola: scala Boggle classica (vedi `scoreForLength`). */
 export function schedaWordPoints(length: number): number {
-  return Math.max(0, length - 2);
+  return scoreForLength(length);
 }

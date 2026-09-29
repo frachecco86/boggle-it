@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.40.0';
+export const APP_VERSION = '0.41.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -48,6 +48,34 @@ export interface ReleasePromo {
  */
 export const RELEASES: ReleaseEntry[] = [
   {
+    version: '0.41.0',
+    date: '2026-09-29',
+    title: 'Punteggio Boggle classico: le parole lunghe valgono davvero di più',
+    promo: {
+      emoji: '🧮',
+      headline: 'Punteggi come nel Boggle classico',
+      text: 'La scala dei punteggi era lineare: una parola da 8 lettere valeva 6 punti, meno di tre parole da 4. Ora è la scala classica del Boggle — 3 e 4 lettere valgono 1 punto, 5 ne valgono 2, 6 ne valgono 3, 7 ne valgono 5 e da 8 lettere in su ne valgono 11 — così la parola lunga è il momento che decide la partita.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Nuova scala dei punteggi (Boggle classico).** 3–4 lettere → **1 punto**, 5 → **2**, 6 → **3**, 7 → **5**, 8 o più → **11**. La scala lineare di prima (`lunghezza − 2`) premiava troppo poco le parole lunghe; da 8 lettere in su i punti non crescono più, come nel Boggle originale.',
+          'Le **Regole e punteggi** nel gioco mostrano la nuova tabella (sono derivate dal codice, quindi non possono restare indietro).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La scala vive in **un solo punto** (`scoreForWord` in `packages/shared/src/scoring.ts`); `stats.ts` (`schedaWordPoints`) e la difficoltà delle schede Ale (`schedaAle.ts`) la riusano invece di duplicare la formula. Cambiarla ora aggiorna gioco, statistiche e calibrazione insieme.',
+          '**Le schede Ale sono state ricalibrate e rigenerate**: la difficoltà usa il punteggio nella metrica di ricchezza `M`, quindi la vecchia calibrazione non valeva più. Campione di calibrazione portato a **5000 griglie** per dimensione.',
+          'I **record delle partite già giocate restano quelli salvati** (calcolati con la scala precedente): non vengono riscritti. Il punteggio massimo e la distribuzione per lunghezza delle schede usano invece la nuova scala.',
+        ],
+      },
+    ],
+  },
+
+  {
     version: '0.40.0',
     date: '2026-09-29',
     title: 'Schede Ale: le lettere rare ora compaiono, e di più su difficile',
@@ -77,7 +105,6 @@ export const RELEASES: ReleaseEntry[] = [
       },
     ],
   },
-
   {
     version: '0.39.0',
     date: '2026-09-29',

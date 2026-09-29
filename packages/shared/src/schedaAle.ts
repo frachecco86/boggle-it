@@ -30,6 +30,7 @@ import type { Difficulty } from './difficulty.js';
 import { DIFFICULTY_ORDER } from './difficulty.js';
 import { FOREIGN_LETTERS, gridStructureIssues } from './grid.js';
 import { gridToRows, type Scheda } from './scheda.js';
+import { scoreForWord } from './scoring.js';
 import { solveGrid, solveGridCoverage, type TrieNode } from './solver.js';
 import type { Grid, GridSize, Tile } from './types.js';
 
@@ -694,16 +695,12 @@ export function compositeDifficulty(
   return weights.rarity * rarity + weights.richness * richnessFor(wordCount, score);
 }
 
-/** Punteggio Boggle: `lunghezza − 2` (QU conta due lettere). */
-function pointsFor(word: string): number {
-  return Math.max(0, word.length - 2);
-}
-
 /**
  * Risolve la griglia e calcola le metriche della spec (§4.1).
  *
  * La rarità `R` è quella ad anelli di frequenza (`aleRarityRings`): `rings` è
- * obbligatorio nel terzo argomento.
+ * obbligatorio nel terzo argomento. Il punteggio usa la scala Boggle classica
+ * condivisa (`scoreForWord`), così la ricchezza `M` resta allineata al gioco.
  */
 export function scoreAleBoard(
   grid: Grid,
@@ -718,7 +715,7 @@ export function scoreAleBoard(
   let score = 0;
   let longest = 0;
   for (const w of words) {
-    score += pointsFor(w);
+    score += scoreForWord(w);
     if (w.length > longest) longest = w.length;
   }
   return { words, wordCount: words.length, ringCounts, rarity, score, longest };

@@ -1,5 +1,9 @@
 # Piano — vincoli sulle lettere rare nell'algoritmo `ale`
 
+> **SUPERATO.** Documento storico del lavoro sulle rare (PR #1): i vincoli qui
+> descritti sono implementati, ma lo score non è più lineare (scala Boggle
+> classica, PR #2). Numeri e bande aggiornati: [`ale.md`](./ale.md).
+>
 > Stato: **revisione 2 (proposta semplice, autoritativa)**. Sostituisce la rev. 1
 > (esplorativa: iniezione, cap proporzionale, floor per fascia, calibrazione a due
 > passate), conservata solo come storico nelle note a fondo pagina.

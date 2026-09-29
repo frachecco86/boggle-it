@@ -1,5 +1,9 @@
 # Scala dei punteggi — alternative a confronto
 
+> **STATO: adottata la scala del task** (Boggle classico, 8+ = 11).
+> Implementata sul ramo `nonlinear-score`; le schede Ale sono state ricalibrate
+> (5000 griglie per dimensione) perché la difficoltà usa il punteggio.
+
 Documento di lavoro per la modifica *"cambia la scala dei punteggi. Non lineare"*
 (Todoist `6hf9pCch3GxgCx8v`), che chiede esplicitamente **di proporre alternative**
 prima di sceglierne una.

@@ -27,9 +27,8 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
   di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
   parole per Facile / Normale / Difficile). Le lettere rare restano più frequenti nei livelli alti,
   ma come mezzo, non come criterio.
-- **Punteggio Boggle adattato**: **1 punto per una parola di 3 lettere, poi un punto in più per
-  ogni lettera** (lunghezza − 2; una parola da 10 lettere vale 8 punti). In multiplayer una
-  parola trovata da **un solo giocatore vale doppio**.
+- **Punteggio Boggle classico**: **3–4 lettere → 1 punto, 5 → 2, 6 → 3, 7 → 5,
+  8 o più → 11**. In multiplayer una parola trovata da **un solo giocatore vale doppio**.
 - **Catalogo schede in home**: numero totale sempre visibile; **pannello admin** con token per
   generarne di nuove e per decidere il **tipo di scheda di default** (Standard / Full criteria /
   Ale) valido per tutti i giocatori; la **pagina scheda** con la griglia e tutte le parole

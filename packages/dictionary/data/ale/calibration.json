@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T10:04:03.420Z",
+  "generatedAt": "2026-09-29T10:21:58.280Z",
   "seed": 1,
   "guardRails": {
     "vowels": {
@@ -32,44 +32,44 @@
   "bySize": {
     "4": {
       "wordRange": {
-        "lo": 60,
-        "hi": 166
+        "lo": 63,
+        "hi": 169
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.578874013354028,
+          "targetDifficulty": 0.48743787600397565,
           "range": {
             "min": 0,
-            "max": 0.6049798603742935
+            "max": 0.5246374553929262
           },
           "wordRange": {
-            "lo": 62,
-            "hi": 100
+            "lo": 65,
+            "hi": 107
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6310857073945592,
+          "targetDifficulty": 0.5618370347818767,
           "range": {
-            "min": 0.6049798603742935,
-            "max": 0.6548599230879675
+            "min": 0.5246374553929262,
+            "max": 0.5973080373785464
           },
           "wordRange": {
-            "lo": 77,
-            "hi": 135
+            "lo": 80,
+            "hi": 139
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.6786341387813758,
+          "targetDifficulty": 0.632779039975216,
           "range": {
-            "min": 0.6548599230879675,
+            "min": 0.5973080373785464,
             "max": 1
           },
           "wordRange": {
-            "lo": 93,
-            "hi": 155
+            "lo": 100,
+            "hi": 157
           }
         }
       ],
@@ -103,7 +103,7 @@
             "6": 8
           }
         },
-        "dictSize": 368098,
+        "dictSize": 368210,
         "rings": {
           "easy": 5000,
           "medium": 20000
@@ -111,10 +111,10 @@
         "metric": "rings-v1",
         "wordCount": {
           "min": 16,
-          "q1": 78,
-          "median": 111,
-          "q3": 154,
-          "max": 492
+          "q1": 81,
+          "median": 114,
+          "q3": 157,
+          "max": 498
         },
         "rho": 0.35,
         "weights": {
@@ -127,44 +127,44 @@
     },
     "5": {
       "wordRange": {
-        "lo": 148,
-        "hi": 365
+        "lo": 152,
+        "hi": 372
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.639155524590718,
+          "targetDifficulty": 0.5757971504135828,
           "range": {
             "min": 0,
-            "max": 0.6588617148335973
+            "max": 0.6062507491794492
           },
           "wordRange": {
-            "lo": 154,
-            "hi": 229
+            "lo": 159,
+            "hi": 234
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6785679050764766,
+          "targetDifficulty": 0.6367043479453156,
           "range": {
-            "min": 0.6588617148335973,
-            "max": 0.6961742551112216
+            "min": 0.6062507491794492,
+            "max": 0.664297778148971
           },
           "wordRange": {
-            "lo": 186,
-            "hi": 305
+            "lo": 190,
+            "hi": 309
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7137806051459665,
+          "targetDifficulty": 0.6918912083526262,
           "range": {
-            "min": 0.6961742551112216,
+            "min": 0.664297778148971,
             "max": 1
           },
           "wordRange": {
-            "lo": 230,
-            "hi": 343
+            "lo": 236,
+            "hi": 352
           }
         }
       ],
@@ -198,18 +198,18 @@
             "6": 8
           }
         },
-        "dictSize": 368098,
+        "dictSize": 368210,
         "rings": {
           "easy": 5000,
           "medium": 20000
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 28,
-          "q1": 185,
-          "median": 254,
-          "q3": 340,
-          "max": 1100
+          "min": 32,
+          "q1": 190,
+          "median": 259,
+          "q3": 347,
+          "max": 1117
         },
         "rho": 0.35,
         "weights": {
@@ -222,44 +222,44 @@
     },
     "6": {
       "wordRange": {
-        "lo": 287,
-        "hi": 637
+        "lo": 294,
+        "hi": 647
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.6729410304816767,
+          "targetDifficulty": 0.6304850864741512,
           "range": {
             "min": 0,
-            "max": 0.6888124166967424
+            "max": 0.6554766746484593
           },
           "wordRange": {
-            "lo": 300,
-            "hi": 425
+            "lo": 308,
+            "hi": 431
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.7046838029118082,
+          "targetDifficulty": 0.6804682628227674,
           "range": {
-            "min": 0.6888124166967424,
-            "max": 0.7197824763265281
+            "min": 0.6554766746484593,
+            "max": 0.7031770889217333
           },
           "wordRange": {
-            "lo": 349,
-            "hi": 535
+            "lo": 352,
+            "hi": 541
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7348811497412481,
+          "targetDifficulty": 0.7258859150206992,
           "range": {
-            "min": 0.7197824763265281,
+            "min": 0.7031770889217333,
             "max": 1
           },
           "wordRange": {
-            "lo": 421,
-            "hi": 608
+            "lo": 430,
+            "hi": 617
           }
         }
       ],
@@ -293,18 +293,18 @@
             "6": 8
           }
         },
-        "dictSize": 368098,
+        "dictSize": 368210,
         "rings": {
           "easy": 5000,
           "medium": 20000
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 87,
-          "q1": 347,
-          "median": 456.5,
-          "q3": 597.25,
-          "max": 1947
+          "min": 91,
+          "q1": 355,
+          "median": 465,
+          "q3": 607,
+          "max": 1961
         },
         "rho": 0.35,
         "weights": {
