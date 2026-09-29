@@ -32,9 +32,15 @@ ai deploy:
 |---|---|
 | `/app/data/boggle.db` | profili: utente, foto, clip audio |
 | `/app/data/schede-extra/` | schede generate dall'admin |
+| `/app/data/schede-ale/` | schede **ale** generate dall'admin a runtime |
 
 **Serve UN SOLO volume**, perché le schede dell'admin stanno dentro `DATA_DIR`.
 I PaaS (Railway) consentono un volume per servizio: così non ne servono due.
+
+Le schede ale a runtime **non sono in git** e non seguono gli aggiornamenti del
+codice: quando cambia la calibrazione o la scala punteggi vanno svuotate e
+rigenerate (procedura e script in
+[ALE-RUNTIME-SERVER.md](./ALE-RUNTIME-SERVER.md)).
 
 #### Creare il volume su Railway
 

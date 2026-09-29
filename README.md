@@ -175,6 +175,11 @@ per ambito (solo quelle aggiunte, solo le ale, per variante o tutte).
 Quelle nuove vengono salvate in `DATA_DIR/schede-extra/` (standard/full) e `DATA_DIR/schede-ale/`
 (ale) — entrambe non versionate e dentro il volume persistente.
 
+Le ale a runtime **restano ferme alla calibrazione del giorno in cui sono state create**:
+dopo un cambio di calibrazione o della scala punteggi vanno svuotate e rigenerate con il codice
+deployato — `node tools/rigenera-ale-server.mjs` (dry-run di default) e la procedura in
+**[`docs/ALE-RUNTIME-SERVER.md`](docs/ALE-RUNTIME-SERVER.md)**.
+
 ---
 
 ## Comandi
