@@ -61,7 +61,7 @@ export const RELEASES: ReleaseEntry[] = [
         kind: 'feature',
         items: [
           '**Presenza minima di lettere rare per fascia.** Ogni scheda “difficile” ha almeno una tra H, Z e Qu; quelle “facile” ne hanno al più una; “normale” resta libera. La regola si applica dopo la classificazione della difficoltà, quindi non ne sposta i confini.',
-          '**Più “Qu” nelle griglie.** Il campionamento per frequenza rendeva “Qu” quasi assente (0,18% delle celle). Un floor di campionamento la porta allo 0,3% delle celle (una su 333): “Qu” compare ora nello 0–27% delle schede, contro lo 0% di prima, con la massima presenza su difficile.',
+          '**Più “Qu” nelle griglie.** Il campionamento per frequenza rendeva “Qu” quasi assente (0,18% delle celle). Un floor di campionamento la porta allo 0,6% delle celle (una su 167): “Qu” compare ora nello 0–33% delle schede, contro lo 0% di prima, con la massima presenza su difficile.',
           '**Anche “H” compare, sempre accanto a C/G.** La “H” isolata veniva scartata dalla struttura, quindi appariva raramente. Ora è piazzata solo dove serve (accanto a “C”/“G”), alla sua frequenza naturale: compare nello 0–33% delle schede senza gonfiare la lettera.',
         ],
       },
@@ -69,7 +69,7 @@ export const RELEASES: ReleaseEntry[] = [
         kind: 'tech',
         items: [
           '**“Qu” fuori dalla banda vocali**: come nel full, `qu` non conta più come vocale. Libera il floor di “Qu” dal vincolo 30–60% e allinea la regola di struttura.',
-          '**`tokenFloor` in quota di cella**: il floor è una quota di CELLA (non di dizionario), convertita con `w = p·(Σf−f_t)/(1−p)`; usare `p` come peso diretto sarebbe sbagliato di un fattore ~7,5. Oggi `qu: 0.003` (una cella su 333).',
+          '**`tokenFloor` in quota di cella**: il floor è una quota di CELLA (non di dizionario), convertita con `w = p·(Σf−f_t)/(1−p)`; usare `p` come peso diretto sarebbe sbagliato di un fattore ~7,5. Oggi `qu: 0.006` (una cella su 167).',
           '**`rareByTier`** è un filtro di accettazione applicato in `nextAleCandidate` dopo la fascia naturale: non cambia `D` né i confini k-means, quindi la calibrazione resta a una passata. Il tetto `rareCap` resta fisso a 3 (dopo il floor di “Qu” morde davvero).',
           '**`h` posizionale (`hNearCG`, `hBoost = 1`)**: la “H” è esclusa dalla fase 1 del campionamento e poi promossa solo su consonanti comuni adiacenti a “C”/“G”, con probabilità `q = m_h/P` (`m_h` = marginale naturale di cella). Le reiezioni “h senza c/g” scendono a zero e la frequenza aggregata di “H” resta quella naturale.',
           'Calibrazione rifatta su **5000 griglie per dimensione**: k-means k=3 ovunque, **15/15 in banda per ogni fascia, zero ripieghi**, riproduzione 15/15 rispetto al catalogo. Presenza rare per fascia in `docs/algoritmi/report/ale.md`.',

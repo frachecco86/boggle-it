@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T01:53:36.750Z",
+  "generatedAt": "2026-09-29T10:04:03.420Z",
   "seed": 1,
   "guardRails": {
     "vowels": {
@@ -7,7 +7,7 @@
       "max": 0.6
     },
     "tokenFloor": {
-      "qu": 0.003
+      "qu": 0.006
     },
     "rareByTier": {
       "facile": {
@@ -32,44 +32,44 @@
   "bySize": {
     "4": {
       "wordRange": {
-        "lo": 61,
-        "hi": 167
+        "lo": 60,
+        "hi": 166
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.5831910561639131,
+          "targetDifficulty": 0.578874013354028,
           "range": {
             "min": 0,
-            "max": 0.6083182886149309
+            "max": 0.6049798603742935
           },
           "wordRange": {
-            "lo": 64,
-            "hi": 103
+            "lo": 62,
+            "hi": 100
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6334455210659486,
+          "targetDifficulty": 0.6310857073945592,
           "range": {
-            "min": 0.6083182886149309,
-            "max": 0.6564715342790264
+            "min": 0.6049798603742935,
+            "max": 0.6548599230879675
           },
           "wordRange": {
-            "lo": 78,
-            "hi": 136
+            "lo": 77,
+            "hi": 135
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.679497547492104,
+          "targetDifficulty": 0.6786341387813758,
           "range": {
-            "min": 0.6564715342790264,
+            "min": 0.6548599230879675,
             "max": 1
           },
           "wordRange": {
-            "lo": 95,
-            "hi": 156
+            "lo": 93,
+            "hi": 155
           }
         }
       ],
@@ -81,7 +81,7 @@
             "max": 0.6
           },
           "tokenFloor": {
-            "qu": 0.003
+            "qu": 0.006
           },
           "rareByTier": {
             "facile": {
@@ -110,10 +110,10 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 10,
-          "q1": 79,
-          "median": 112,
-          "q3": 155,
+          "min": 16,
+          "q1": 78,
+          "median": 111,
+          "q3": 154,
           "max": 492
         },
         "rho": 0.35,
@@ -127,44 +127,44 @@
     },
     "5": {
       "wordRange": {
-        "lo": 152,
-        "hi": 366
+        "lo": 148,
+        "hi": 365
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.6406760675170927,
+          "targetDifficulty": 0.639155524590718,
           "range": {
             "min": 0,
-            "max": 0.6601488697226323
+            "max": 0.6588617148335973
           },
           "wordRange": {
-            "lo": 157,
-            "hi": 233
+            "lo": 154,
+            "hi": 229
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.6796216719281718,
+          "targetDifficulty": 0.6785679050764766,
           "range": {
-            "min": 0.6601488697226323,
-            "max": 0.6968887174746469
+            "min": 0.6588617148335973,
+            "max": 0.6961742551112216
           },
           "wordRange": {
-            "lo": 191,
-            "hi": 303
+            "lo": 186,
+            "hi": 305
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7141557630211219,
+          "targetDifficulty": 0.7137806051459665,
           "range": {
-            "min": 0.6968887174746469,
+            "min": 0.6961742551112216,
             "max": 1
           },
           "wordRange": {
-            "lo": 232,
-            "hi": 347
+            "lo": 230,
+            "hi": 343
           }
         }
       ],
@@ -176,7 +176,7 @@
             "max": 0.6
           },
           "tokenFloor": {
-            "qu": 0.003
+            "qu": 0.006
           },
           "rareByTier": {
             "facile": {
@@ -205,11 +205,11 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 33,
-          "q1": 187,
-          "median": 256,
+          "min": 28,
+          "q1": 185,
+          "median": 254,
           "q3": 340,
-          "max": 1086
+          "max": 1100
         },
         "rho": 0.35,
         "weights": {
@@ -222,44 +222,44 @@
     },
     "6": {
       "wordRange": {
-        "lo": 295,
-        "hi": 641
+        "lo": 287,
+        "hi": 637
       },
       "tiers": [
         {
           "difficulty": "facile",
-          "targetDifficulty": 0.6763974667717451,
+          "targetDifficulty": 0.6729410304816767,
           "range": {
             "min": 0,
-            "max": 0.69180718072436
+            "max": 0.6888124166967424
           },
           "wordRange": {
-            "lo": 310,
-            "hi": 442
+            "lo": 300,
+            "hi": 425
           }
         },
         {
           "difficulty": "normale",
-          "targetDifficulty": 0.707216894676975,
+          "targetDifficulty": 0.7046838029118082,
           "range": {
-            "min": 0.69180718072436,
-            "max": 0.7219108828013223
+            "min": 0.6888124166967424,
+            "max": 0.7197824763265281
           },
           "wordRange": {
-            "lo": 360,
-            "hi": 546
+            "lo": 349,
+            "hi": 535
           }
         },
         {
           "difficulty": "difficile",
-          "targetDifficulty": 0.7366048709256697,
+          "targetDifficulty": 0.7348811497412481,
           "range": {
-            "min": 0.7219108828013223,
+            "min": 0.7197824763265281,
             "max": 1
           },
           "wordRange": {
-            "lo": 432,
-            "hi": 616
+            "lo": 421,
+            "hi": 608
           }
         }
       ],
@@ -271,7 +271,7 @@
             "max": 0.6
           },
           "tokenFloor": {
-            "qu": 0.003
+            "qu": 0.006
           },
           "rareByTier": {
             "facile": {
@@ -300,11 +300,11 @@
         },
         "metric": "rings-v1",
         "wordCount": {
-          "min": 83,
-          "q1": 353,
-          "median": 463,
-          "q3": 600,
-          "max": 1804
+          "min": 87,
+          "q1": 347,
+          "median": 456.5,
+          "q3": 597.25,
+          "max": 1947
         },
         "rho": 0.35,
         "weights": {

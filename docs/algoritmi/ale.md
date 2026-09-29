@@ -91,7 +91,7 @@ produzione: cambiarli invalida `calibration.json`.
 Due rail aggiuntivi governano la **presenza delle lettere rare**:
 
 - **`tokenFloor`** — floor di *campionamento* per token, in **quota di cella** (non
-  di dizionario). Oggi `{ qu: 0.003 }`: circa una cella su 333 è `QU`, contro lo
+  di dizionario). Oggi `{ qu: 0.006 }`: circa una cella su 167 è `QU`, contro lo
   0,18% naturale del campionamento per frequenza. Il peso si converte con
   `w = p·(Σf−f_t)/(1−p)`, così la quota realizzata è esattamente `p`.
 - **`rareByTier`** — gate di *accettazione* applicato in `nextAleCandidate` **dopo**

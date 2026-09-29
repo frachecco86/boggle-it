@@ -15,7 +15,7 @@
 Quattro modifiche, tutte localizzate in `schedaAle.ts`:
 
 1. **`qu` fuori dalla banda vocali** (`ALE_VOWEL_TOKENS = {a,e,i,o,u}`), come nel full.
-2. **`tokenFloor`** di campionamento per `qu`, espresso in **quota di cella** (0,3%).
+2. **`tokenFloor`** di campionamento per `qu`, espresso in **quota di cella** (0,6%).
 3. **`rareByTier`**: gate di *accettazione* applicato **dopo** l'assegnazione della
    fascia naturale (`facile: max 1`, `difficile: min 1`). Non cambia `D`: non è
    circolare.
@@ -81,8 +81,8 @@ ma è il prerequisito dei punti 3.2.
 
 ### 3.2 `tokenFloor`: floor di campionamento in quota di cella
 
-`tokenFloor: { qu: 0.003 }` significa "una cella su 333 è `qu`", **non** "il peso
-di `qu` nel dizionario è 0,3%". Conversione esatta (un solo token floored):
+`tokenFloor: { qu: 0.006 }` significa "una cella su 167 è `qu`", **non** "il peso
+di `qu` nel dizionario è 0,6%". Conversione esatta (un solo token floored):
 
 ```
 w_qu = p · (Σf − f_qu) / (1 − p)
@@ -182,9 +182,9 @@ proporzionale (`rareRate`/`rareCapMin`/`rareCapMax`).
 
 Le misure di esplorazione (simulazione token + struttura, 20.000 griglie) sono
 servite a scegliere le leve, non i valori finali. Il floor definitivo è stato
-scelto **molto leggero (0,3%)** per non far dominare `qu`: porta la presenza su
+scelto **molto leggero (0,6%)** per non far dominare `qu`: porta la presenza su
 difficile nel 7–27%, lasciando `h` e `z` come rare dominanti. I numeri finali del
-catalogo (4/5/6×6, `tokenFloor.qu = 0,3%`, `h` posizionale, 5000 campioni) sono
+catalogo (4/5/6×6, `tokenFloor.qu = 0,6%`, `h` posizionale, 5000 campioni) sono
 in [`report/ale.md`](./ale.md) §4.
 
 Le tabelle seguenti restano come **storico** della taratura (floor 4%, `h` non
@@ -240,7 +240,7 @@ export interface AleGuardRails {
 
 export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   vowels: { min: 0.3, max: 0.6 },
-  tokenFloor: { qu: 0.003 },
+  tokenFloor: { qu: 0.006 },
   hNearCG: true,
   hBoost: 1,
   rareByTier: { facile: { max: 1 }, normale: {}, difficile: { min: 1 } },
@@ -276,7 +276,7 @@ export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
 ## 6. Tappe
 
 > **Stato**: Tappa 0, Tappa 1 e Tappa 2 **fatte** (v0.40.0): `qu` fuori dalle
-> vocali, `tokenFloor.qu = 0,3%`, `rareByTier`, `h` posizionale (`hNearCG`), cap
+> vocali, `tokenFloor.qu = 0,6%`, `rareByTier`, `h` posizionale (`hNearCG`), cap
 > fisso 3, calibrazione 5000, schede rigenerate. Numeri in
 > [`report/ale.md`](./ale.md).
 

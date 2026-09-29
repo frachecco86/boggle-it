@@ -195,7 +195,7 @@ export interface AleGuardRails {
   vowels: { min: number; max: number } | null;
   /**
    * Floor di campionamento per token, in QUOTA DI CELLA (0–1), non in frequenza
-   * di dizionario. Es. `{ qu: 0.003 }` = una cella su 333 è `qu`. Il peso si
+   * di dizionario. Es. `{ qu: 0.006 }` = una cella su 167 è `qu`. Il peso si
    * converte con `w = p·(Σf−f_t)/(1−p)`, così la quota realizzata è esattamente
    * `p`. Ha effetto solo se il floor supera la quota naturale del token.
    */
@@ -249,7 +249,7 @@ export interface AleGuardRails {
 /** Guard rails ATTIVI, come concordato per il catalogo. */
 export const DEFAULT_ALE_GUARD_RAILS: AleGuardRails = {
   vowels: { min: 0.3, max: 0.6 },
-  tokenFloor: { qu: 0.003 },
+  tokenFloor: { qu: 0.006 },
   rareByTier: { facile: { max: 1 }, normale: {}, difficile: { min: 1 } },
   hNearCG: true,
   hBoost: 1,

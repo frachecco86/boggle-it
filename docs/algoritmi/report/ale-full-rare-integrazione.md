@@ -54,7 +54,7 @@ Artefatti da **rigenerare** sul branch di destinazione (non copiare):
 1. `ALE_VOWEL_TOKENS = {a,e,i,o,u}` (`qu` fuori dalla banda vocali).
 2. `AleGuardRails`: nuovi campi `tokenFloor`, `rareByTier`, `hNearCG`, `hBoost`.
 3. `DEFAULT_ALE_GUARD_RAILS`:
-   `tokenFloor: { qu: 0.003 }`, `rareByTier: { facile:{max:1}, normale:{}, difficile:{min:1} }`,
+   `tokenFloor: { qu: 0.006 }`, `rareByTier: { facile:{max:1}, normale:{}, difficile:{min:1} }`,
    `hNearCG: true`, `hBoost: 1`.
 4. `AleGenerationStats`: nuovo `tierRareOut` (+ init in `newAleGenerationStats`).
 5. `tokenSamplingWeights` (nuovo) + `sampleTokens(freq, count, rng, floors?, omit?)`.
