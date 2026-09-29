@@ -99,6 +99,11 @@ assente.
 > La raccomandazione pratica è lavorare **sul campione** (probabilità per token,
 > per difficoltà), tenendo i guard rails come rete di sicurezza. Questo evita la
 > circolarità di §4.6 perché `D` si calcola normalmente dopo.
+>
+> **Aggiornamento (§4.9)**: dopo una simulazione su 20.000 griglie la
+> raccomandazione è cambiata — floor **globali** (`quShare`/`hShare`), `h`
+> **condizionata** a `c`/`g`, **cap 3 invariato**, niente cap proporzionale. Le
+> sezioni 4.0–4.8 restano come proposta iniziale; §4.9 è la versione misurata.
 
 ### 4.0 Vocabolario: "iniettare" vs "floored probability"
 
@@ -297,26 +302,112 @@ export interface AleGuardRails {
 ```
 
 
+### 4.9 Simulazione (20.000 griglie) e decisioni riviste
+
+Per scegliere i numeri ho simulato il **livello token + struttura** (vocali senza
+`qu`, cap rare, `gridStructureIssues`) su 20.000 griglie per combinazione. NON
+include copertura/ancora, che filtrerebbero ancora: i valori di validità sono
+quindi un **limite superiore**.
+
+| scenario | Qu 4/5/6 | h 4/5/6 | validità 4/5/6 |
+| --- | --- | --- | --- |
+| base (`qu` non vocale, nessun floor) | 2,5 / 3,9 / 5,7% | 4,3 / 7,5 / 11,6% | 58 / 64 / 66% |
+| `qu=h=1,5%`, cap 3 | 20 / 30 / 39% | 7 / 11 / 17% | 54 / 57 / 56% |
+| **`qu=4%, h=0`, cap 3** | **44 / 60 / 72%** | 4,0 / 6,5 / 9,2% | 56 / 59 / 56% |
+| `qu=4%, h=4%`, cap 3 | 44 / 58 / 68% | 16 / 25 / 33% | **40 / 35 / 26%** |
+| `qu=4%, h=4%`, cap 5 | 44 / 59 / 73% | 16 / 26 / 37% | 41 / 37 / 33% |
+
+**Lettura:**
+
+1. **Togliere `qu` dalle vocali** non cambia quasi nulla da solo (base ≈ com'era),
+   ma è il prerequisito perché il floor di `qu` non sfori la banda vocali.
+2. **Il floor di `qu` è economico**: `qu=4%` porta `Qu` a 44–72% e la validità
+   resta ~56–59%; il cap 3 non morde (rare medie 0,77–1,57). È la vittoria facile.
+3. **Il floor di `h` globale è costoso**: passare `h` da 1,5% a 4% fa crollare la
+   validità (6×6: 56% → 26%) e **alzare il cap 3→5 non recupera** (26% → 33%):
+   il collo di bottiglia diventa `struttura` (le `h` isolate), non il cap. Quindi
+   la `h` va **condizionata alla vicinanza di `c`/`g`** (§4.9.1).
+4. **Il cap 3 va bene così**: con `qu`-floor (o `h` condizionata) non morde quasi
+   mai. Il cap proporzionale di §4.3 diventa **inutile** in questo disegno: una
+   variabile in meno. Resterebbe necessario solo se si insiste su `h` globale 4%.
+
+#### 4.9.1 "Preservare le frequenze": che unità ha il floor?
+
+Ci sono **tre unità** diverse nascoste in "4%", e vanno distinte:
+
+- **(a) floor di estrazione su tutte le celle** — quello simulato. La marginale
+  *accettata* è più bassa, perché le `h` isolate vengono scartate.
+- **(b) probabilità condizionata a una cella adiacente a `c`/`g`** — ogni `h`
+  prodotta è valida, ma la marginale realizzata è `q · P(adiacente)`.
+- **(c) marginale obiettivo sulle griglie accettate** — "il 4% delle celle è `h`".
+  È la più interpretabile.
+
+La via pulita è **(c) implementata via (b)**: se si vuole marginale `m`, poiché
+`h` può stare solo accanto a `c`/`g`,
+
+```
+q = m / P(cella adiacente a un c/g)
+```
+
+Con `m=1,5%` e `P_adj≈0,34` su 4×4: `q≈4,4%`. Con `m=4%`: `q≈11,8%`. Su 6×6
+`P_adj` è più alta, quindi serve `q` più basso. Così **tutte le `h` sono valide** e
+la reiezione per struttura sparisce.
+
+**Cosa significa "preservare le frequenze".** Il **peso base** di ogni token
+resta la frequenza di dizionario (`h` 0,93%, `qu` 0,18%); il floor subentra solo
+quando il target `m` lo supera. Gli altri token non cambiano distribuzione (cambia
+solo la normalizzazione). Non si può insieme "floor a 4%" e "restare a 0,18%":
+sono alternativi; "preservare" vale per le lettere non targettate.
+
+Per questo conviene esporre il parametro come **quota obiettivo** (`quShare`,
+`hShare`), non come probabilità di estrazione: è l'unità che si vuole davvero, e
+il codice la converte in `q`.
+
+#### 4.9.2 Difficoltà: `byTier` non è applicabile al volo
+
+Nel flusso a tre secchi la fascia **non è nota al momento della generazione** (è
+un output di `D`). Quindi un `byTier.tokenFloor` non si può applicare direttamente.
+Tre strade:
+
+1. **Floor globali** (nessuna circolarità): es. `quShare=4%`, `hShare=1,5%`
+   condizionata. Tutti i secchi prendono rare, i centri si ri-calibrano. **Da
+   provare per primo.**
+2. **Flussi per fascia-target**: per ogni fascia si genera con il floor di quella
+   fascia e si accetta solo se `D` cade nella fascia. Controllo reale per fascia,
+   ma reintroduce gli scarti "difficoltà fuori fascia" e complica la calibrazione.
+3. **Gate post-hoc + calibrazione auto-consistente** (§4.6): massimo controllo,
+   massima complessità. Solo se 1 e 2 non bastano.
+
+**Raccomandazione finale (rivista dopo la simulazione):**
+
+- **Tappa 0**: `qu` fuori dalle vocali.
+- **Tappa 1**: `quShare` globale (≈4%) + `hShare` condizionato a `c`/`g` (≈1,5%,
+  poi alzabile), **cap 3 invariato**.
+- **Misura**: presenza `Qu`/`h`/`z` per fascia e dimensione, validità, word count.
+- **Tappa 2 (solo se serve)**: floor per fascia con la strada 2.
+- Il **cap proporzionale si scarta**, salvo che si torni a `h` globale alta.
+
+---
+
 ## 5. Piano di implementazione a tappe
 
 Ogni tappa: **cambio rail → test → ricalibrazione 5000 → report → misura**.
 
-1. **Tappa 0 — `qu` fuori dalla banda vocali** (§4.2)
+1. **Tappa 0 — `qu` fuori dalla banda vocali** (§4.2, §4.9)
    - `ALE_VOWEL_TOKENS = {a,e,i,o,u}`; test aggiornati; misura della deriva delle
      bande. È il prerequisito dei floor su `qu`.
-2. **Tappa 1 — floor di probabilità (`tokenFloor`, `hNearCG`)** (§4.0, §4.4)
-   - Pesi per token con floor, per dimensione; bias `h` vicino a `c`/`g`.
-   - Verifica: quota di schede con `Qu`/`h`/`z` per dimensione (senza difficoltà).
-3. **Tappa 2 — floor per difficoltà** (§4.5)
-   - `byTier.tokenFloor`: nessuna circolarità (agisce al campionamento). È la
-     versione leggera della dipendenza dalla difficoltà.
-4. **Tappa 3 — cap proporzionale** (§4.3)
-   - `rareRate`/clamp; da tarare **dopo** i floor, quando il cap inizia a mordere.
-5. **Tappa 4 — iniezione/presenza dura** (§4.1, §4.4) — solo se i floor non
-   bastano a garantire `Qu`/`h` sulla fascia difficile.
-6. **Tappa 5 — gate per fascia post-hoc** (§4.6) — solo se serve separare la
-   difficoltà per composizione; richiede la calibrazione a due passate.
-7. **Chiusura**: `report:ale` aggiornato (presence per fascia, rare per fascia),
+2. **Tappa 1 — quote obiettivo globali** (§4.9.1)
+   - `quShare ≈ 4%` (floor globale) e `hShare ≈ 1,5%` **condizionata a `c`/`g`**
+     (conversione `q = m / P_adj`); `tokenFloor`/`hNearCG` come implementazione.
+   - **Cap 3 invariato** (§4.9).
+   - Verifica: presenza `Qu`/`h`/`z` e validità per dimensione.
+3. **Tappa 2 — floor per fascia** (§4.9.2) — solo se i floor globali non danno la
+   separazione voluta; strada 2 (flussi per fascia-target), non gate post-hoc.
+4. **Tappa 3 — iniezione/presenza dura** (§4.1) — solo se i floor non bastano a
+   garantire `Qu` su difficile.
+5. **Tappa 4 — gate per fascia post-hoc** (§4.6) — ultima spiaggia, calibrazione a
+   due passate.
+6. **Chiusura**: `report:ale` aggiornato (presence per fascia, rare per fascia),
    docs (`docs/algoritmi/ale.md`, `report/ale.md`, questo piano), changelog, test.
 
 ---
