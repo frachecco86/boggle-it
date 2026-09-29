@@ -210,6 +210,7 @@ function main(): void {
     console.log(
       `  flusso ${size}×${size}: campioni ${stats.sampled.toLocaleString('it-IT')} · respinti ${stats.rejected.toLocaleString('it-IT')} · ` +
         `fuori range ${stats.wordCountOut.toLocaleString('it-IT')} · fuori banda fascia ${stats.tierBandOut.toLocaleString('it-IT')} · ` +
+        `gate rari fascia ${stats.tierRareOut.toLocaleString('it-IT')} · ` +
         `ripieghi ${stats.fallbacks} · ${Date.now() - startedAt}ms`,
     );
   }

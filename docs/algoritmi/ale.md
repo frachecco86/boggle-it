@@ -80,12 +80,31 @@ formato `forma<TAB>lemma`). Le radici erano precalcolate in
 era in `Common`. Senza la radice la rarità `R` era gonfiata dalla morfologia
 (0,80/0,85/0,89); con la radice scendeva a ~0,56/0,58/0,59.
 
-**Guard rails (ATTIVI, scelta di progetto):** banda vocali **30–60%**, **al più 3 token
-rari H/Z/QU in totale**, **struttura giocabile** (`gridStructureIssues`: consonanti
-non troppo lontane da una vocale, al più una riga/colonna senza vocali, nessuna `h`
-senza `c`/`g` accanto), **nessuna riga o colonna senza soluzioni** e almeno una
-**parola ancora** (≥ 6/7/8 lettere su 4×4/5×5/6×6). Devono essere identici in
-calibrazione e produzione: cambiarli invalida `calibration.json`.
+**Guard rails (ATTIVI, scelta di progetto):** banda vocali **30–60%** (`qu` NON
+conta come vocale, come nel full), **al più 3 token rari H/Z/QU in totale**,
+**struttura giocabile** (`gridStructureIssues`: consonanti non troppo lontane da
+una vocale, al più una riga/colonna senza vocali, nessuna `h` senza `c`/`g`
+accanto), **nessuna riga o colonna senza soluzioni** e almeno una **parola ancora**
+(≥ 6/7/8 lettere su 4×4/5×5/6×6). Devono essere identici in calibrazione e
+produzione: cambiarli invalida `calibration.json`.
+
+Due rail aggiuntivi governano la **presenza delle lettere rare**:
+
+- **`tokenFloor`** — floor di *campionamento* per token, in **quota di cella** (non
+  di dizionario). Oggi `{ qu: 0.003 }`: circa una cella su 333 è `QU`, contro lo
+  0,18% naturale del campionamento per frequenza. Il peso si converte con
+  `w = p·(Σf−f_t)/(1−p)`, così la quota realizzata è esattamente `p`.
+- **`rareByTier`** — gate di *accettazione* applicato in `nextAleCandidate` **dopo**
+  che la fascia naturale è stata assegnata: `facile: { max: 1 }`, `normale: {}`,
+  `difficile: { min: 1 }`. È un filtro, non cambia `D` né i confini k-means, quindi
+  la calibrazione resta a una passata.
+- **`hNearCG` / `hBoost`** — `h` posizionale. La `h` è esclusa dalla fase 1 del
+  campionamento, poi è “promossa” solo su celle sacrificabili (consonanti comuni,
+  non `c`/`g`, non rare) adiacenti a una `c`/`g`, con probabilità
+  `q = hBoost · m_h / P` (`m_h = f_h/Σf ≈ 0,93%` è la marginale naturale di cella,
+  `P` la frazione di celle sacrificabili). Così `E[#h] = N·m_h·hBoost`: la
+  frequenza aggregata di `h` resta quella naturale, ma ogni `h` è in posizione
+  valida e le reiezioni “h senza c/g” spariscono. Default `hBoost = 1`.
 
 I due rail che richiedono il dizionario (copertura e ancora) condividono **una sola**
 `solveGridCoverage`: l'ancora usa le `words` già restituite per la copertura, quindi
