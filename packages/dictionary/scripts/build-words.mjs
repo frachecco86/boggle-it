@@ -7,6 +7,11 @@
 //  - paroleitaliane (napolux) — lessico comune per colmare lacune di Morph-it
 //  - 280k parole italiane     — sostantivi e aggettivi che Morph-it NON copre
 //  - Wikizionario (kaikki.org) — HEADWORD + categoria grammaticale (CC BY-SA 4.0)
+//  - technical-words.txt      — tecnicismi e derivati regolari che il filtro di
+//    attestazione di Wikizionario scartava pur essendo parole italiane vere
+//    (`setosa`, `absidale`, `accelerometrico`). Vedi `tools/gen-technical-words.mjs`:
+//    la lista è GENERATA con un criterio di derivazione, più un file curato a mano
+//    (`technical-words.curated.txt`) come per `consonant-endings.txt`.
 //
 // NOTA: le abbreviazioni NON sono più una fonte. `abbreviations.txt` conteneva
 // abbreviazioni vere (`dott`) ma anche ~100 ETICHETTE di materia/grammatica
@@ -147,6 +152,43 @@ async function loadCuratedList(file) {
     if (w) set.add(w);
   }
   return set;
+}
+
+/**
+ * Legge una lista curata con TAG grammaticale opzionale.
+ *
+ * Formato: `parola` oppure `parola<TAB>tag` (righe `#` e vuote ignorate).
+ * Il tag è quello scritto in chiaro nella pagina Parole (`agg`, `sost`, `n.c.`, …)
+ * e deve appartenere a `POS_LABEL`: un tag sconosciuto viene IGNORATO (non è un
+ * errore fatale, la parola entra comunque) perché questa lista non deve poter
+ * rompere il build per un refuso.
+ *
+ * Usata da `technical-words.txt`: senza i tag, le ~4.3k voci tecniche entrerebbero
+ * tutte come `n.c.` e farebbero scendere la copertura dei tag misurata a ogni build.
+ *
+ * `n.c.` è accettato come tag esplicito (il file generato lo scrive per il gruppo
+ * `-oide`, dove la categoria non è deducibile): il risultato è identico al
+ * fallback, ma il conteggio dei "tag dichiarati" resta onesto.
+ *
+ * Ritorna `{ words, tags }`.
+ */
+async function loadTaggedList(file) {
+  const full = path.join(DATA, file);
+  const words = new Set();
+  const tags = new Map();
+  if (!existsSync(full)) return { words, tags };
+  const known = new Set([...Object.values(POS_LABEL), 'n.c.']);
+  for (const line of (await readFile(full, 'utf8')).split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const [rawWord, rawTag] = trimmed.split(/\s+/);
+    const w = normalizeWord(rawWord ?? '');
+    if (!w) continue;
+    words.add(w);
+    const tag = (rawTag ?? '').toLowerCase();
+    if (known.has(tag)) tags.set(w, tag);
+  }
+  return { words, tags };
 }
 
 /**
@@ -314,7 +356,15 @@ const POS_LABEL = {
  * Priorità della fonte del tag:
  *  1. Wikizionario (headword + categoria, la più precisa);
  *  2. Morph-it (categoria del lemma: la flessione eredita il tag);
- *  3. `n.c.` (non classificata) — marginale con il filtro headword.
+ *  3. `technical-words.txt` (tag dichiarato a mano o dal generatore: è l'unico
+ *     dato che esiste per queste voci, che per definizione NON sono né su
+ *     Wikizionario né in Morph-it);
+ *  4. categoria del lemma del paradigma (`~inf` di Wikizionario);
+ *  5. `n.c.` (non classificata).
+ *
+ * Wikizionario e Morph-it restano davanti perché derivano da dizionari veri. In
+ * pratica l'ordine non è mai in discussione: le voci di `technical-words.txt`
+ * sono per definizione assenti da entrambi, quindi si applica il gradino 3.
  *
  * Formato BUCKET, non una riga per parola: `tag\nparola parola …\n` per ogni
  * categoria, più due sezioni di link (`~w` = voce Wikizionario, `~n` = nessuna)
@@ -348,7 +398,7 @@ function sortTags(tag) {
     .join(' ');
 }
 
-async function writeWordIndex(sorted, morphPath, wiktionary) {
+async function writeWordIndex(sorted, morphPath, wiktionary, techTags = new Map()) {
   // Morph-it: forma → categoria (o categorie) del lemma.
   const morphPos = new Map();
   const morphRaw = new TextDecoder('latin1').decode(await readFile(morphPath));
@@ -379,7 +429,7 @@ async function writeWordIndex(sorted, morphPath, wiktionary) {
     // paradigma (`~inf`) → non classificata. Senza il terzo gradino le ~14k
     // forme recuperate dai paradigmi sarebbero tutte `n.c.`.
     const tag = sortTags(
-      wiki ?? morphPos.get(w) ?? wiktionary?.inflected.get(w) ?? 'n.c.',
+      wiki ?? morphPos.get(w) ?? techTags.get(w) ?? wiktionary?.inflected.get(w) ?? 'n.c.',
     );
     if (tag !== 'n.c.') withTag++;
     const list = buckets.get(tag) ?? [];
@@ -465,6 +515,19 @@ async function buildFromExistingWords() {
   for (const w of allowedEndings) {
     if (accepted(w)) words.add(w);
   }
+  /*
+   * Idem per le parole tecniche: anche questo percorso (deploy Netlify/Docker)
+   * deve riammettere le voci di `technical-words.txt`, altrimenti in produzione
+   * il dizionario perderebbe ~4.3k parole che `words.br` versionato contiene.
+   * I TAG non si ricostruiscono qui: arrivano da `word-index.br` versionato.
+   */
+  const technical = await loadTaggedList('technical-words.txt');
+  let techAdded = 0;
+  for (const w of technical.words) {
+    if (!accepted(w)) continue;
+    if (!words.has(w)) techAdded++;
+    words.add(w);
+  }
   const sorted = [...words].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const { txt, br } = await writeOutputs(sorted);
   const kb = (n) => (n / 1024).toFixed(1) + ' KB';
@@ -473,6 +536,7 @@ async function buildFromExistingWords() {
   if (dropped > 0) {
     console.log(`  ripulite ${dropped.toLocaleString('it-IT')} voci non giocabili (troncamenti/abbreviazioni non ammesse)`);
   }
+  console.log(`  parole tecniche riammesse: +${techAdded} (da technical-words.txt)`);
 
   /*
    * Indice parole (`word-index.br`): è VERSIONATO con i tag grammaticali pieni.
@@ -696,9 +760,43 @@ async function main() {
     }
   }
 
+  /*
+   * 6. Parole tecniche (`technical-words.txt`).
+   *
+   * PERCHÉ SERVE: il filtro headword dello step 2b scarta ~83k voci della lista
+   * piatta, e fra queste ci sono parole italiane vere che Wikizionario non copre
+   * — `setosa` (botanica/zoologia, da `seta`), `absidale`, `accelerometrico`.
+   * Questa lista le riammette scavalcando il filtro. Il criterio con cui è
+   * costruita (derivazione regolare da una base attestata + regola del paradigma)
+   * è in `tools/gen-technical-words.mjs`.
+   *
+   * Passa da `accepted()` come ogni altra sorgente, quindi NON può reintrodurre
+   * volgarità né parole in consonante fuori whitelist: una voce in consonante
+   * viene respinta e segnalata, perché quei casi appartengono a
+   * `consonant-endings.txt` (unica fonte di verità per `schedaPool.ts`).
+   */
+  const technical = await loadTaggedList('technical-words.txt');
+  let techCount = 0;
+  const techRejected = [];
+  for (const w of technical.words) {
+    if (accepted(w)) {
+      if (!words.has(w)) techCount++;
+      words.add(w);
+    } else if (isUsable(w) && !blocked.has(w)) {
+      // Giocabile per lunghezza, ma respinta: finisce in consonante e non è in
+      // `consonant-endings.txt`, oppure è bloccata.
+      techRejected.push(w);
+    }
+  }
+  if (techRejected.length > 0) {
+    console.warn(
+      `  ⚠ ${techRejected.length} voci di technical-words.txt non giocabili (finiscono in consonante): ` +
+        `vanno in consonant-endings.txt — ${techRejected.slice(0, 8).join(', ')}${techRejected.length > 8 ? ', …' : ''}`,
+    );
+  }
 
   const sorted = await writeDictionary(words);
-  await writeWordIndex(sorted, morphPath, wiktionary);
+  await writeWordIndex(sorted, morphPath, wiktionary, technical.tags);
 
   const kb = (n) => (n / 1024).toFixed(1) + ' KB';
   console.log(`  da Morph-it: ${morphCount.toLocaleString('it-IT')}`);
@@ -706,6 +804,7 @@ async function main() {
   console.log(`  lista estesa: +${extendedCount.toLocaleString('it-IT')}`);
   console.log(`  composti e neologismi: +${modernCount}`);
   console.log(`  finali in consonante: +${endingCount}`);
+  console.log(`  parole tecniche: +${techCount}${technical.tags.size > 0 ? ` (${technical.tags.size} con tag dichiarato)` : ''}`);
 }
 
 // Eseguito direttamente?

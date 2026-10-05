@@ -299,6 +299,17 @@ export const SPECS: Record<ClassicSchedaVariant, SchedaSpec> = {
  */
 const DENSITY_TOLERANCE = 0.15;
 
+/*
+ * Stessa ragione per la LUNGHEZZA MEDIA, espressa in lettere (è una media, non un
+ * conteggio, quindi la tolleranza è assoluta e non percentuale).
+ *
+ * Senza questa tolleranza qualunque arricchimento del dizionario può far scattare
+ * un falso allarme: misurato, l'aggiunta di 5 parole lunghe (`beotico`, `cotale`,
+ * `tabico`) ha portato una scheda da 4.8287 a 4.8594 con tetto 4.85 — un
+ * superamento dello 0,19% che non è un difetto di giocabilità.
+ */
+const MEAN_LENGTH_TOLERANCE = 0.05;
+
 /**
  * Tetto sulle parole enumerate per griglia.
  *
@@ -315,6 +326,7 @@ export const SCHEDA_CRITERIA = {
   specs: SPECS,
   bandSizes: BAND_SIZES,
   densityTolerance: DENSITY_TOLERANCE,
+  meanLengthTolerance: MEAN_LENGTH_TOLERANCE,
   bandSolveLimit: BAND_SOLVE_LIMIT,
   fullSolveLimit: FULL_SOLVE_LIMIT,
 } as const;

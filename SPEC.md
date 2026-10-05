@@ -27,9 +27,9 @@ nessuna persistenza su database, nessuna PWA.
 | Frontend | **React 18 + Vite + TypeScript** |
 | Animazioni | **CSS + Web Animations API** (nessuna libreria) |
 | Multiplayer | **Node + Socket.IO**, stanza con codice 6 caratteri |
-| Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer; ~368k forme, tutte giocabili |
+| Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer; ~372k forme, tutte giocabili |
 | Struttura | **Monorepo pnpm workspaces** |
-| Sorgente dizionario | **Morph-it! (UniBO) + Wikizionario** (headword e categorie; nessuna abbreviazione) |
+| Sorgente dizionario | **Morph-it! (UniBO) + Wikizionario** (headword e categorie) **+ `technical-words.txt`** (tecnicismi riammessi); nessuna abbreviazione |
 | Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 180 schede** |
 | Punteggio | **lunghezza − 2**; in multiplayer **raddoppio** se trovata da un solo giocatore |
 

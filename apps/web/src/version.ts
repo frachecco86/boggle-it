@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.42.0';
+export const APP_VERSION = '0.43.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,39 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.43.0',
+    date: '2026-10-05',
+    title: 'Dizionario: riammesse le parole tecniche che il gioco rifiutava',
+    promo: {
+      emoji: '🔬',
+      headline: 'Anche “setosa” e “absidale” valgono punti',
+      text: 'Il dizionario scartava quasi 83.000 parole rare ma vere — aggettivi di botanica, zoologia, geologia — perché non erano presenti su Wikizionario: potevi comporle sulla griglia e il gioco te le rifiutava. Ora ne sono rientrate 4.339, con tanto di categoria grammaticale nella pagina Parole.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le parole accettate in partita non dipendono più dalla scheda che stai giocando.** Il client rifiutava ogni parola che non fosse nell’elenco salvato dentro la scheda: quando il dizionario cambiava, le schede già calcolate restavano indietro e alcune parole valide venivano respinte **proprio nel single player**. Misurato prima della correzione: **168 schede su 270 disallineate**, 738 parole promesse dal server e rifiutate dal gioco. Ora un controllo dedicato (`pnpm sync:schede`) riallinea gli elenchi e **fallisce** se trova una divergenza.',
+          '**Rimosse 112 etichette di materia e grammatica** che erano rimaste nel dizionario versionato (`agg`, `avv`, `anat`, `archit`, `arm`, `biz`, `fis`…): non sono parole italiane e il gioco le accettava solo per un difetto di allineamento fra le liste. Le schede le elencavano fra le soluzioni possibili.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**+4.339 parole tecniche riammesse** (`setosa`, `absidale`, `accelerometrico`, `mucillaginoso`, `arenaceo`, `piombifero`): derivati regolari, termini scientifici, etnici. Il dizionario passa da **368.000 a 372.000 forme** e ognuna porta la sua categoria grammaticale nella pagina Parole.',
+          'Nuova lista **`technical-words.txt`**, generata da **`tools/gen-technical-words.mjs`** e integrabile a mano da **`technical-words.curated.txt`**. Una parola entra solo se è un derivato regolare di una base già conosciuta dal gioco **e** compare nella lista dei 280k: è il doppio controllo che tiene fuori il rumore (`acta`, `agfa`, `baili`).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La tolleranza della verifica copre anche la lunghezza media.** Aveva un margine solo sulla densità di parole: bastavano 5 parole lunghe in più per far fallire una scheda con una media di **4,86** contro un tetto di **4,85** — lo 0,19% di scarto, non un difetto di giocabilità. Ora la verifica usa `meanLengthTolerance` come già faceva per la densità.',
+          'Il generatore delle parole tecniche è **idempotente**: sottrae dal lessico delle basi la whitelist prodotta dall’esecuzione precedente, altrimenti — trovando le proprie voci già nel dizionario — avrebbe generato derivati su derivati a ogni lancio.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.42.0',
     date: '2026-09-29',

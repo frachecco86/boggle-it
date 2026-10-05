@@ -1,0 +1,34 @@
+# Voci curate a mano per `technical-words.txt`.
+#
+# Questa è la lista che si modifica a mano: `technical-words.txt` è GENERATO
+# (vedi `tools/gen-technical-words.mjs`) e le voci scritte qui hanno la PRECEDENZA
+# su quelle generate (servono anche a correggere un tag sbagliato).
+#
+# Quando usarla, invece della generazione automatica:
+#   - un tecnicismo che le regole di derivazione non coprono, perché la base non
+#     è nel lessico (es. `abiotico`, da `a-` + `biotico`: non c'è una base
+#     `abiot…` attestata, quindi il generatore non può ricavarlo);
+#   - una parola la cui base è attestata ma il cui paradigma ha una sola forma
+#     nella lista piatta (la regola del paradigma la scarta);
+#   - un tag da correggere (`coroide` è un sostantivo, non un aggettivo).
+#
+# FORMATO: `parola` oppure `parola<TAB>tag`
+#   tag ammessi: agg sost verb avv pron art prep cong num inter loc pref suff
+#                abbr sim car aff part n.pr n.c.
+#   senza tag vale `n.c.`
+#
+# ⚠️ NON mettere qui parole che terminano in consonante: il filtro di
+#    giocabilità le accetta solo da `consonant-endings.txt`.
+
+# --- voci attive ---
+# `cine` è una parola italiana (troncamento d'uso di `cinema`, in `cineforum`,
+# `cinepanettone`) e sta nella lista piatta dei 280k. La scarta il filtro di
+# attestazione perché nel dump di Wikizionario esiste SOLO come spagnolo
+# (`lang_code: "es"`): verificato sul dump kaikki, non è un difetto dello script.
+# Non è un derivato regolare, quindi il generatore non può ricavarla.
+cine	sost
+
+# --- esempi (commentati, scommentare per attivare) ---
+# abiotico	agg
+# abiotica	agg
+# coroide	sost

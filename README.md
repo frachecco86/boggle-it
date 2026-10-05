@@ -15,7 +15,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare **italiane**: `z`). Le lettere non italiane (`k w x y j`, quasi solo prestiti) non entrano mai in griglia.
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
-- **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**.
+- **Dizionario italiano ampio**: ~372.000 forme, incluse **tutte le coniugazioni verbali**.
   **Ogni voce è giocabile**: è la stessa lista usata dalle schede. Le abbreviazioni e le
   etichette di materia (`idr`, `geogr`, `avv`…) **non** sono nel lessico.
 - **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (270 schede di base:
@@ -279,13 +279,55 @@ Pipeline di build (`packages/dictionary/scripts/`):
    unisce le fonti, deduplica, ordina e produce `words.txt` + `words.br`.
 3. `build-frequency.mjs` ritaglia dalla lista di frequenza le prime 60.000 parole **giocabili**
    e scrive `frequency-it.txt` (versionato): sono le fasce usate dal generatore delle schede.
+4. `build-words.mjs` legge anche **`technical-words.txt`**, la whitelist che riammette i
+   tecnicismi scartati dal filtro di attestazione (vedi sotto).
 
 **Nota (branch `ale-full`):** NVdB/Morph-it restano fonti del **dizionario principale**
 (forme flesse), ma non entrano più nella pipeline delle schede **ale**, che misura la rarità
 con le fasce di frequenza d'uso di `frequency-it.txt` (top-5000 / top-20000 / oltre).
 La vecchia pipeline a lemmi (`lemmas.br`, `nvdb.words.txt`) è conservata solo come storico.
 
-Risultato tipico: **386.946 parole**, 4,3 MB raw → **616 KB Brotli** (14%).
+Risultato tipico: **372.439 parole**, 4,2 MB raw → **626 KB Brotli** (15%).
+
+### Perché una whitelist di parole tecniche
+
+Le liste pubbliche contengono anche rumore (`acta`, `agfa`, `baili`, `savere`): una voce della
+lista piatta dei 280k entra nel dizionario solo se è **attestata come voce autonoma di
+Wikizionario**. Il filtro però scarta ~80.000 voci, e fra queste ci sono parole italiane vere —
+Wikizionario copre male botanica, zoologia, geologia, derivati regolari. `setosa` (da `seta`),
+`absidale`, `accelerometrico`, `mucillaginoso` erano componibili sulla griglia e venivano
+**rifiutate in partita**.
+
+`technical-words.txt` le riammette scavalcando il filtro, con due prove indipendenti:
+**derivazione regolare** da una base già attestata nel lessico *e* presenza nella lista dei 280k,
+più la **regola del paradigma** (almeno 2 forme attestate, che elimina i falsi positivi come il
+gerundio con clitico `abbarbicandosi` = `abbarbicand` + `osi`). Il file è **generato** da
+`tools/gen-technical-words.mjs` (idempotente) e integrabile a mano da
+`technical-words.curated.txt` — stesso schema di `consonant-endings.txt`.
+
+> **Cosa NON c'è nel dizionario.** Nessuna whitelist copre tutto: restano fuori i tecnicismi la
+> cui base non è nel lessico (`abiotico` = `a-` + `biotico`), le locuzioni multi-parola
+> (`ferro da stiro`) e le forme con clitici (`dammelo`), che per un gioco di parole non sono
+> componibili. Il conteggio non va confrontato con le stime «2 milioni di parole» dell'italiano:
+> quelle contano i lessemi per tutte le loro forme flesse, clitici e polirematiche inclusi.
+
+### ⚠️ Cambiare il dizionario richiede di riallineare le schede
+
+Le schede pre-calcolate contengono gli elenchi delle soluzioni già risolti (`allWords`), e in
+single player il client valida le parole **contro la scheda**, non contro il dizionario. Quindi
+dopo ogni modifica al lessico:
+
+```bash
+pnpm --filter @boggle/dictionary build:full   # o `build`, se offline
+pnpm sync:schede                              # riallinea words/allWords (--check per la sola diagnosi)
+node apps/web/scripts/copy-schede.mjs         # aggiorna il bundle offline dell'app
+pnpm --filter @boggle/server verify:schede    # controlla i criteri di qualità
+```
+
+`pnpm sync:schede` ricalcola gli elenchi con la **stessa pipeline del generatore** e non tocca le
+griglie: le schede `ale` usano il proprio trie (`Dict'`, 16 lettere), le altre il pool classico
+(14 lettere, con il filtro sulle consonanti finali). Senza questo passaggio il gioco rifiuta
+parole che il server accetta: era il caso di **168 schede su 270**.
 
 ---
 
@@ -312,7 +354,7 @@ quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione 
 classiche e gli ingressi dell'algoritmo **ale** vengono allocati **solo** quando l'admin
 genera. Quelli delle ale vengono **rilasciati** a fine richiesta, così il picco non resta.
 
-I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quindi
+I deploy sono **riproducibili offline**: `words.br` (626 KB) è versionato, quindi
 `pnpm --filter @boggle/dictionary build` rigenera `words.txt` senza rete.
 
 ---

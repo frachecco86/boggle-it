@@ -184,11 +184,20 @@ function checkScheda(
   }
 
   // 3. Lunghezza media (solo "full criteria").
-  if (meanBand && (meanLength < meanBand.min || meanLength > meanBand.max)) {
+  //
+  // Con la stessa TOLLERANZA della densità: il generatore usa `[min, max]`
+  // tassativi, il verificatore un margine più largo, altrimenti un dizionario
+  // leggermente più ricco (una manciata di parole lunghe in più) fa scattare un
+  // falso allarme su una scheda che resta perfettamente giocabile.
+  const meanTol = SCHEDA_CRITERIA.meanLengthTolerance;
+  if (
+    meanBand &&
+    (meanLength < meanBand.min - meanTol || meanLength > meanBand.max + meanTol)
+  ) {
     violations.push({
       schedaId: scheda.id,
       criterion: 'lunghezza media',
-      detail: `${meanLength.toFixed(2)} fuori banda [${meanBand.min}, ${meanBand.max}]`,
+      detail: `${meanLength.toFixed(2)} fuori banda [${meanBand.min}, ${meanBand.max}] (tolleranza ±${meanTol})`,
     });
   }
 
