@@ -36,7 +36,7 @@ describe('Room.submitWord', () => {
     const res = room.submitWord('p1', 'casa', [0, 1, 2, 3]);
     expect(res.accepted).toBe(true);
     expect(res.word).toBe('casa');
-    // Regola Boggle: 'casa' (4 lettere) → 2 punti base
+    // Scala lineare: 'casa' (4 lettere) → 2 punti base
     expect(res.points).toBe(2);
     expect(room.players.get('p1')!.totalScore).toBe(2);
   });

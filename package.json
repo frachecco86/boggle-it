@@ -10,10 +10,13 @@
     "build": "pnpm -r build",
     "build:dict": "pnpm --filter @boggle/dictionary build:full",
     "gen:schede": "pnpm --filter @boggle/server gen:schede",
+    "sync:schede": "pnpm --filter @boggle/server sync:schede",
+    "gen:technical-words": "node tools/gen-technical-words.mjs",
     "test": "pnpm -r test",
     "test:e2e": "node tests/e2e/run-all.mjs",
     "typecheck": "pnpm -r typecheck",
-    "check:context": "node tools/check-context.mjs"
+    "check:context": "node tools/check-context.mjs",
+    "check:version": "node tools/check-version.mjs"
   },
   "packageManager": "pnpm@10.8.1",
   "engines": {

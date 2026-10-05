@@ -84,7 +84,8 @@ Valgono per tutti e tre gli algoritmi: [standard](./standard.md), [full](./full.
 - Campi: `id`, `size`, `difficulty`, `grid` (righe separate da `\n`, `q` = Qu),
   `variant`, `words`, `allWords`, `longest`.
 - `longest` = lunghezza della parola più lunga di `allWords` (insieme accettato).
-- Punteggio parola: **`lunghezza − 2`** (3 lettere → 1 punto), minimo 3 lettere.
+- Punteggio parola: **scala lineare** — 3 lettere → 1 punto, poi +1 per ogni
+  lettera in più (3 → 1, 4 → 2, 5 → 3, …), minimo 3 lettere, **senza tetto**.
   Nel multiplayer una parola trovata da un solo giocatore vale **doppio**.
 
 ### A.5 Perché offline

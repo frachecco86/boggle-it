@@ -10,7 +10,7 @@
  * punteggio, parole trovate, difficoltà, dimensione e data.
  */
 import type { Difficulty } from './difficulty.js';
-import { scoreForWord } from './scoring.js';
+import { scoreForLength } from './scoring.js';
 import type { GridSize } from './types.js';
 
 /** Modalità di gioco che generano una partita classificabile. */
@@ -253,7 +253,7 @@ export interface WordCatalogEntry {
   length: number;
   /** Numero di schede in cui la parola è componibile. */
   occurrences: number;
-  /** Punteggio che vale (lunghezza - 2, come nel Boggle). */
+  /** Punteggio che vale (scala lineare, vedi `scoreForLength`). */
   points: number;
   /**
    * Categoria grammaticale abbreviata (`sost`, `verb`, `agg`, …) da Morph-it o
@@ -376,10 +376,10 @@ export interface SchedaStats {
 /**
  * Punteggio di una parola di data lunghezza.
  *
- * DELEGA a `scoreForWord`: prima la formula era ricopiata qui (`length - 2`) e
+ * DELEGA a `scoreForLength`: prima la formula era ricopiata qui (`length - 2`) e
  * poteva divergere da quella del gioco. Ora c'è una sola definizione della
  * scala (`packages/shared/src/scoring.ts`) e tutto il resto la usa.
  */
 export function schedaWordPoints(length: number): number {
-  return scoreForWord('x'.repeat(length));
+  return scoreForLength(length);
 }

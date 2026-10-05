@@ -16,7 +16,12 @@
  * NON c'è un tetto: la crescita è lineare e illimitata, +1 punto per ogni
  * lettera oltre la terza. Una parola da 9 lettere non vale come una da 8: su una
  * griglia 6×6 (dove le parole lunghe esistono davvero) la parte alta della scala
- * resta un incentivo. Un tetto a 10 punti appiattirebbe tutto ciò che sta sopra.
+ * resta un incentivo. Un tetto appiattirebbe tutto ciò che sta sopra.
+ *
+ * Perché non una scala a soglie (Boggle classico, 8+ = 11): quella premia molto
+ * la parola lunga una volta sola, ma da 8 lettere in su non cresce più. Qui il
+ * gioco arriva fino a 16 lettere su 6×6, e la crescita continua è ciò che
+ * chiede la modifica in corso.
  *
  * Perché non una formula più piatta: con ⌊lunghezza/3⌋ una parola da 9 lettere
  * valeva solo 3 punti, come tre parole da 3 lettere, pur essendo molto più
@@ -28,11 +33,21 @@
 export const MIN_WORD_LENGTH = 3;
 export const MAX_WORD_LENGTH = 16;
 
+/**
+ * Punti base per una parola di data lunghezza (0 se non valida).
+ *
+ * È la funzione su cui si appoggiano `scoreForWord`, le statistiche delle schede
+ * (`schedaWordPoints`) e la difficoltà dell'algoritmo ale: una sola definizione
+ * della scala, così non può esistere una copia che diverge.
+ */
+export function scoreForLength(length: number): number {
+  if (length < MIN_WORD_LENGTH) return 0;
+  return length - 2;
+}
+
 /** Punti base per una parola di data lunghezza (0 se non valida). */
 export function scoreForWord(word: string): number {
-  const len = word.length;
-  if (len < MIN_WORD_LENGTH) return 0;
-  return len - 2;
+  return scoreForLength(word.length);
 }
 
 /**

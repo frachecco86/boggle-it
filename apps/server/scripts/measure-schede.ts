@@ -30,6 +30,7 @@ import {
   RARE_ITALIAN,
   resolveSchedaVariant,
   SCHEDA_VARIANT_LABELS,
+  schedaWordPoints,
   solveGrid,
   SPECS,
   type Difficulty,
@@ -171,7 +172,7 @@ function main(): void {
           if (w.length > longest) longest = w.length;
           if (w.length >= anchor.length) anchors++;
           total += w.length;
-          score += Math.max(0, w.length - 2);
+          score += schedaWordPoints(w.length);
         }
         const mean = all.length > 0 ? total / all.length : 0;
         accepted.push(all.length);

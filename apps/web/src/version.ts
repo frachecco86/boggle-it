@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.38.0';
+export const APP_VERSION = '0.44.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,187 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.44.0',
+    date: '2026-10-05',
+    title: 'Punteggi di nuovo lineari: ogni lettera in più vale un punto',
+    promo: {
+      emoji: '📈',
+      headline: 'La parola lunga cresce senza tetto',
+      text: 'La scala a soglie (8 lettere e oltre sempre 11 punti) appiattiva proprio le parole più rare e difficili: su una griglia 6×6 una parola da 13 lettere valeva come una da 8. Ora il punteggio sale di un punto per lettera — 3 → 1, 4 → 2, 5 → 3, … 10 → 8 — e non si ferma mai.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Scala dei punteggi lineare.** 3 lettere → **1 punto**, poi **+1 per ogni lettera in più** (4 → 2, 5 → 3, 6 → 4, 7 → 5, 8 → 6, 9 → 7, 10 → 8). Nessun tetto: una parola da 16 lettere vale **14 punti**.',
+          'Una parola da 9 lettere vale **7 volte** una da 3, e la crescita resta continua oltre le 8: al contrario della scala a soglie, non ci sono due lunghezze diverse che valgono lo stesso.',
+        ],
+      },
+      {
+        kind: 'fix',
+        items: [
+          '**Il pannello Regole non promette più un tetto che non esiste.** Mostrava l\'ultima fascia come “10 o più → 8+”, suggerendo che i punti si fermassero lì: ora elenca le lunghezze esatte e la nota chiarisce che la scala non ha un tetto.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La scala è definita in un solo posto** (`scoreForLength` in `packages/shared/src/scoring.ts`). Prima la formula era ricopiata in `stats.ts`, in `SchedaBrowser.tsx` e in `schedaAle.ts`: quattro copie che potevano divergere. Ora tutte delegano alla stessa funzione.',
+          '**Le schede Ale sono state ricalibrate** (5000 griglie per dimensione) perché la difficoltà usa la ricchezza `M = 1 − parole / punteggio`, che dipende dalla scala: con la vecchia scala a soglie la ricchezza media cambiava di **0,135**, abbastanza da spostare i confini delle fasce. Le 135 schede Ale sono state rigenerate e sono tutte in banda.',
+          'Il controllo `tools/rigenera-ale-server.mjs` verifica ora che il server usi la scala **lineare** (prima pretendeva la classica): il gate serve a non rigenerare le Ale con una scala che il codice non usa più.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.43.0',
+    date: '2026-10-05',
+    title: 'Dizionario: riammesse le parole tecniche che il gioco rifiutava',
+    promo: {
+      emoji: '🔬',
+      headline: 'Anche “setosa” e “absidale” valgono punti',
+      text: 'Il dizionario scartava quasi 83.000 parole rare ma vere — aggettivi di botanica, zoologia, geologia — perché non erano presenti su Wikizionario: potevi comporle sulla griglia e il gioco te le rifiutava. Ora ne sono rientrate 4.339, con tanto di categoria grammaticale nella pagina Parole.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le parole accettate in partita non dipendono più dalla scheda che stai giocando.** Il client rifiutava ogni parola che non fosse nell’elenco salvato dentro la scheda: quando il dizionario cambiava, le schede già calcolate restavano indietro e alcune parole valide venivano respinte **proprio nel single player**. Misurato prima della correzione: **168 schede su 270 disallineate**, 738 parole promesse dal server e rifiutate dal gioco. Ora un controllo dedicato (`pnpm sync:schede`) riallinea gli elenchi e **fallisce** se trova una divergenza.',
+          '**Rimosse 112 etichette di materia e grammatica** che erano rimaste nel dizionario versionato (`agg`, `avv`, `anat`, `archit`, `arm`, `biz`, `fis`…): non sono parole italiane e il gioco le accettava solo per un difetto di allineamento fra le liste. Le schede le elencavano fra le soluzioni possibili.',
+        ],
+      },
+      {
+        kind: 'feature',
+        items: [
+          '**+4.339 parole tecniche riammesse** (`setosa`, `absidale`, `accelerometrico`, `mucillaginoso`, `arenaceo`, `piombifero`): derivati regolari, termini scientifici, etnici. Il dizionario passa da **368.000 a 372.000 forme** e ognuna porta la sua categoria grammaticale nella pagina Parole.',
+          'Nuova lista **`technical-words.txt`**, generata da **`tools/gen-technical-words.mjs`** e integrabile a mano da **`technical-words.curated.txt`**. Una parola entra solo se è un derivato regolare di una base già conosciuta dal gioco **e** compare nella lista dei 280k: è il doppio controllo che tiene fuori il rumore (`acta`, `agfa`, `baili`).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La tolleranza della verifica copre anche la lunghezza media.** Aveva un margine solo sulla densità di parole: bastavano 5 parole lunghe in più per far fallire una scheda con una media di **4,86** contro un tetto di **4,85** — lo 0,19% di scarto, non un difetto di giocabilità. Ora la verifica usa `meanLengthTolerance` come già faceva per la densità.',
+          'Il generatore delle parole tecniche è **idempotente**: sottrae dal lessico delle basi la whitelist prodotta dall’esecuzione precedente, altrimenti — trovando le proprie voci già nel dizionario — avrebbe generato derivati su derivati a ogni lancio.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.42.0',
+    date: '2026-09-29',
+    title: 'Schede Ale del server: si allineano al metodo nuovo con un comando solo',
+    promo: {
+      emoji: '🧹',
+      headline: 'Anche le schede Ale nate dal pannello si aggiornano',
+      text: 'Le schede Ale create dal pannello admin vivono sul server e non seguivano gli aggiornamenti: dopo un cambio di difficoltà o di punteggi restavano tarate sul metodo vecchio. Ora si svuotano e si rigenerano con un comando solo, con backup automatico e controllo delle lettere rare.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le schede Ale generate dal pannello non restano più indietro.** Sono salvate sul server (non nel codice) e quindi continuavano a usare la calibrazione del giorno in cui erano nate: dopo il passaggio agli **anelli di frequenza**, ai **rail delle lettere rare** e alla **scala Boggle classica**, la difficoltà non era più omogenea con il resto del catalogo. Ora si azzerano e si rigenerano con il metodo in esecuzione, così “facile”, “normale” e “difficile” vogliono dire la stessa cosa per tutte le schede.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'Nuovo strumento **`tools/rigenera-ale-server.mjs`**: fa login, scarica un **backup JSON** di tutte le schede Ale, svuota la cartella delle Ale generate a runtime (`schede-ale/`), rigenera i lotti e verifica che le lettere rare rispettino le fasce. È **dry-run di default** (`--apply` per eseguire) e **rifiuta di procedere** se il server non usa ancora la scala classica dei punteggi. Le credenziali arrivano solo da variabili d’ambiente.',
+          'Procedura, alternative dal pannello e ripristino documentati in **`docs/ALE-RUNTIME-SERVER.md`** (collegato da `DEPLOY.md` e dal README).',
+          'Nuovo controllo **`pnpm check:version`**: la versione dell’app deve avanzare di **almeno 0.1** rispetto al commit precedente e avere la sua voce nella pagina Novità — così una release non può restare senza numero.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.41.0',
+    date: '2026-09-29',
+    title: 'Punteggio Boggle classico: le parole lunghe valgono davvero di più',
+    promo: {
+      emoji: '🧮',
+      headline: 'Punteggi come nel Boggle classico',
+      text: 'La scala dei punteggi era lineare: una parola da 8 lettere valeva 6 punti, meno di tre parole da 4. Ora è la scala classica del Boggle — 3 e 4 lettere valgono 1 punto, 5 ne valgono 2, 6 ne valgono 3, 7 ne valgono 5 e da 8 lettere in su ne valgono 11 — così la parola lunga è il momento che decide la partita.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Nuova scala dei punteggi (Boggle classico).** 3–4 lettere → **1 punto**, 5 → **2**, 6 → **3**, 7 → **5**, 8 o più → **11**. La scala lineare di prima (`lunghezza − 2`) premiava troppo poco le parole lunghe; da 8 lettere in su i punti non crescono più, come nel Boggle originale. *(Superata dalla 0.44.0: la scala a soglie appiattiva le parole da 8+, quindi si è tornati alla lineare.)*',
+          'Le **Regole e punteggi** nel gioco mostrano la nuova tabella (sono derivate dal codice, quindi non possono restare indietro).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La scala vive in **un solo punto** (`scoreForWord` in `packages/shared/src/scoring.ts`); `stats.ts` (`schedaWordPoints`) e la difficoltà delle schede Ale (`schedaAle.ts`) la riusano invece di duplicare la formula. Cambiarla ora aggiorna gioco, statistiche e calibrazione insieme.',
+          '**Le schede Ale sono state ricalibrate e rigenerate**: la difficoltà usa il punteggio nella metrica di ricchezza `M`, quindi la vecchia calibrazione non valeva più. Campione di calibrazione portato a **5000 griglie** per dimensione.',
+          'I **record delle partite già giocate restano quelli salvati** (calcolati con la scala precedente): non vengono riscritti. Il punteggio massimo e la distribuzione per lunghezza delle schede usano invece la nuova scala.',
+        ],
+      },
+    ],
+  },
+
+  {
+    version: '0.40.0',
+    date: '2026-09-29',
+    title: 'Schede Ale: le lettere rare ora compaiono, e di più su difficile',
+    promo: {
+      emoji: '🔤',
+      headline: 'Le lettere rare si vedono, soprattutto quando è difficile',
+      text: 'Nelle schede Ale “Qu”, “H” e “Z” capitavano quasi solo per caso: su difficile potevano mancare del tutto, mentre su facile erano più frequenti. Ora ogni scheda difficile ha almeno una lettera rara — “Qu” compare nella maggior parte delle schede e “H” solo accanto a C/G — mentre facile ne tiene poche.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Presenza minima di lettere rare per fascia.** Ogni scheda “difficile” ha almeno una tra H, Z e Qu; quelle “facile” ne hanno al più una; “normale” resta libera. La regola si applica dopo la classificazione della difficoltà, quindi non ne sposta i confini.',
+          '**Più “Qu” nelle griglie.** Il campionamento per frequenza rendeva “Qu” quasi assente (0,18% delle celle). Un floor di campionamento la porta allo 0,6% delle celle (una su 167): “Qu” compare ora nello 0–33% delle schede, contro lo 0% di prima, con la massima presenza su difficile.',
+          '**Anche “H” compare, sempre accanto a C/G.** La “H” isolata veniva scartata dalla struttura, quindi appariva raramente. Ora è piazzata solo dove serve (accanto a “C”/“G”), alla sua frequenza naturale: compare nello 0–33% delle schede senza gonfiare la lettera.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**“Qu” fuori dalla banda vocali**: come nel full, `qu` non conta più come vocale. Libera il floor di “Qu” dal vincolo 30–60% e allinea la regola di struttura.',
+          '**`tokenFloor` in quota di cella**: il floor è una quota di CELLA (non di dizionario), convertita con `w = p·(Σf−f_t)/(1−p)`; usare `p` come peso diretto sarebbe sbagliato di un fattore ~7,5. Oggi `qu: 0.006` (una cella su 167).',
+          '**`rareByTier`** è un filtro di accettazione applicato in `nextAleCandidate` dopo la fascia naturale: non cambia `D` né i confini k-means, quindi la calibrazione resta a una passata. Il tetto `rareCap` resta fisso a 3 (dopo il floor di “Qu” morde davvero).',
+          '**`h` posizionale (`hNearCG`, `hBoost = 1`)**: la “H” è esclusa dalla fase 1 del campionamento e poi promossa solo su consonanti comuni adiacenti a “C”/“G”, con probabilità `q = m_h/P` (`m_h` = marginale naturale di cella). Le reiezioni “h senza c/g” scendono a zero e la frequenza aggregata di “H” resta quella naturale.',
+          'Calibrazione rifatta su **5000 griglie per dimensione**: k-means k=3 ovunque, **15/15 in banda per ogni fascia, zero ripieghi**, riproduzione 15/15 rispetto al catalogo. Presenza rare per fascia in `docs/algoritmi/report/ale.md`.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.39.0',
+    date: '2026-09-29',
+    title: 'Schede Ale più equilibrate: rarità a fasce di frequenza e parole ancora',
+    promo: {
+      emoji: '🎯',
+      headline: 'Ale capisce meglio quanto è difficile una griglia',
+      text: 'Le schede Ale valutavano quanto è “rara” una parola con un sì/no. Ora usano tre fasce di frequenza d’uso (le 5.000 più comuni, poi fino a 20.000, poi il resto): una griglia con parole rare ma riconoscibili non viene più trattata come una con parole oscure. In più ogni scheda ha almeno una parola lunga da trovare e una struttura senza celle morte, e ogni fascia di difficoltà ha la sua quantità di parole giusta.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Difficoltà Ale più fine (rarità ad anelli di frequenza).** La componente di rarità non è più “dentro o fuori dal vocabolario comune”: ogni parola trovata è nella fascia delle **5.000 più usate**, in quella **fino a 20.000** o **oltre**; la rarità pesa l’anello più raro il doppio (`R = (f1 + 2·f2)/2`). Una griglia di parole rare ma d’uso reale non viene più confusa con una di parole oscure.',
+          '**Ogni scheda Ale ha almeno una parola ancora**: 6 lettere su 4×4, 7 su 5×5, 8 su 6×6. Le schede “piatte” (solo parole corte) non esistono più.',
+          '**Struttura giocabile garantita**: niente `h` isolata senza `c`/`g` accanto, consonanti non troppo lontane da una vocale, al più una riga o colonna senza vocali. Erano le zone che il giocatore percepiva come “celle morte”.',
+          '**Ogni fascia di difficoltà ha la sua banda di parole**: dopo la calibrazione, facile/normale/difficile hanno un intervallo di parole proprio (più stretto di quello globale). Le schede della stessa fascia restano così più omogenee nel numero di parole, senza scambiare “facile” con “poche parole”.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          'La rarità ora usa `frequency-it.txt` (OpenSubtitles 2018) al posto di NVdB + lemmi: la pipeline Ale **non dipende più da `lemmas.br`, `nvdb.words.txt` né Morph-it**, che restano solo fonti storiche del dizionario principale.',
+          '**Generazione a tre secchi**: un solo flusso di candidati; ognuno finisce nella fascia in cui cade naturalmente, senza più scartare griglie “di difficoltà sbagliata” (il contatore `difficultyOut` è stato rimosso). Gli id restano contigui per fascia, dopo standard/full.',
+          'Calibrazione rifatta su **2000 griglie per dimensione** con i nuovi guard rails e bande per fascia: k-means k=3 converge ovunque, nessun fallback ai tertili, **15/15 schede per fascia in banda, zero ripieghi**, riproduzione 15/15 rispetto al catalogo. Numeri in `docs/algoritmi/report/ale.md`.',
+        ],
+      },
+    ],
+  },
+
   {
     version: '0.38.0',
     date: '2026-09-28',

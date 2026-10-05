@@ -9,31 +9,31 @@ const tile = (index: number, row: number, col: number, letter = 'a'): Tile => ({
 });
 
 describe('scoring', () => {
-  it('assegna 1 punto per 3 lettere, poi 1 per lettera in più', () => {
+  it('segue la scala lineare: 1 punto per 3 lettere, poi +1 per lettera', () => {
     expect(scoreForWord('ab')).toBe(0); // sotto il minimo
-    // Regola Boggle: lunghezza − 2.
-    expect(scoreForWord('abc')).toBe(1);
-    expect(scoreForWord('abcd')).toBe(2);
-    expect(scoreForWord('abcde')).toBe(3);
-    expect(scoreForWord('abcdef')).toBe(4);
-    expect(scoreForWord('abcdefg')).toBe(5);
-    expect(scoreForWord('abcdefgh')).toBe(6);
-    expect(scoreForWord('abcdefghi')).toBe(7);
-    expect(scoreForWord('abcdefghij')).toBe(8);
-    expect(scoreForWord('abcdefghijklmnop')).toBe(14);
+    expect(scoreForWord('abc')).toBe(1); // 3 lettere
+    expect(scoreForWord('abcd')).toBe(2); // 4
+    expect(scoreForWord('abcde')).toBe(3); // 5
+    expect(scoreForWord('abcdef')).toBe(4); // 6
+    expect(scoreForWord('abcdefg')).toBe(5); // 7
+    expect(scoreForWord('abcdefgh')).toBe(6); // 8
+    expect(scoreForWord('abcdefghi')).toBe(7); // 9
+    expect(scoreForWord('abcdefghij')).toBe(8); // 10
+    expect(scoreForWord('abcdefghijklmnop')).toBe(14); // 16, nessun tetto
   });
 
-  it('le parole lunghe valgono molto più delle corte', () => {
-    // Il motivo della formula: con una piatta (⌊len/3⌋) una parola da 9 lettere
-    // valeva 3 punti, come tre parole da 3. Ora ne vale 7.
-    const nove = scoreForWord('abcdefghi');
+  it('le parole lunghe valgono molto più delle corte, senza tetto', () => {
+    // Il senso della scala lineare: la parola da 9 lettere vale 7 volte una da 3.
+    const lunga = scoreForWord('abcdefghi');
     const tre = scoreForWord('abc');
-    expect(nove).toBe(7);
-    expect(nove / tre).toBe(7);
-    // La crescita è lineare: ogni lettera in più vale 1 punto.
-    for (let len = 4; len <= 15; len++) {
-      expect(scoreForWord('x'.repeat(len)) - scoreForWord('x'.repeat(len - 1))).toBe(1);
+    expect(lunga).toBe(7);
+    expect(lunga / tre).toBe(7);
+    // La crescita è continua: +1 punto per ogni lettera, anche oltre le 8.
+    for (let len = 4; len <= 16; len++) {
+      expect(scoreForWord('x'.repeat(len))).toBe(len - 2);
     }
+    // Niente tetto: una parola da 16 batte una da 8.
+    expect(scoreForWord('x'.repeat(16))).toBeGreaterThan(scoreForWord('x'.repeat(8)));
   });
 
   it('raddoppia i punti per una parola trovata da un solo giocatore', () => {

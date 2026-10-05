@@ -1,14 +1,15 @@
 /**
  * Genera le schede "ale" e le aggiunge al catalogo.
  *
- * Pipeline (spec *algoritmo schede "ale"*):
+ * Pipeline (docs/algoritmi/report/ale-full-implementazione.md, branch `ale-full`):
  *   1. Pre-processing: `words.txt` → `Dict'` (pulizia, accenti piegati, niente `q`
  *      non seguita da `u`);
  *   2. Frequenza dei token su `Dict'` (`QU` = un token);
- *   3. `Common` = NVdB ∩ `Dict'`;
- *   4. Calibrazione: 500 griglie → intervallo di parole (Tukey + rho) → 3 fasce
- *      di difficoltà (k-means, con fallback ai tertili);
- *   5. Produzione: cicli di reiezione con seme, con targeting per fascia.
+ *   3. Anelli di frequenza da `frequency-it.txt` (top-5000 / top-20000);
+ *   4. Calibrazione: 2000 griglie → intervallo di parole (Tukey + rho) → 3 fasce
+ *      di difficoltà (k-means) → **banda di parole per fascia**;
+ *   5. Produzione **a tre secchi**: un solo flusso di candidati, ognuno nel
+ *      secchio della sua fascia naturale, finché i tre non sono pieni.
  *
  * Gli ingressi (1–3) arrivano da `ale-inputs.ts`, la STESSA sorgente usata dal
  * server per la generazione dall'admin: una sola implementazione, nessuna
@@ -16,29 +17,33 @@
  *
  * Uso:
  *   pnpm gen:schede:ale                          # 15 schede per fascia su 4×4, 5×5 e 6×6
- *   pnpm gen:schede:ale -- --n 5 --size 4        # 5 per fascia, tutte le dimensioni
+ *   pnpm gen:schede:ale -- --n 5 --size 4        # 5 per fascia, una dimensione
  *   pnpm gen:schede:ale -- --append              # aggiunge senza sovrascrivere
  *   pnpm gen:schede:ale -- --samples 2000        # campione di calibrazione più grande
  *
  * Opzioni:
  *   --size 4|5|6        dimensione (default: tutte)
- *   --difficolta <n>    facile|normale|difficile (default: tutte)
  *   --n <numero>        schede per fascia (default 15)
- *   --samples <numero>  griglie per la calibrazione (default 500)
+ *   --samples <numero>  griglie per la calibrazione (default 2000)
  *   --seed <numero>     seme master (default 1)
  *   --append            aggiunge alle esistenti invece di sovrascrivere le "ale"
  *   --replace           rigenera SOLO le "ale" e tiene le altre varianti
+ *
+ * `--difficolta` NON esiste più: la generazione è sempre per tutte e tre le
+ * fasce insieme (usa `--n` per il numero per fascia).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  ALE_CALIBRATION_RHO,
+  ALE_RARITY_RINGS,
   calibrateAle,
   DEFAULT_ALE_GUARD_RAILS,
   DIFFICULTY_ORDER,
-  generateAleScheda,
+  generateAleBuckets,
+  newAleGenerationStats,
   sampleAleBoards,
   schedaFileName,
-  schedaKey,
   schedaVariantOf,
   SCHEDA_FORMAT_VERSION,
   type AleCalibration,
@@ -71,49 +76,54 @@ function loadExisting(size: GridSize, difficulty: Difficulty): Scheda[] {
 }
 
 function main(): void {
+  if (arg('difficolta') !== undefined) {
+    throw new Error('la generazione ale è a tre secchi: usa --n per il numero per fascia');
+  }
   const sizes = arg('size') ? [Number(arg('size')) as GridSize] : ALL_SIZES;
-  const difficulties = arg('difficolta') ? [arg('difficolta') as Difficulty] : DIFFICULTY_ORDER;
   const count = Number(arg('n', '15'));
-  const samples = Number(arg('samples', '500'));
+  const samples = Number(arg('samples', '2000'));
   const seed = Number(arg('seed', '1'));
   const append = hasFlag('append');
   const replace = hasFlag('replace');
 
   for (const s of sizes) if (!ALL_SIZES.includes(s)) throw new Error(`Dimensione non valida: ${s}`);
-  for (const d of difficulties) if (!DIFFICULTY_ORDER.includes(d)) throw new Error(`Difficoltà non valida: ${d}`);
 
   const inputs = loadAleInputs();
-  const { freq, trie, common, lemmas, dictPrime } = inputs;
+  const { freq, trie, rings, dictPrime } = inputs;
 
   // La calibrazione dipende dalla DIMENSIONE: la facciamo per ogni dimensione
   // richiesta. Un file per dimensione (una 4×4 ha meno celle di una 6×6).
   const calibrations = new Map<GridSize, AleCalibration>();
   for (const size of sizes) {
     console.log(`Calibro su ${samples} griglie ${size}×${size}…`);
-    const stats = sampleAleBoards(size, freq, trie, common, samples, seed, DEFAULT_ALE_GUARD_RAILS, lemmas);
+    const stats = sampleAleBoards(size, freq, trie, rings, samples, seed, DEFAULT_ALE_GUARD_RAILS);
     const calibration = calibrateAle(stats, {
       guardRails: DEFAULT_ALE_GUARD_RAILS,
       dictSize: dictPrime.length,
-      commonSize: common.size,
-      rho: 0.6,
+      rings: ALE_RARITY_RINGS,
+      rho: ALE_CALIBRATION_RHO,
     });
     calibrations.set(size, calibration);
     const wc = calibration.provenance.wordCount;
     console.log(
-      `  parole p0=${wc.min} q1=${wc.q1} med=${wc.median} q3=${wc.q3} p100=${wc.max} → range [${calibration.wordRange.lo}, ${calibration.wordRange.hi}]`,
+      `  parole p0=${wc.min} q1=${wc.q1} med=${wc.median} q3=${wc.q3} p100=${wc.max} → range globale [${calibration.wordRange.lo}, ${calibration.wordRange.hi}]`,
     );
+    for (const tier of calibration.tiers) {
+      console.log(
+        `  ${tier.difficulty.padEnd(9)} centro ${tier.targetDifficulty.toFixed(3)} · difficoltà [${tier.range.min.toFixed(3)}–${tier.range.max.toFixed(3)}] · parole [${tier.wordRange.lo}, ${tier.wordRange.hi}]`,
+      );
+    }
     console.log(
-      `  fasce: ${calibration.tiers.map((t) => `${t.difficulty}(d=${t.targetDifficulty.toFixed(2)} [${t.range.min.toFixed(2)}–${t.range.max.toFixed(2)}])`).join('  ')}`,
+      `  k-means usato: ${calibration.provenance.usedKmeans ? 'sì' : 'no (fallback ai tertili)'}` +
+        `${calibration.provenance.perTierFallback ? ' · perTierFallback ATTIVO' : ''}`,
     );
-    console.log(`  k-means usato: ${calibration.provenance.usedKmeans ? 'sì' : 'no (fallback ai tertili)'}`);
   }
 
   /*
    * Persistenza della calibrazione (provenienza della spec §6.4).
    *
    * Si FONDE con il file esistente: una run per una sola dimensione non deve
-   * cancellare le calibrazioni delle altre. Il file contiene `bySize` con una
-   * voce per dimensione (una 4×4 ha meno celle di una 6×6).
+   * cancellare le calibrazioni delle altre.
    */
   mkdirSync(path.dirname(CALIB_PATH), { recursive: true });
   const previous = existsSync(CALIB_PATH)
@@ -142,38 +152,33 @@ function main(): void {
 
   for (const size of sizes) {
     const calibration = calibrations.get(size)!;
-    for (const difficulty of difficulties) {
+
+    // Le schede non-ale restano; gli id delle ale partono dopo, per non collidere.
+    const keptByDifficulty = new Map<Difficulty, Scheda[]>();
+    for (const difficulty of DIFFICULTY_ORDER) {
       const existing = append || replace ? loadExisting(size, difficulty) : [];
       const kept = replace ? existing.filter((s) => schedaVariantOf(s) !== 'ale') : existing;
-      /*
-       * Gli id delle schede "ale" partono DOPO quelli già presenti nello stesso
-       * file: standard/full usano già `5-facile-001..015`, quindi le "ale"
-       * prendono i numeri successivi. Il formato `size-difficulty-NNN` resta
-       * valido per `schedaFileFor`.
-       */
-      const idPrefix = schedaKey(size, difficulty);
-      const idStart = kept.length + 1;
-      const startedAt = Date.now();
-      const fresh: Scheda[] = [];
-      for (let i = 0; i < count; i++) {
-        const boardSeed = seed * 1_000_003 + 7919 + i * 104_729;
-        fresh.push(
-          generateAleScheda({
-            size,
-            difficulty,
-            freq,
-            trie,
-            common,
-            lemmas,
-            calibration,
-            seed: boardSeed,
-            idPrefix,
-            idStart,
-            idIndex: i,
-            maxAttempts: 500,
-          }),
-        );
-      }
+      keptByDifficulty.set(difficulty, kept);
+    }
+    const idStart = Math.max(...DIFFICULTY_ORDER.map((d) => keptByDifficulty.get(d)!.length)) + 1;
+
+    const startedAt = Date.now();
+    const stats = newAleGenerationStats();
+    const buckets = generateAleBuckets({
+      size,
+      perTier: count,
+      freq,
+      trie,
+      rings,
+      calibration,
+      seed,
+      idStart,
+      stats,
+    });
+
+    for (const difficulty of DIFFICULTY_ORDER) {
+      const kept = keptByDifficulty.get(difficulty)!;
+      const fresh = buckets[difficulty];
       const schede = append || replace ? [...kept, ...fresh] : fresh;
       const file: SchedaFile = {
         version: SCHEDA_FORMAT_VERSION,
@@ -184,17 +189,32 @@ function main(): void {
       };
       writeFileSync(path.join(OUT_DIR, schedaFileName(size, difficulty)), JSON.stringify(file, null, 2) + '\n');
 
-      // Diagnostica: quante sono davvero nella fascia richiesta?
-      const inTier = fresh.filter((s) => {
+      const tier = calibration.tiers.find((t) => t.difficulty === difficulty)!;
+      const inBand = fresh.filter((s) => {
         const wc = (s.allWords ?? s.words).length;
-        return wc >= calibration.wordRange.lo && wc <= calibration.wordRange.hi;
+        return (
+          wc >= calibration.wordRange.lo &&
+          wc <= calibration.wordRange.hi &&
+          wc >= tier.wordRange.lo &&
+          wc <= tier.wordRange.hi
+        );
       }).length;
-      const avgWords = Math.round(fresh.reduce((a, x) => a + (x.allWords ?? x.words).length, 0) / fresh.length);
+      const avgWords = fresh.length
+        ? Math.round(fresh.reduce((a, x) => a + (x.allWords ?? x.words).length, 0) / fresh.length)
+        : 0;
       console.log(
-        `✓ ${size}×${size} ${difficulty} [Ale]: ${fresh.length} schede (medie ${avgWords} parole, in banda ${inTier}/${fresh.length}) · totale nel file ${schede.length}  in ${Date.now() - startedAt}ms`,
+        `✓ ${size}×${size} ${difficulty} [Ale]: ${fresh.length} schede (medie ${avgWords} parole, in banda ${inBand}/${fresh.length}) · totale nel file ${schede.length}`,
       );
     }
+
+    console.log(
+      `  flusso ${size}×${size}: campioni ${stats.sampled.toLocaleString('it-IT')} · respinti ${stats.rejected.toLocaleString('it-IT')} · ` +
+        `fuori range ${stats.wordCountOut.toLocaleString('it-IT')} · fuori banda fascia ${stats.tierBandOut.toLocaleString('it-IT')} · ` +
+        `gate rari fascia ${stats.tierRareOut.toLocaleString('it-IT')} · ` +
+        `ripieghi ${stats.fallbacks} · ${Date.now() - startedAt}ms`,
+    );
   }
+
   console.log(`\nSchede scritte in ${path.relative(process.cwd(), OUT_DIR)}/`);
   console.log('Ricordati di copiare il bundle: node apps/web/scripts/copy-schede.mjs');
 }

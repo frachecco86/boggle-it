@@ -1,8 +1,22 @@
 # Scala dei punteggi — alternative a confronto
 
+> **STATO: adottata la scala LINEARE (crescita continua).**
+>
+> Storia: il ramo `nonlinear-score` aveva implementato la **scala classica**
+> (8+ = 11, alternativa 1 qui sotto). Una modifica successiva (Todoist
+> `6hh6H58XWJc3w7hM`) ha chiesto esplicitamente la scala **lineare**, ed è quella
+> in vigore: 3 → 1, 4 → 2, 5 → 3 … 10 → 8, 16 → 14, **senza tetto**.
+> La scala classica resta qui sotto solo come alternativa scartata.
+>
+> Le schede Ale sono state **ricalibrate** per la scala lineare (5000 griglie per
+> dimensione) perché `M = 1 − wordCount / score` dipende dal punteggio: con la
+> scala classica la ricchezza media cambiava di **0,135**, abbastanza da spostare
+> i confini delle fasce.
+
 Documento di lavoro per la modifica *"cambia la scala dei punteggi. Non lineare"*
-(Todoist `6hf9pCch3GxgCx8v`), che chiede esplicitamente **di proporre alternative**
-prima di sceglierne una.
+(Todoist `6hf9pCch3GxgCx8v`), che chiedeva **di proporre alternative** prima di
+sceglierne una. La modifica successiva ha ribaltato la scelta verso la lineare:
+vedi lo stato in testa.
 
 ## A. La scala di oggi
 

@@ -325,7 +325,7 @@ describe('catalogo parole', () => {
     expect(casa).toBeDefined();
     expect(casa!.occurrences).toBe(2);
     expect(casa!.length).toBe(4);
-    // Punteggio = lunghezza - 2.
+    // Punteggio = scala lineare (4 lettere → 2).
     expect(casa!.points).toBe(2);
   });
 

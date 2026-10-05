@@ -300,7 +300,7 @@ export function SchedaBrowser() {
             <p>
               Il <strong>punteggio massimo</strong> mostrato è il totale di TUTTE le parole
               trovabili: è il tetto teorico, non quello che si fa in una partita. Si calcola
-              come <code>lunghezza − 2</code> per parola.
+              con la scala lineare (3 → 1, 4 → 2, 5 → 3, poi +1 per lettera).
             </p>
           </InfoBox>
         </div>

@@ -15,7 +15,7 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 - **Griglie 4×4, 5×5 e 6×6** con composizione controllata (vocali e lettere rare **italiane**: `z`). Le lettere non italiane (`k w x y j`, quasi solo prestiti) non entrano mai in griglia.
 - **Round da 3 minuti** con timer autorevole lato server in multiplayer.
 - **Swipe/drag** su celle adiacenti (8 direzioni), con undo tornando sulla lettera precedente.
-- **Dizionario italiano ampio**: ~368.000 forme, incluse **tutte le coniugazioni verbali**.
+- **Dizionario italiano ampio**: ~372.000 forme, incluse **tutte le coniugazioni verbali**.
   **Ogni voce è giocabile**: è la stessa lista usata dalle schede. Le abbreviazioni e le
   etichette di materia (`idr`, `geogr`, `avv`…) **non** sono nel lessico.
 - **Schede pre-calcolate**: ogni partita pesca una **scheda** dal catalogo (270 schede di base:
@@ -27,9 +27,8 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
   di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
   parole per Facile / Normale / Difficile). Le lettere rare restano più frequenti nei livelli alti,
   ma come mezzo, non come criterio.
-- **Punteggio Boggle adattato**: **1 punto per una parola di 3 lettere, poi un punto in più per
-  ogni lettera** (lunghezza − 2; una parola da 10 lettere vale 8 punti). In multiplayer una
-  parola trovata da **un solo giocatore vale doppio**.
+- **Punteggio Boggle classico**: **3–4 lettere → 1 punto, 5 → 2, 6 → 3, 7 → 5,
+  8 o più → 11**. In multiplayer una parola trovata da **un solo giocatore vale doppio**.
 - **Catalogo schede in home**: numero totale sempre visibile; **pannello admin** con token per
   generarne di nuove e per decidere il **tipo di scheda di default** (Standard / Full criteria /
   Ale) valido per tutti i giocatori; la **pagina scheda** con la griglia e tutte le parole
@@ -131,6 +130,11 @@ node tools/gen-icon.mjs     # rigenera icone Android e web (margherita), senza d
 Il numero di versione sta in `apps/web/src/version.ts` insieme alle note di rilascio;
 nell'app compare in alto a destra e apre la pagina **Novità**.
 
+**Regola:** ogni commit porta la versione **almeno +0.1** (minor avanti di uno:
+`0.41.0` → `0.42.0`) e aggiunge la sua voce in `RELEASES`: niente numero senza
+changelog. Il controllo è `pnpm check:version` (confronta con `origin/master`;
+con `--base <ref>` si confronta con un altro riferimento).
+
 ### App Android
 
 ```bash
@@ -176,6 +180,11 @@ per ambito (solo quelle aggiunte, solo le ale, per variante o tutte).
 Quelle nuove vengono salvate in `DATA_DIR/schede-extra/` (standard/full) e `DATA_DIR/schede-ale/`
 (ale) — entrambe non versionate e dentro il volume persistente.
 
+Le ale a runtime **restano ferme alla calibrazione del giorno in cui sono state create**:
+dopo un cambio di calibrazione o della scala punteggi vanno svuotate e rigenerate con il codice
+deployato — `node tools/rigenera-ale-server.mjs` (dry-run di default) e la procedura in
+**[`docs/ALE-RUNTIME-SERVER.md`](docs/ALE-RUNTIME-SERVER.md)**.
+
 ---
 
 ## Comandi
@@ -189,6 +198,7 @@ Quelle nuove vengono salvate in `DATA_DIR/schede-extra/` (standard/full) e `DATA
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
 | `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
+| `pnpm check:version` | Verifica che la versione sia avanzata di almeno 0.1 e abbia la sua voce |
 
 ### Feedback sonoro
 
@@ -269,8 +279,55 @@ Pipeline di build (`packages/dictionary/scripts/`):
    unisce le fonti, deduplica, ordina e produce `words.txt` + `words.br`.
 3. `build-frequency.mjs` ritaglia dalla lista di frequenza le prime 60.000 parole **giocabili**
    e scrive `frequency-it.txt` (versionato): sono le fasce usate dal generatore delle schede.
+4. `build-words.mjs` legge anche **`technical-words.txt`**, la whitelist che riammette i
+   tecnicismi scartati dal filtro di attestazione (vedi sotto).
 
-Risultato tipico: **386.946 parole**, 4,3 MB raw → **616 KB Brotli** (14%).
+**Nota (branch `ale-full`):** NVdB/Morph-it restano fonti del **dizionario principale**
+(forme flesse), ma non entrano più nella pipeline delle schede **ale**, che misura la rarità
+con le fasce di frequenza d'uso di `frequency-it.txt` (top-5000 / top-20000 / oltre).
+La vecchia pipeline a lemmi (`lemmas.br`, `nvdb.words.txt`) è conservata solo come storico.
+
+Risultato tipico: **372.439 parole**, 4,2 MB raw → **626 KB Brotli** (15%).
+
+### Perché una whitelist di parole tecniche
+
+Le liste pubbliche contengono anche rumore (`acta`, `agfa`, `baili`, `savere`): una voce della
+lista piatta dei 280k entra nel dizionario solo se è **attestata come voce autonoma di
+Wikizionario**. Il filtro però scarta ~80.000 voci, e fra queste ci sono parole italiane vere —
+Wikizionario copre male botanica, zoologia, geologia, derivati regolari. `setosa` (da `seta`),
+`absidale`, `accelerometrico`, `mucillaginoso` erano componibili sulla griglia e venivano
+**rifiutate in partita**.
+
+`technical-words.txt` le riammette scavalcando il filtro, con due prove indipendenti:
+**derivazione regolare** da una base già attestata nel lessico *e* presenza nella lista dei 280k,
+più la **regola del paradigma** (almeno 2 forme attestate, che elimina i falsi positivi come il
+gerundio con clitico `abbarbicandosi` = `abbarbicand` + `osi`). Il file è **generato** da
+`tools/gen-technical-words.mjs` (idempotente) e integrabile a mano da
+`technical-words.curated.txt` — stesso schema di `consonant-endings.txt`.
+
+> **Cosa NON c'è nel dizionario.** Nessuna whitelist copre tutto: restano fuori i tecnicismi la
+> cui base non è nel lessico (`abiotico` = `a-` + `biotico`), le locuzioni multi-parola
+> (`ferro da stiro`) e le forme con clitici (`dammelo`), che per un gioco di parole non sono
+> componibili. Il conteggio non va confrontato con le stime «2 milioni di parole» dell'italiano:
+> quelle contano i lessemi per tutte le loro forme flesse, clitici e polirematiche inclusi.
+
+### ⚠️ Cambiare il dizionario richiede di riallineare le schede
+
+Le schede pre-calcolate contengono gli elenchi delle soluzioni già risolti (`allWords`), e in
+single player il client valida le parole **contro la scheda**, non contro il dizionario. Quindi
+dopo ogni modifica al lessico:
+
+```bash
+pnpm --filter @boggle/dictionary build:full   # o `build`, se offline
+pnpm sync:schede                              # riallinea words/allWords (--check per la sola diagnosi)
+node apps/web/scripts/copy-schede.mjs         # aggiorna il bundle offline dell'app
+pnpm --filter @boggle/server verify:schede    # controlla i criteri di qualità
+```
+
+`pnpm sync:schede` ricalcola gli elenchi con la **stessa pipeline del generatore** e non tocca le
+griglie: le schede `ale` usano il proprio trie (`Dict'`, 16 lettere), le altre il pool classico
+(14 lettere, con il filtro sulle consonanti finali). Senza questo passaggio il gioco rifiuta
+parole che il server accetta: era il caso di **168 schede su 270**.
 
 ---
 
@@ -290,14 +347,14 @@ Guida completa in [`docs/DEPLOY.md`](docs/DEPLOY.md). Due opzioni:
 |---|---|
 | Avvio (dizionario + catalogo schede in memoria) | ~230 MB |
 | Generazione schede standard/full dall'admin (trie completo) | picco ~350 MB |
-| Generazione schede **ale** dall'admin (trie 16 lettere + radici) | picco ~450 MB, rilasciato subito dopo |
+| Generazione schede **ale** dall'admin (trie 16 lettere + anelli di frequenza) | picco ~450 MB, rilasciato subito dopo |
 
 Il trie del **solver non esiste più a runtime**: le parole valide arrivano dalle schede,
 quindi il server non costruisce più l'indice da 142 MB. Il pool di generazione delle schede
 classiche e gli ingressi dell'algoritmo **ale** vengono allocati **solo** quando l'admin
 genera. Quelli delle ale vengono **rilasciati** a fine richiesta, così il picco non resta.
 
-I deploy sono **riproducibili offline**: `words.br` (616 KB) è versionato, quindi
+I deploy sono **riproducibili offline**: `words.br` (626 KB) è versionato, quindi
 `pnpm --filter @boggle/dictionary build` rigenera `words.txt` senza rete.
 
 ---

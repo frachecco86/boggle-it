@@ -948,8 +948,8 @@ app.put('/admin/config', (req, res) => {
  *
  * Le varianti `standard` e `full` sono classiche (pool del dizionario) e vivono
  * in `schede-extra/`. La variante `ale` richiede la pipeline completa
- * (calibrazione + NVdB + Morph-it) e viene scritta in `schede-ale/`, separata,
- * così cancellarla o rigenerarla non tocca le altre.
+ * (calibrazione ad anelli di frequenza) e viene scritta in `schede-ale/`,
+ * separata, così cancellarla o rigenerarla non tocca le altre.
  */
 app.post('/admin/schede/genera', async (req, res) => {
   if (!requireAdmin(req, res)) return;

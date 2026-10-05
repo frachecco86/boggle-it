@@ -2,10 +2,10 @@
  * Algoritmo "ale" a RUNTIME: genera schede su richiesta dell'admin.
  *
  * Fino a ieri le schede "ale" si producevano solo offline con
- * `pnpm gen:schede:ale`: richiedono la calibrazione e il vocabolario NVdB, che
+ * `pnpm gen:schede:ale`: richiedono la calibrazione e gli ingressi pesanti, che
  * l'immagine Docker non includeva del tutto. Ora la pipeline completa (pulizia
- * del dizionario, frequenza dei token, `Common`, radici da Morph-it, trie,
- * calibrazione e cicli di reiezione) è disponibile anche nel server, così
+ * del dizionario, frequenza dei token, anelli di frequenza da `frequency-it.txt`,
+ * trie, calibrazione e flusso a tre secchi) è disponibile anche nel server, così
  * l'admin può generarne dal pannello.
  *
  * PERCHÉ tenere qui la logica condivisa: lo script offline e il server devono
@@ -13,24 +13,25 @@
  * generato dal pannello divergono. `scripts/ale-inputs.ts` ri-esporta questo
  * modulo, quindi l'implementazione è una sola.
  *
- * MEMORIA: il picco è alto (trie 16 lettere + radici). Il runtime si carica
- * PIGRAMENTE e si può liberare (`releaseAleRuntime`): l'endpoint lo rilascia
+ * MEMORIA: il picco è alto (trie 16 lettere + anelli). Il runtime si carica
+ * PIGRAMENTE e si può liberare (`releaseAleInputs`): l'endpoint lo rilascia
  * dopo la generazione, così la memoria non resta occupata a tempo indefinito.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { brotliDecompressSync } from 'node:zlib';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  buildAleCommon,
-  buildAleLemmas,
+  ALE_CALIBRATION_RHO,
+  ALE_DIFFICULTY_WEIGHTS,
+  ALE_RARITY_RINGS,
   buildTrie,
   calibrateAle,
   cleanAleWord,
   computeAleFrequency,
   DEFAULT_ALE_GUARD_RAILS,
-  generateAleScheda,
+  nextAleCandidate,
   sampleAleBoards,
+  toAleScheda,
   type AleCalibration,
   type AleFrequency,
   type Difficulty,
@@ -45,29 +46,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '../../..');
 export const DICT_DIR = path.join(ROOT, 'packages/dictionary/data');
 export const ALE_DIR = path.join(DICT_DIR, 'ale');
-export const NVDB_PATH = path.join(ALE_DIR, 'nvdb.words.txt');
 export const CALIB_PATH = path.join(ALE_DIR, 'calibration.json');
-/**
- * Radici (forma → lemma) per l'algoritmo ale, GIA' FILTRATE sui lemmi comuni.
- *
- * Perché questo file (172 KB, versionato) e non Morph-it (19 MB, gitignored):
- * per stabilire se una forma è comune basta sapere quale lemma ha, e il lemma
- * conta solo se è in `Common`. Tenere solo quelle coppie riduce il file di due
- * ordini di grandezza e permette la generazione ale sia in locale sia nel
- * container. Si rigenera con `node scripts/build-ale-lemmas.mjs`.
- */
-export const ALE_LEMMAS_PATH = path.join(ALE_DIR, 'lemmas.br');
-/** Morph-it: fonte grezza delle radici. Serve solo a rigenerare `lemmas.br`. */
-export const MORPH_PATH = path.join(DICT_DIR, 'morph-it_048.txt');
+/** Lista di frequenza d'uso (OpenSubtitles 2018): fonte degli anelli. */
+export const FREQUENCY_PATH = path.join(DICT_DIR, 'frequency-it.txt');
 
 export interface AleInputs {
   rawCount: number;
   dictPrime: string[];
   dictSet: Set<string>;
   freq: AleFrequency;
-  nvdbCount: number;
-  common: Set<string>;
-  lemmas: Map<string, string>;
+  /** Anelli di frequenza: `easy` = top-5000, `medium` = top-20000 (include easy). */
+  rings: { easy: Set<string>; medium: Set<string> };
   trie: TrieNode;
 }
 
@@ -77,8 +66,30 @@ export function readLines(file: string): string[] {
 }
 
 /**
+ * Costruisce gli anelli di frequenza da `frequency-it.txt` (§1.1).
+ *
+ * Si leggono le righe in ordine di frequenza decrescente; ogni riga valida
+ * (dopo `cleanAleWord`) occupa una posizione. Le prime 5000 voci valide formano
+ * `easy`, le prime 20000 (annidate) formano `medium`.
+ */
+export function buildAleRings(lines: string[]): { easy: Set<string>; medium: Set<string> } {
+  const easy = new Set<string>();
+  const medium = new Set<string>();
+  let valid = 0;
+  for (const raw of lines) {
+    const w = cleanAleWord(raw);
+    if (!w) continue;
+    valid++;
+    if (valid <= ALE_RARITY_RINGS.easy) easy.add(w);
+    if (valid <= ALE_RARITY_RINGS.medium) medium.add(w);
+    if (valid >= ALE_RARITY_RINGS.medium) break;
+  }
+  return { easy, medium };
+}
+
+/**
  * Carica e prepara tutti gli ingressi dell'algoritmo. Costoso (secondi): chi
- * chiama dovrebbe usare `getAleRuntime()`, che lo fa una volta sola.
+ * chiama dovrebbe usare `getAleInputs()`, che lo fa una volta sola.
  */
 export function loadAleInputs({ log = true }: { log?: boolean } = {}): AleInputs {
   const say = (msg: string) => {
@@ -99,65 +110,16 @@ export function loadAleInputs({ log = true }: { log?: boolean } = {}): AleInputs
 
   const freq = computeAleFrequency(dictPrime);
 
-  say('ale: costruisco `Common` (NVdB ∩ Dict’)…');
-  const nvdb = readLines(NVDB_PATH);
-  const common = buildAleCommon(nvdb, dictSet);
+  say('ale: carico gli anelli di frequenza (frequency-it.txt)…');
+  const rings = buildAleRings(readLines(FREQUENCY_PATH));
   say(
-    `ale: Common ${common.size.toLocaleString('it-IT')} ` +
-      `(${((common.size / dictPrime.length) * 100).toFixed(1)}% di Dict')`,
+    `ale: anelli di frequenza ${rings.easy.size.toLocaleString('it-IT')} / ` +
+      `${rings.medium.size.toLocaleString('it-IT')} (da frequency-it.txt)`,
   );
-
-  /*
-   * Radici (forma → lemma): NVdB contiene i LEMMI, non tutte le forme flesse.
-   * Senza, una forma comune come `amo` risulterebbe rara e la difficoltà della
-   * griglia sarebbe gonfiata dalla morfologia.
-   *
-   * Si usa `lemmas.br` (versionato, già filtrato sui lemmi comuni). Solo se
-   * manca — sviluppo, prima di generarlo — si ricade su Morph-it, che è più
-   * lento e pesante.
-   */
-  say('ale: carico le radici (forma → lemma)…');
-  const lemmas = loadAleLemmas(common);
-  say(`ale: forme flesse con lemma comune: ${lemmas.size.toLocaleString('it-IT')}`);
 
   const trie = buildTrie(dictPrime, { maxLength: 16, minLength: 3 });
 
-  return { rawCount: rawDict.length, dictPrime, dictSet, freq, nvdbCount: nvdb.length, common, lemmas, trie };
-}
-
-/**
- * Radici forma → lemma.
- *
- * Preferisce `lemmas.br` (già filtrato sui lemmi comuni: il chiamante passa
- * `common` solo per il fallback da Morph-it). Se il file versionato manca, e c'è
- * Morph-it, lo costruisce al volo: così in sviluppo la pipeline funziona anche
- * prima di generare `lemmas.br`.
- */
-export function loadAleLemmas(common: Set<string>): Map<string, string> {
-  if (existsSync(ALE_LEMMAS_PATH)) {
-    const text = brotliDecompressSync(readFileSync(ALE_LEMMAS_PATH)).toString('utf8');
-    const lemmas = new Map<string, string>();
-    for (const line of text.split('\n')) {
-      if (!line) continue;
-      const tab = line.indexOf('\t');
-      if (tab <= 0) continue;
-      lemmas.set(line.slice(0, tab), line.slice(tab + 1));
-    }
-    return lemmas;
-  }
-
-  if (!existsSync(MORPH_PATH)) {
-    throw new Error(
-      `Manca ${ALE_LEMMAS_PATH} (radici forma → lemma per l'algoritmo ale).\n` +
-        'Rigeneralo con: node packages/dictionary/scripts/build-ale-lemmas.mjs',
-    );
-  }
-  // Fallback: Morph-it in ISO-8859-1, filtrato sui lemmi comuni.
-  const morphRaw = new TextDecoder('latin1').decode(readFileSync(MORPH_PATH));
-  const all = buildAleLemmas(morphRaw);
-  const filtered = new Map<string, string>();
-  for (const [form, lemma] of all) if (common.has(lemma)) filtered.set(form, lemma);
-  return filtered;
+  return { rawCount: rawDict.length, dictPrime, dictSet, freq, rings, trie };
 }
 
 let cached: Promise<AleInputs> | null = null;
@@ -170,7 +132,7 @@ export function getAleInputs(): Promise<AleInputs> {
   return cached;
 }
 
-/** Libera gli ingressi (trie e radici): la memoria torna disponibile. */
+/** Libera gli ingressi (trie e anelli): la memoria torna disponibile. */
 export function releaseAleInputs(): void {
   cached = null;
 }
@@ -178,9 +140,10 @@ export function releaseAleInputs(): void {
 /**
  * La calibrazione committata per una dimensione, se presente e coerente.
  *
- * Deve essere stata prodotta con gli STESSI guard rails della produzione:
- * cambiandoli, la calibrazione non vale più (lo dice la spec dell'algoritmo).
- * Se manca o non è coerente si ricalcola al momento (poche centinaia di ms).
+ * Deve essere stata prodotta con gli STESSI guard rails, gli stessi pesi, lo
+ * stesso `rho` e la stessa metrica ad anelli della produzione: cambiandone uno,
+ * la calibrazione non vale più (lo dice la spec dell'algoritmo). Se manca o non
+ * è coerente si ricalcola al momento (poche centinaia di ms).
  */
 function committedCalibration(size: GridSize): AleCalibration | null {
   if (!existsSync(CALIB_PATH)) return null;
@@ -192,6 +155,14 @@ function committedCalibration(size: GridSize): AleCalibration | null {
     if (!calibration) return null;
     const rails = calibration.provenance?.guardRails;
     if (JSON.stringify(rails) !== JSON.stringify(DEFAULT_ALE_GUARD_RAILS)) return null;
+    // Anche i pesi della difficoltà invalidano la calibrazione (cambiano i confini delle fasce).
+    const weights = calibration.provenance?.weights;
+    if (JSON.stringify(weights) !== JSON.stringify(ALE_DIFFICULTY_WEIGHTS)) return null;
+    // E anche rho: restringe l'intervallo di parole, quindi cambia la produzione.
+    if (calibration.provenance?.rho !== ALE_CALIBRATION_RHO) return null;
+    // Metrica e anelli: la vecchia calibrazione (NVdB+lemmi) non è più valida.
+    if (calibration.provenance?.metric !== 'rings-v1') return null;
+    if (JSON.stringify(calibration.provenance?.rings) !== JSON.stringify(ALE_RARITY_RINGS)) return null;
     return calibration;
   } catch {
     return null;
@@ -211,12 +182,12 @@ export function calibrationFor(size: GridSize, inputs: AleInputs, samples = 500,
     return committed;
   }
 
-  const stats = sampleAleBoards(size, inputs.freq, inputs.trie, inputs.common, samples, seed, DEFAULT_ALE_GUARD_RAILS, inputs.lemmas);
+  const stats = sampleAleBoards(size, inputs.freq, inputs.trie, inputs.rings, samples, seed, DEFAULT_ALE_GUARD_RAILS);
   const calibration = calibrateAle(stats, {
     guardRails: DEFAULT_ALE_GUARD_RAILS,
     dictSize: inputs.dictPrime.length,
-    commonSize: inputs.common.size,
-    rho: 0.6,
+    rings: ALE_RARITY_RINGS,
+    rho: ALE_CALIBRATION_RHO,
   });
   calibrationCache.set(size, calibration);
   return calibration;
@@ -228,38 +199,72 @@ export interface AleGenerateOptions {
   count: number;
   /** Numero del primo id (le schede prendono `idStart`, `idStart+1`, …). */
   startIndex: number;
-  /** Seme master; il seme di una scheda è `seed * 1_000_003 + 7919 + i * 104_729`. */
+  /** Seme master del flusso (tentativi `seed + attempt`). */
   seed?: number;
   inputs?: AleInputs;
 }
 
-/** Genera un lotto di schede "ale" per una fascia, con id che continuano la numerazione. */
+/**
+ * Genera un lotto di schede "ale" per una fascia, con id che continuano la
+ * numerazione. Implementata sopra il flusso a tre secchi (`nextAleCandidate`):
+ * si pescano candidati finché non se ne raccolgono `count` della fascia
+ * richiesta (le schede valide delle altre fasce si ignorano), con lo stesso
+ * ripiego del catalogo applicato alla singola fascia.
+ */
 export function generateAleBatch(options: AleGenerateOptions): Scheda[] {
   const inputs = options.inputs ?? null;
   if (!inputs) throw new Error('generateAleBatch richiede gli ingressi (usa getAleInputs())');
   const { size, difficulty, count, startIndex, seed = 1 } = options;
   const calibration = calibrationFor(size, inputs);
-  const idPrefix = `${size}-${difficulty}`;
-
+  const maxAttempts = 500 * count;
   const out: Scheda[] = [];
-  for (let i = 0; i < count; i++) {
-    const boardSeed = seed * 1_000_003 + 7919 + i * 104_729;
-    out.push(
-      generateAleScheda({
+
+  const take = (attempt: number): boolean => {
+    const candidate = nextAleCandidate({
+      size,
+      freq: inputs.freq,
+      trie: inputs.trie,
+      rings: inputs.rings,
+      calibration,
+      seed,
+      attempt,
+    });
+    if (candidate && candidate.difficulty === difficulty) {
+      out.push(toAleScheda(size, difficulty, startIndex, out.length, candidate.grid, candidate.stats));
+      return true;
+    }
+    return false;
+  };
+
+  let attempt = 0;
+  while (out.length < count && attempt < maxAttempts) {
+    take(attempt);
+    attempt++;
+  }
+
+  // Ripiego: si ignora la banda della fascia (restano rails + range globale).
+  if (out.length < count) {
+    const relaxed: AleCalibration = {
+      ...calibration,
+      tiers: calibration.tiers.map((t) => ({ ...t, wordRange: { ...calibration.wordRange } })),
+    };
+    let extra = 0;
+    while (out.length < count && extra < maxAttempts) {
+      const candidate = nextAleCandidate({
         size,
-        difficulty,
         freq: inputs.freq,
         trie: inputs.trie,
-        common: inputs.common,
-        lemmas: inputs.lemmas,
-        calibration,
-        seed: boardSeed,
-        idPrefix,
-        idStart: startIndex,
-        idIndex: i,
-        maxAttempts: 500,
-      }),
-    );
+        rings: inputs.rings,
+        calibration: relaxed,
+        seed,
+        attempt: attempt + extra,
+      });
+      extra++;
+      if (candidate && candidate.difficulty === difficulty) {
+        out.push(toAleScheda(size, difficulty, startIndex, out.length, candidate.grid, candidate.stats));
+      }
+    }
   }
+
   return out;
 }

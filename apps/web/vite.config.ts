@@ -32,6 +32,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/socket.io': { target: 'http://localhost:3001', ws: true },
+      '/config': { target: 'http://localhost:3001' },
       '/health': { target: 'http://localhost:3001' },
       '/schede': { target: 'http://localhost:3001' },
       '/preview': { target: 'http://localhost:3001' },

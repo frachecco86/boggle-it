@@ -120,7 +120,8 @@ export interface Scheda {
   /**
    * Parole della FASCIA della difficoltà trovabili sulla griglia, ordinate per
    * lunghezza decrescente. Pre-calcolate: a runtime non si risolve più nulla.
-   * I punti si derivano (`lunghezza − 2`), quindi non vengono salvati.
+   * I punti si derivano (scala lineare, `scoreForWord`), quindi non
+   * vengono salvati.
    */
   words: string[];
   /**

@@ -13,16 +13,26 @@ import {
   ALE_DIR,
   CALIB_PATH,
   DICT_DIR,
-  MORPH_PATH,
-  NVDB_PATH,
+  FREQUENCY_PATH,
   ROOT,
+  buildAleRings,
   getAleInputs,
   loadAleInputs,
   readLines,
   type AleInputs,
 } from '../src/ale.js';
 
-export { ALE_DIR, CALIB_PATH, DICT_DIR, MORPH_PATH, NVDB_PATH, ROOT, getAleInputs, loadAleInputs, readLines };
+export {
+  ALE_DIR,
+  CALIB_PATH,
+  DICT_DIR,
+  FREQUENCY_PATH,
+  ROOT,
+  buildAleRings,
+  getAleInputs,
+  loadAleInputs,
+  readLines,
+};
 export type { AleInputs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

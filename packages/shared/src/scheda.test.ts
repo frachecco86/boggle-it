@@ -119,7 +119,7 @@ describe('generatore schede', () => {
   it('scoreForWord cresce di 1 punto per lettera anche oltre le 8', () => {
     // 'cassaforte' = 10 lettere → 8 punti (lunghezza − 2).
     expect(scoreForWord('cassaforte')).toBe(8);
-    // 16 lettere → 14 punti.
+    // 16 lettere → 14 punti: nessun tetto.
     expect(scoreForWord('x'.repeat(16))).toBe(14);
   });
 });

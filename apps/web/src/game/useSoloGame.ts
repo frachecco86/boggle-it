@@ -87,7 +87,8 @@ export interface SoloGameState {
  * del server. Così la partita è riproducibile e le parole valide arrivano
  * pre-calcolate (niente solver nel client).
  *
- * Punteggio: `lunghezza − 2`. In single player NON c'è raddoppio (non esistono
+ * Punteggio: scala lineare `lunghezza − 2` (vedi `scoreForWord`). In single player NON
+ * c'è raddoppio (non esistono
  * avversari con cui essere "unici").
  */
 export function useSoloGame(options: UseSoloGameOptions) {

@@ -32,16 +32,17 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   /*
-   * I punti sono DERIVATI da `scoreForWord`, non scritti a mano: se la formula
+   * I punti sono DERIVATI da `scoreForWord`, non scritti a mano: se la scala
    * cambia, il pannello si aggiorna da solo. Scriverli a mano è il modo sicuro
    * per farli divergere dal gioco (è già successo con la validazione difficoltà).
+   *
+   * Ogni riga è una lunghezza ESATTA: la scala lineare non ha un tetto, quindi
+   * non esiste una fascia "8 o più" con un punto fisso. Fermarsi a 10 tiene la
+   * tabella corta; la nota sotto spiega che la crescita continua.
    */
   const rows = Array.from({ length: 8 }, (_, i) => {
     const length = i + 3; // da 3 a 10
     return {
-      // Ogni fascia è una lunghezza ESATTA: qui non si appiattisce nulla.
-      // Con l'etichetta "10 o più" la tabella suggeriva un tetto dopo le 10
-      // lettere, ma la scala cresce di un punto per lettera senza fermarsi.
       label: `${length} lettere`,
       points: scoreForWord('x'.repeat(length)),
     };
@@ -169,8 +170,8 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
                     normali.
                   </p>
                   <p className="rules__how-line rules__example">
-                    Esempio: <em>strada</em> (6 lettere) → <strong>4 punti</strong>, oppure{' '}
-                    <strong>8</strong> se la trovi solo tu.
+                    Esempio: <em>strada</em> (6 lettere) → <strong>3 punti</strong>, oppure{' '}
+                    <strong>6</strong> se la trovi solo tu.
                   </p>
                 </div>
               )}
