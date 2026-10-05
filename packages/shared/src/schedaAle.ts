@@ -26,6 +26,7 @@
  */
 import type { Difficulty } from './difficulty.js';
 import { gridToRows, type Scheda } from './scheda.js';
+import { scoreForWord } from './scoring.js';
 import { solveGrid, solveGridCoverage, type TrieNode } from './solver.js';
 import type { Grid, GridSize, Tile } from './types.js';
 
@@ -466,9 +467,16 @@ export function compositeDifficulty(
   return weights.rarity * rarity + weights.scarcity * scarcityFor(wordCount, wordRange);
 }
 
-/** Punteggio Boggle: `lunghezza − 2` (QU conta due lettere). */
+/**
+ * Punteggio Boggle di una parola trovata sulla griglia.
+ *
+ * DELEGA a `scoreForWord`: la formula era ricopiata qui (`lunghezza − 2`), una
+ * terza copia della stessa regola. Le parole di `solveGrid` sono stringhe in cui
+ * `qu` occupa DUE caratteri, quindi conta già come due lettere — lo stesso
+ * trattamento del gioco.
+ */
 function pointsFor(word: string): number {
-  return Math.max(0, word.length - 2);
+  return scoreForWord(word);
 }
 
 /** Risolve la griglia e calcola le metriche della spec (§4.1). */

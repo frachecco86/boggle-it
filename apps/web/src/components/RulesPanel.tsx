@@ -39,7 +39,10 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
   const rows = Array.from({ length: 8 }, (_, i) => {
     const length = i + 3; // da 3 a 10
     return {
-      label: length === 10 ? '10 o più' : `${length} lettere`,
+      // Ogni fascia è una lunghezza ESATTA: qui non si appiattisce nulla.
+      // Con l'etichetta "10 o più" la tabella suggeriva un tetto dopo le 10
+      // lettere, ma la scala cresce di un punto per lettera senza fermarsi.
+      label: `${length} lettere`,
       points: scoreForWord('x'.repeat(length)),
     };
   });
@@ -146,14 +149,14 @@ export function RulesPanel({ multiplayer = false, defaultOpen = false }: RulesPa
                     <span className="rules__row-label">{r.label}</span>
                     <span className="rules__row-dots" aria-hidden />
                     <span className="rules__row-points">
-                      {r.label === '10 o più' ? `${r.points}+` : r.points}{' '}
-                      {r.points === 1 ? 'punto' : 'punti'}
+                      {r.points} {r.points === 1 ? 'punto' : 'punti'}
                     </span>
                   </div>
                 ))}
                 <p className="rules__note">
                   Più lunga è la parola, più vale: una da 9 lettere vale{' '}
-                  <strong>7 volte</strong> una da 3.
+                  <strong>7 volte</strong> una da 3. La scala non ha un tetto: ogni
+                  lettera oltre la terza aggiunge un punto.
                 </p>
               </div>
 

@@ -8,6 +8,7 @@ import {
   SCHEDA_VARIANT_LABELS,
   SCHEDA_VARIANTS,
   schedaVariantOf,
+  schedaWordPoints,
   type Difficulty,
   type GridSize,
   type Scheda,
@@ -146,14 +147,14 @@ export function SchedaBrowser() {
     }
     return [...map.entries()]
       .sort((a, b) => b[0] - a[0])
-      .map(([length, words]) => ({ length, points: Math.max(0, length - 2), words: words.sort() }));
+      .map(([length, words]) => ({ length, points: schedaWordPoints(length), words: words.sort() }));
   }, [scheda]);
 
   // Punteggio massimo della scheda mostrata: somma dei punti di tutte le parole.
   const maxScore = useMemo(
     () =>
       scheda
-        ? acceptedWords(scheda).reduce((total, w) => total + Math.max(0, w.length - 2), 0)
+        ? acceptedWords(scheda).reduce((total, w) => total + schedaWordPoints(w.length), 0)
         : 0,
     [scheda],
   );

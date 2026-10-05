@@ -11,6 +11,12 @@
  *   8          → 6
  *   9          → 7
  *   10         → 8
+ *   16         → 14
+ *
+ * NON c'è un tetto: la crescita è lineare e illimitata, +1 punto per ogni
+ * lettera oltre la terza. Una parola da 9 lettere non vale come una da 8: su una
+ * griglia 6×6 (dove le parole lunghe esistono davvero) la parte alta della scala
+ * resta un incentivo. Un tetto a 10 punti appiattirebbe tutto ciò che sta sopra.
  *
  * Perché non una formula più piatta: con ⌊lunghezza/3⌋ una parola da 9 lettere
  * valeva solo 3 punti, come tre parole da 3 lettere, pur essendo molto più

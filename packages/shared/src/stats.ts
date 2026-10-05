@@ -10,6 +10,7 @@
  * punteggio, parole trovate, difficoltà, dimensione e data.
  */
 import type { Difficulty } from './difficulty.js';
+import { scoreForWord } from './scoring.js';
 import type { GridSize } from './types.js';
 
 /** Modalità di gioco che generano una partita classificabile. */
@@ -372,7 +373,13 @@ export interface SchedaStats {
   gamesPlayed: number;
 }
 
-/** Punteggio di una parola: 1 punto per 3 lettere, poi 1 per lettera in più. */
+/**
+ * Punteggio di una parola di data lunghezza.
+ *
+ * DELEGA a `scoreForWord`: prima la formula era ricopiata qui (`length - 2`) e
+ * poteva divergere da quella del gioco. Ora c'è una sola definizione della
+ * scala (`packages/shared/src/scoring.ts`) e tutto il resto la usa.
+ */
 export function schedaWordPoints(length: number): number {
-  return Math.max(0, length - 2);
+  return scoreForWord('x'.repeat(length));
 }
