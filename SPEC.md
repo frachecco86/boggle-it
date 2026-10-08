@@ -30,7 +30,7 @@ nessuna persistenza su database, nessuna PWA.
 | Dizionario | **Schede pre-calcolate** (client) + **validazione server** in multiplayer; ~372k forme, tutte giocabili |
 | Struttura | **Monorepo pnpm workspaces** |
 | Sorgente dizionario | **Morph-it! (UniBO) + Wikizionario** (headword e categorie) **+ `technical-words.txt`** (tecnicismi riammessi); nessuna abbreviazione |
-| Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 180 schede** |
+| Griglie | **4×4, 5×5, 6×6** selezionabili, da un **catalogo di 270 schede** |
 | Punteggio | **lunghezza − 2**; in multiplayer **raddoppio** se trovata da un solo giocatore |
 
 ---
@@ -348,7 +348,7 @@ sbooble/
 │           └── index.ts        # HTTP + Socket.IO + admin
 ├── packages/
 │   ├── shared/                 # tipi, griglia, scoring, solver, schede (web+server)
-│   │   └── schede/             # 180 schede pre-calcolate (JSON versionati)
+│   │   └── schede/             # 270 schede pre-calcolate (JSON versionati)
 │   └── dictionary/             # lista parole + script di build
 ├── tools/
 │   └── check-context.mjs       # controllo contesto di build

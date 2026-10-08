@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.25.2** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.44.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -27,8 +27,14 @@ Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
   di parole e punteggio sono misurate per dimensione × difficoltà (su 4×4: ~130 / ~60 / ~30
   parole per Facile / Normale / Difficile). Le lettere rare restano più frequenti nei livelli alti,
   ma come mezzo, non come criterio.
-- **Punteggio Boggle classico**: **3–4 lettere → 1 punto, 5 → 2, 6 → 3, 7 → 5,
-  8 o più → 11**. In multiplayer una parola trovata da **un solo giocatore vale doppio**.
+- **Punteggio lineare, senza tetto**: **3 lettere → 1 punto, poi +1 per ogni lettera in più**
+  (4 → 2, 5 → 3, 6 → 4, 7 → 5, 8 → 6, 10 → 8, 16 → 14). In multiplayer una parola trovata da
+  **un solo giocatore vale doppio**. La scala è definita **in un solo punto** (`scoreForLength`
+  in `packages/shared/src/scoring.ts`) e da lì la riusano gioco, statistiche e difficoltà ale.
+  La scala a soglie del Boggle classico (3-4 → 1 … 8 o più → 11) è stata adottata nella 0.41.0 e
+  **abbandonata nella 0.44.0**: da 8 lettere in su non cresce più, quindi una parola da 13
+  valeva come una da 8. Confronto misurato delle alternative:
+  [`docs/SCALA-PUNTEGGI-ALTERNATIVE.md`](docs/SCALA-PUNTEGGI-ALTERNATIVE.md).
 - **Catalogo schede in home**: numero totale sempre visibile; **pannello admin** con token per
   generarne di nuove e per decidere il **tipo di scheda di default** (Standard / Full criteria /
   Ale) valido per tutti i giocatori; la **pagina scheda** con la griglia e tutte le parole
@@ -249,9 +255,11 @@ sbooble/
 │           ├── index.ts      eventi Socket.IO, serving dizionario
 │           └── dictionary.ts caricamento dizionario + trie
 ├── packages/
-│   ├── shared/               tipi, dadi, griglia, adiacenza, punteggio, solver (trie)
+│   ├── shared/               tipi, griglia, adiacenza, punteggio, solver (trie),
+│   │                         generazione e validazione schede (standard/full/ale)
 │   └── dictionary/           lista parole + script di build
-├── tools/gen-dice.mjs        generatore deterministico dei dadi
+├── tools/                    gen-icon, gen-technical-words, gen-consonant-endings,
+│                             rigenera-ale-server, build-apk, check-version, check-context
 └── tests/e2e/                smoke test multiplayer
 ```
 
