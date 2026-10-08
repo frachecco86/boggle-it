@@ -70,6 +70,14 @@ export interface PlayerPublic {
   score: number;
   connected: boolean;
   isHost: boolean;
+  /**
+   * true se il giocatore è **seduto in stanza ma non gioca la partita in corso**:
+   * è arrivato quando non poteva più entrare (dal round 2 in poi, o a partita
+   * finita) e giocherà la prossima. Vedi `Room.seatForNewPlayer`.
+   *
+   * Assente (o false) = gioca la partita corrente.
+   */
+  waiting?: boolean;
 }
 
 export interface FoundWord {
@@ -106,6 +114,14 @@ export interface RoomState {
   schedaVariant?: SchedaVariant;
   currentRound: number;
   phase: GamePhase;
+  /**
+   * Quale partita sta giocando QUESTA stanza: 1 alla prima, +1 ogni volta che
+   * l'host inizia una nuova partita (stesso codice, stessi giocatori).
+   *
+   * Non è il numero di round: serve all'interfaccia per dire «partita 2» e per
+   * far capire a chi è arrivato tardi che una partita l'hanno già giocata.
+   */
+  matchNumber: number;
   players: PlayerPublic[];
   /** Timestamp server (ms) di fine round corrente, se in playing. */
   endsAt?: number;
@@ -161,6 +177,31 @@ export interface RoomJoinAck {
   ok: true;
   playerId: string;
   state: RoomState;
+}
+
+/**
+ * Risposta di `room:newGame`: la stanza è pronta per una nuova partita, con i
+ * punteggi azzerati e le schede nuove da pescare.
+ */
+export interface RoomNewGameAck {
+  ok: true;
+  state: RoomState;
+}
+
+/** Payload di `room:newGame`, l'evento con cui la stanza avvisa TUTTI. */
+export interface RoomNewGamePayload {
+  state: RoomState;
+}
+
+/**
+ * Payload di `room:closed`: la stanza non esiste più, i client tornano alla home.
+ *
+ * Non c'è un "motivo": l'unico modo in cui una stanza viene spenta da fuori è la
+ * scelta dell'host (`room:close`). Una stanza rimasta senza giocatori non ha
+ * nessuno da avvisare, e la pulizia automatica non è un evento: non manda niente.
+ */
+export interface RoomClosedPayload {
+  code: string;
 }
 
 export interface RoomConfigPayload {
@@ -355,6 +396,24 @@ export interface ClientToServerEvents {
    */
   'room:rejoin': (payload: { code: string; playerId: string }, ack: (res: RoomJoinAck | ErrorPayload) => void) => void;
   'room:start': (payload: { code: string }) => void;
+  /**
+   * L'host inizia una NUOVA partita nella stessa stanza.
+   *
+   * Perché non basta `room:start`: quando una partita finisce la stanza entra in
+   * `gameEnd` e i punteggi, i round giocati e le parole restano quelli di quella
+   * partita. Qui il server azzera la partita (NON la stanza: codice, giocatori,
+   * impostazioni e musica restano) e avvisa tutti con `room:newGame`, così chi
+   * è arrivato tardi e aspettava entra a giocare. È anche il momento in cui le
+   * partite concluse vengono scritte in classifica, prima di azzerare i punti.
+   */
+  'room:newGame': (payload: { code: string }, ack: (res: RoomNewGameAck | ErrorPayload) => void) => void;
+  /**
+   * L'host chiude la stanza per tutti (l'alternativa a «gioca ancora»).
+   *
+   * Si può fare solo fra una partita e l'altra: durante un round si esce e
+   * basta, chiudere la stanza addosso alla gente non è mai stato utile.
+   */
+  'room:close': (payload: { code: string }, ack: (res: { ok: true } | ErrorPayload) => void) => void;
   'room:config': (payload: RoomConfigPayload) => void;
   /** L'host pesca una nuova scheda per il prossimo round (visibile a tutti). */
   'room:shuffleScheda': (payload: { code: string }) => void;
@@ -382,6 +441,17 @@ export interface ServerToClientEvents {
   'game:roundEnd': (payload: RoundEndPayload) => void;
   'game:gameEnd': (payload: GameEndPayload) => void;
   'game:countdown': (payload: { seconds: number }) => void;
+  /**
+   * Nuova partita nella stessa stanza: punteggi azzerati, round ricominciato, si
+   * torna in sala d'attesa con lo STESSO codice stanza.
+   *
+   * Serve un evento dedicato (e non solo un `room:update`) perché i client sono
+   * sulla schermata di classifica finale con i punteggi di una partita che non
+   * esiste più: devono dimenticare quei dati, non aggiornarli.
+   */
+  'room:newGame': (payload: RoomNewGamePayload) => void;
+  /** La stanza è stata chiusa: si torna alla home. */
+  'room:closed': (payload: RoomClosedPayload) => void;
   /** Voce di un altro giocatore della stanza (a chi parla non torna indietro). */
   'voice:audio': (payload: VoiceAudioPayload) => void;
   error: (payload: ErrorPayload) => void;

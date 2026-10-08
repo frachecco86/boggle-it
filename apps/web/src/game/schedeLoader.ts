@@ -10,8 +10,17 @@
  * Così l'app Android ha il single player completo anche senza connessione,
  * mentre la pagina scheda e il multiplayer restano online.
  */
-import { schedaVariantOf, type Difficulty, type GridSize, type Scheda, type SchedaVariant } from '@boggle/shared';
+import {
+  pickScheda,
+  SchedaMemory,
+  schedaVariantOf,
+  type Difficulty,
+  type GridSize,
+  type Scheda,
+  type SchedaVariant,
+} from '@boggle/shared';
 import { SERVER_BASE } from '../net/socket.js';
+import { localViewCounts, markLocalSeen } from './localSchedaMemory.js';
 import { activeToken } from './profileStore.js';
 
 /**
@@ -73,13 +82,16 @@ function authHeaders(): Record<string, string> {
  *
  * Si chiama quando la partita INIZIA davvero (non quando la scheda viene
  * pescata): una scheda pescata e mai giocata non deve restare esclusa per
- * sempre. Senza profilo non fa nulla: non c'è una cronologia da aggiornare.
+ * sempre. Senza profilo il `POST` al server non parte (non c'è una cronologia da
+ * aggiornare), ma la copia LOCALE si aggiorna comunque: è l'unica memoria che
+ * esiste per chi gioca anonimo o offline.
  *
  * Non lancia e non attende il risultato: è un'informazione accessoria, e un
  * fallimento di rete non deve interferire con la partita in corso.
  */
 export function markSchedaPlayed(schedaId: string | null | undefined): void {
   if (!schedaId) return;
+  markLocalSeen(schedaId);
   const token = activeToken();
   if (!token) return;
   void fetch(`${SERVER_BASE}/me/played-schede`, {
@@ -87,26 +99,6 @@ export function markSchedaPlayed(schedaId: string | null | undefined): void {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ schedaId }),
   }).catch(() => undefined);
-}
-
-/**
- * Cancella la cronologia delle schede giocate (profilo attivo).
- *
- * Serve al MULTIPLAYER: in una stanza le schede le sceglie l'host/admin, e
- * quello che ho visto da solo non deve influire sulla partita degli altri.
- */
-export async function clearPlayedSchede(): Promise<boolean> {
-  const token = activeToken();
-  if (!token) return false;
-  try {
-    const res = await fetch(`${SERVER_BASE}/me/played-schede`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
 }
 
 async function fetchJson<T>(
@@ -145,7 +137,6 @@ export async function loadScheda(id: string): Promise<Scheda | null> {
   const file = await fetchJson<{ schede?: Scheda[] }>(`${LOCAL_BASE}/${schedaFileFor(id)}`);
   return file?.schede?.find((s) => s.id === id) ?? null;
 }
-
 /** Deriva il nome del file dal prefisso dell'id (`4-normale-017` -> `schede-4-normale.json`). */
 function schedaFileFor(id: string): string {
   const parts = id.split('-');
@@ -178,7 +169,15 @@ export async function loadRandomScheda(
     if (scheda) return scheda;
   }
 
-  // Offline: pesca a caso dall'indice incluso nel bundle, filtrando la variante.
+  /*
+   * Offline: pesca dall'indice incluso nel bundle, filtrando la variante e
+   * RISPETTANDO la memoria locale (vedi `localSchedaMemory`).
+   *
+   * Serve un oggetto `SchedaMemory` invece di un elenco di id da scartare: la
+   * regola è la stessa del server — prima le mai viste, poi quelle con la somma
+   * dei contatori più bassa — e con i pool da 10-15 schede il secondo caso è la
+   * normalità, non l'eccezione.
+   */
   const catalog = await fetchJson<Omit<CatalogInfo, 'offline'>>(`${LOCAL_BASE}/index.json`);
   const key = `${size}-${difficulty}`;
   const list = catalog?.ids?.[key];
@@ -187,5 +186,5 @@ export async function loadRandomScheda(
   const all = await fetchJson<{ schede: Scheda[] }>(`${LOCAL_BASE}/${schedaFileFor(list[0]!)}`);
   const matching = (all?.schede ?? []).filter((s) => schedaVariantOf(s) === variant);
   if (matching.length === 0) return null;
-  return matching[Math.floor(Math.random() * matching.length)] ?? null;
+  return pickScheda(matching, new SchedaMemory({ player: localViewCounts() }))?.scheda ?? null;
 }

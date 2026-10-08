@@ -202,7 +202,14 @@ export function MultiplayerGameScreen() {
     );
   }
 
-  const others = room.players.filter((p) => p.id !== playerId);
+  /*
+   * In partita si mostra solo CHI LA GIOCA, la partita: chi è seduto in stanza
+   * in attesa della prossima (è arrivato a questa già troppo avanti) sta
+   * nella sala d'attesa e comparire qui sopra, a 0 punti, sarebbe letto come
+   * «non ha trovato niente».
+   */
+  const inMatch = room.players.filter((p) => !p.waiting);
+  const others = inMatch.filter((p) => p.id !== playerId);
 
   return (
     <div className="screen game screen--mp">
@@ -257,11 +264,11 @@ export function MultiplayerGameScreen() {
       {/* Barra dei giocatori: avatar tondi, punteggio sotto, "+N" che si
           sovrappone all'avatar di chi ha appena segnato. */}
       <AvatarScoreBar
-        players={room.players}
+        players={inMatch}
         meId={playerId}
         badges={badges}
         speakers={speakers}
-        showNames={room.players.length <= 4}
+        showNames={inMatch.length <= 4}
         hint={others.length === 0 ? `Sei da solo per ora: condividi il codice ${roomCode}.` : undefined}
       />
     </div>

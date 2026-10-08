@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.44.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.49.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -69,8 +69,25 @@ codice già nel campo “Entra”. Dove la condivisione non c'è, il link si cop
   clip audio personale, se ne hanno registrata una, a metà volume.
 - **Si entra anche a partita iniziata** (fino alla fine del **primo round**): chi arriva in
   ritardo apre il link della stanza e si ritrova in gioco, con la griglia in corso e il tempo che
-  resta. Nella pausa dopo il round 1 si entra ancora (si gioca dal round successivo); dal round 2
-  la stanza è chiusa, perché un round intero di parole e di raddoppi già giocati non si recupera.
+  resta. Nella pausa dopo il round 1 si entra ancora (si gioca dal round successivo).
+- **Chi arriva troppo tardi si siede, non resta fuori** (0.49.0): dal round 2 in avanti, o a
+  partita conclusa, il link funziona comunque. Si entra in stanza con la fascetta **in attesa**,
+  si chiacchiera con gli altri e si gioca la partita successiva — senza griglia, senza punteggi e
+  senza classifiche di una partita a cui non si sta partecipando.
+- **Si rigioca nella stessa stanza** (0.49.0): a fine partita chi ha creato la stanza scegle tra
+  **Gioca ancora nella stessa stanza** e **Chiudi la stanza**. Rigiocando restano codice, link,
+  giocatori e impostazioni (ritoccabili tra un giro e l'altro); si azzerano i punteggi e le
+  schede sono **nuove**, perché la stanza ha memoria di quelle già giocate.
+- **Memoria per profilo anche in multiplayer** (0.50.0): le stanze uniscono le cronologie dei
+  giocatori presenti e pescano la griglia che **nessuno di loro** ha mai visto. Se una griglia
+  pulita non esiste più (i gruppi hanno 10-15 schede), non si pesca a caso: vince la **somma dei
+  contatori** più bassa, cioè quella **vista di meno** — una griglia giocata cento volte da uno pesa
+  cento e viene dopo una giocata una volta da sette. Le partite in stanza entrano nella cronologia
+  personale, entrare in una stanza **non cancella più** lo storico, e il profilo mostra quante
+  griglie ricorda (con un tasto per dimenticarle). Offline, l'app ricorda sul dispositivo.
+- **Le schede contano le ripetizioni** (0.50.0): `played_schede` ha `seen_count`, e i livelli di
+  `SchedaMemory` portano i conteggi (`views`) invece dei soli insiemi: è ciò che permette a
+  `pickScheda` di ripiegare sulla scheda **meno vista** quando le pulite finiscono.
 - **Riconnessione**: il giocatore viene marcato "offline" e la partita continua; rientrando
   (anche con una **riconnessione automatica** del socket) recupera griglia, timer e punteggio
   senza interrompere la partita.

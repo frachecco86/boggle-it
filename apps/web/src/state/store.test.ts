@@ -15,12 +15,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * quindi si fornisce uno stub minimo PRIMA di importare il modulo.
  */
 const memory = new Map<string, string>();
-vi.stubGlobal('localStorage', {
+const storageStub = {
   getItem: (k: string) => memory.get(k) ?? null,
   setItem: (k: string, v: string) => void memory.set(k, v),
   removeItem: (k: string) => void memory.delete(k),
   clear: () => memory.clear(),
-});
+};
+vi.stubGlobal('localStorage', storageStub);
 
 const { useAppStore } = await import('./store.js');
 
@@ -60,6 +61,125 @@ describe('schedaVariantFor', () => {
   });
 });
 
+/*
+ * «Gioca ancora»: lo stato del client quando la stessa stanza inizia una
+ * partita nuova.
+ *
+ * È il punto dove una classe sbagliata si vedrebbe a schermo: se restassero
+ * `finalScores` o `roundResults`, la sala d'attesa mostrerebbe il podio di una
+ * partita i cui punteggi sono appena stati azzerati.
+ *
+ * `applyNewMatch` e lo store si prendono dallo STESSO import dinamico: scrivere
+ * in un'istanza e leggere dall'altra fa fallire tutto senza un motivo visibile.
+ * E infatti questo describe sta prima di `absoluteMusicTrack`, che chiama
+ * `vi.resetModules()`: dopo, un `import('./store.js')` costruisce un modulo
+ * nuovo il cui `persist` non trova più lo `localStorage` finto (rumore su
+ * stderr, e una seconda copia dello store).
+ */
+describe('applyNewMatch', () => {
+  /** Store già piazzato alla classifica finale della partita 2, in `summary`. */
+  async function storeAfterFinalMatch() {
+    const mod = await import('./store.js');
+    const store = mod.useAppStore;
+    store.setState({
+      screen: 'summary',
+      roomCode: 'ABC123',
+      playerId: 'p1',
+      room: {
+        code: 'ABC123',
+        hostId: 'p1',
+        gridSize: 4,
+        difficulty: 'normale',
+        rounds: 3,
+        roundDurationMs: 120_000,
+        maxPlayers: 8,
+        currentRound: 3,
+        phase: 'gameEnd',
+        matchNumber: 2,
+        players: [
+          { id: 'p1', nickname: 'Alice', avatar: '🦊', score: 0, connected: true, isHost: true },
+          {
+            id: 'p9',
+            nickname: 'Ritardatario',
+            avatar: '🐼',
+            score: 0,
+            connected: true,
+            isHost: false,
+            waiting: true,
+          },
+        ],
+      },
+      grid: { size: 4, tiles: [] },
+      currentSchedaId: '4-normale-001',
+      roundEndsAt: 123,
+      roundDurationMs: 180_000,
+      roundResults: [
+        { playerId: 'p1', nickname: 'Alice', roundScore: 9, totalScore: 20, words: ['casa'] },
+      ],
+      finalScores: [
+        { playerId: 'p1', nickname: 'Alice', roundScore: 0, totalScore: 20, words: [] },
+      ],
+      missedWords: ['parola'],
+      liveWords: [{ playerId: 'p1', nickname: 'Alice', word: 'casa', points: 2, wordLength: 4 }],
+      opponentEvents: [],
+      countdown: null,
+      roomNotice: null,
+    });
+    return { store, applyNewMatch: mod.applyNewMatch };
+  }
+
+  /** Lo stato della stanza quando il server annuncia la partita nuova. */
+  const announced = (room: NonNullable<ReturnType<typeof useAppStore.getState>['room']>) => ({
+    ...room,
+    phase: 'lobby' as const,
+    currentRound: 0,
+    matchNumber: 3,
+    roundDurationMs: 90_000,
+    // Il server ha già liberato chi aspettava: non è più in attesa.
+    players: room.players.map(({ waiting: _waiting, ...p }) => p),
+  });
+
+  it('riporta in sala attesa e dimentica la partita finita', async () => {
+    const { store, applyNewMatch } = await storeAfterFinalMatch();
+    applyNewMatch(announced(store.getState().room!));
+
+    const s = store.getState();
+    expect(s.screen).toBe('lobby');
+    // La classifica finale NON deve sopravvivere: i punteggi sono azzerati.
+    expect(s.finalScores).toBeNull();
+    expect(s.roundResults).toBeNull();
+    expect(s.missedWords).toEqual([]);
+    expect(s.liveWords).toEqual([]);
+    // Né devono restare in giro la griglia o il timer del round precedente.
+    expect(s.grid).toBeNull();
+    expect(s.currentSchedaId).toBeNull();
+    expect(s.roundEndsAt).toBe(0);
+    expect(s.countdown).toBeNull();
+    // La stanza è sempre la stessa: codice e identità non cambiano.
+    expect(s.roomCode).toBe('ABC123');
+    expect(s.room?.code).toBe('ABC123');
+    expect(s.room?.matchNumber).toBe(3);
+    // La durata del round si riallinea a quella della stanza: l'host può
+    // cambiarla fra una partita e l'altra.
+    expect(s.roundDurationMs).toBe(90_000);
+  });
+
+  it('mette in gioco chi aspettava la partita precedente', async () => {
+    const { store, applyNewMatch } = await storeAfterFinalMatch();
+    expect(store.getState().room?.players.find((p) => p.id === 'p9')?.waiting).toBe(true);
+    applyNewMatch(announced(store.getState().room!));
+    expect(store.getState().room?.players.find((p) => p.id === 'p9')?.waiting).toBeUndefined();
+  });
+
+  it('racconta cosa è successo con un avviso in sala attesa', async () => {
+    const { store, applyNewMatch } = await storeAfterFinalMatch();
+    applyNewMatch(announced(store.getState().room!));
+    expect(store.getState().roomNotice).toMatch(/Nuova partita/);
+
+    store.getState().clearRoomNotice();
+    expect(store.getState().roomNotice).toBeNull();
+  });
+});
 /*
  * URL delle tracce musicali.
  *

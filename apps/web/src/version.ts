@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.48.0';
+export const APP_VERSION = '0.50.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,80 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.50.0',
+    date: '2026-10-08',
+    title: 'Le griglie già viste non tornano più, nemmeno in multiplayer',
+    promo: {
+      emoji: '🧠',
+      headline: 'Il gioco ricorda cosa hai già visto',
+      text: 'Le schede ricordano **quante volte** le hai giocate, non solo se le hai viste. E la memoria ora vale anche in compagnia: la stanza sceglie la griglia che **nessuno dei giocatori presenti** ha mai visto, e se proprio bisogna ripescare si prende quella che il gruppo ha giocato di meno. Il conteggio lo vedi (e lo puoi azzerare) nella schermata del tuo profilo.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Anche in multiplayer le griglie sono scelte con la memoria di tutti.** Le stanze uniscono le cronologie dei giocatori presenti e pescano quella che **nessuno** di loro ha mai visto; se una griglia pulita non esiste più — con 10-15 schede per gruppo succede dopo poche partite — si prende quella **vista di meno**. Prima la cronologia personale contava solo giocando da soli.',
+          '**«Vista di meno» conta le volte, non le persone.** Una griglia che uno ha giocato cento volte pesa cento, e una che sette hanno giocato una volta pesa sette: tocca alla seconda. Serve a non ridarti sempre in faccia la stessa griglia solo perché l’ha vista una persona sola.',
+          '**Le partite in stanza entrano nella tua storia.** Ogni round segna la griglia nel profilo di chi la sta guardando: dopo una sera di partite in quattro, il single player non ti ripropone le stesse identiche griglie di ieri. Chi è seduto in attesa della partita dopo non riceve niente, e infatti non gli si segna niente.',
+          '**Entrare in una stanza non cancella più la cronologia.** Finora succedeva quello: entri in multiplayer e perdi la memoria delle partite giocate da solo. Non serve più, perché adesso quella memoria la stanza la **usa**, non la subisce.',
+          '**Quante griglie ti ricordi, e puoi dimenticarle.** Nella schermata del profilo c’è il numero delle griglie già viste con un bottone «Dimentica e ricomincia»: utile se vuoi rivedere anche le vecchie, o se il catalogo di una difficoltà è esaurito e preferisci ripartire da zero.',
+          '**Funziona anche offline, sull’app senza rete.** Il telefono si ricorda le griglie giocate sul dispositivo (per profilo), quindi anche il single player offline dell’app Android smette di ripetere le stesse lettere.',
+          '**Chi gioca senza profilo non ha memoria**, né prima né adesso: senza account non esiste una cronologia da consultare, e la pesca resta quella casuale di sempre.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**`played_schede` conta le ripetizioni: nuova colonna `seen_count`.** Finora la tabella rispondeva a «l’hai vista?»; ora risponde a «quante volte», che è la domanda di «vista di meno». `markSchedaPlayed` è passato da `INSERT OR IGNORE` a un **upsert** che incrementa il contatore (`ON CONFLICT ... DO UPDATE`), mentre la chiave primaria `(profile_id, scheda_id)` resta una riga per scheda.',
+          '**Migrazione dello schema: `ProfileStore.ensureColumn`.** `CREATE TABLE IF NOT EXISTS` non integra le tabelle esistenti, quindi su tutti i volumi già deployati la colonna nuova non ci sarebbe stata e ogni query sulla cronologia sarebbe caduta con un errore SQL. L’`ALTER TABLE ... ADD COLUMN ... DEFAULT 1` parte solo se `pragma_table_info` non trova la colonna, e il `DEFAULT 1` è anche il significato giusto: le voci storiche valgono una vista. Test: si apre un database vero, si toglie la colonna a colpi di `DROP COLUMN` e si verifica che il server nuovo la rimetta e conti `1`.',
+          '**La somma la fa SQLite, non il JavaScript: `playedSchedaCounts`.** Una query sola per tutta la stanza (`SELECT scheda_id, SUM(seen_count) ... WHERE profile_id IN (...) GROUP BY scheda_id`), con gli id dei profili uniti prima di costruirne i segnaposto: lo stesso account aperto su due dispositivi non deve pesare doppio.',
+          '**`SchedaMemory` non è più un insieme di id: ogni livello ha i suoi conteggi** (`views(layer)`). Il costo di questa scelta è una riga in `pickScheda`, il beneficio è che il ripiegamento smette di essere «una a caso fra quelle già viste» e diventa «quella con la somma dei contatori più bassa, fra i livelli a cui abbiamo rinunciato». Il sorteggio resta uno solo, fra i pari merito.',
+          '**Il livello `player` di una stanza si ricalcola a ogni pesca: `Room.syncPlayerMemory`.** Non si accumula, perché dipende da **chi** è in stanza: se Dario esce, la sua storia deve uscire con lui. Si ricalcola al momento della pesca e non all’ingresso/uscita perché l’unico consumatore è `pickScheda`: così non c’è una strada di ingresso (rejoin, rientro dopo una riconnessione, Partita Nuova) che possa dimenticarsi il sync.',
+          '**La griglia del round entra nei profili a round partito (`recordRoundScheda`), non a fine partita.** `games.scheda_id` esiste solo per le partite **concluse**, quindi non bastava: una griglia la vedi anche se la stanza si chiude al round 2. Chi entra a round 1 già partito la vede per la prima volta e viene segnato (`resendRoundIfPlaying(..., markSeen)`), chi si riconnette no: rimandare la stessa griglia non è una vista nuova.',
+          '**Memoria locale per la pesca offline: `apps/web/src/game/localSchedaMemory.ts`.** Copia in `localStorage` **per profilo** (tetto di 800 griglie, si dimentica la più vecchia), che alimenta la stessa `pickScheda` usata dal server. Il server resta autoritativo quando c’è rete.',
+          '**L’endpoint `DELETE /me/played-schede` non è più chiamato dall’ingresso in stanza** ed è diventato il «dimentica» del profilo. `clearPlayedSchede` sparisce dal client della lobby; resta la rotta, con il suo effetto documentato: è irreversibile.',
+          '**Nuova suite end-to-end: `tests/e2e/multiplayer-memory.mjs`** (9 verifiche, in `pnpm test:e2e`). Due profili registrati davvero, cronologia caricata dall’API e due partite: la prima verifica che si peschi l’unica scheda che nessuno dei due ha visto e che finisca nello storico di entrambi; la seconda — tutte le schede contate due volte, una una sola — verifica che vinca la **somma** dei contatori. Misurato durante lo sviluppo: con i contatori al valore sbagliato la suite fallisce, e fallisce pescando una scheda a caso.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.49.0',
+    date: '2026-10-08',
+    title: 'Si rigioca nella stessa stanza, chi arriva tardi aspetta',
+    promo: {
+      emoji: '🔁',
+      headline: 'La stessa stanza gioca anche la partita dopo',
+      text: 'Finita una partita non si riparte più da zero: chi ha creato la stanza trova «Gioca ancora nella stessa stanza», che azzera i punteggi e pesca griglie mai viste, lasciando tutti lì con lo stesso codice e lo stesso link. L’alternativa è «Chiudi la stanza», e vale per tutti. Chi arriva quando la partita è già lontana non sente più «partita finita»: entra, si siede, chiacchiera con gli altri e gioca la partita dopo, senza dover rimettere il codice.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**«Gioca ancora nella stessa stanza».** A fine partita chi ha creato la stanza ha due bottoni: rigiocare o chiuderla. Rigiocando restano il **codice stanza**, il **link dell’invito**, i **giocatori** e le **impostazioni**; si azzerano i punteggi e i round, e le griglie sono nuove. Prima l’unica uscita era «Torna alla home»: per il secondo giro serviva rifare la stanza e rigirare il link a tutti.',
+          '**Si può anche cambiare idea tra una partita e l’altra.** Griglia, difficoltà, numero di round, durata e musica si possono ritoccare nella sala d’attesa tra un giro e l’altro: cose che prima, con la stanza già chiusa, non si potevano toccare.',
+          '**Chiude solo chi ha creato la stanza, e solo a partita ferma.** «Chiudi la stanza» spegne la stanza per tutti con un avviso; in mezzo a un round il server lo rifiuta, guastare una partita in corso a chi sta giocando non è una scelta degli altri.',
+          '**Chi arriva quando la partita è troppo partita non sta più fuori.** Dal round 2 in avanti, o a partita conclusa, il link funziona: si entra, si prende un posto con la scritta «in attesa», e si gioca la partita successiva. Il suo nome compare tra i presenti, con la fascetta «in attesa», ma il punteggio non lo sfiora: chi gioca dall’inizio non perde niente.',
+          '**Niente griglia e niente classifica di una partita che non giochi.** A chi aspetta non arriva la griglia del round, non viene accettata nessuna parola e non finisce nei risultati: quando parte la partita nuova, però, entra in gioco insieme agli altri, con la griglia e il tempo di tutti.',
+          '**Nella sala d’attesa si capisce cosa sta succedendo.** Un avviso dice se è partita una partita nuova o se sei arrivato tardi; chi aspetta ha la fascetta «in attesa» accanto al nome, e chi ha già giocato vede «partita 2» nel titolo invece di un generico «sala d’attesa».',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Nuovo evento `room:newGame`** (`packages/shared/src/types.ts`): l’host lo invia, il server lo conferma con un ack, salva i punteggi della partita appena finita e lo rimbalza a tutti con lo stato della stanza. Il client risponde con una funzione sola, `applyNewMatch` (`apps/web/src/state/store.ts`), che azzera classifica, griglia, timer e countdown e riporta in lobby: se fosse bastato aggiornare la stanza, sugli schermi sarebbe rimasto il podio di una partita con i punteggi azzerati.',
+          '**Prima di azzerare, i punteggi si salvano.** `room:newGame` chiama la stessa `recordMultiplayerGames` usata a fine partita (idempotente tramite `gamesPersisted`): se si azzerassero i punteggi prima di scriverli, la cronologia perderebbe il round vincitore.',
+          '**La memoria delle schede è diventata a strati: `SchedaMemory`** (`packages/shared/src/schedaMemory.ts`, modulo nuovo). Tre livelli — `match` (questa partita), `room` (questa stanza), `player` (la storia di chi gioca) — con un ordine di rinuncia: quando le schede pulite finiscono si molla prima la storia personale, poi la memoria della stanza, per ultima la partita. Il vincolo forte, «non ripetere una griglia nel giro in corso», è l’ultimo a cadere.',
+          '**Il motivo per cui esistono gli strati.** Finora «non ripetere le schede» era un insieme di id e basta: in multiplayer valeva per la stanza, in solitario per il profilo, e le due cose non si potevano sommare. Con gli strati, agganciare la storia del giocatore alle partite in stanza («non rigioco a te quello che hai già visto») significa passare un altro insieme al costruttore, non riscrivere la scelta della scheda.',
+          '**La stanza ha una vita propria: `matchNumber`, `lastActivityAt` e `waiting`.** `matchNumber` conta le partite giocate nella stessa stanza (serve alla classifica, che senza di esso direbbe solo «finale»); `lastActivityAt` tiene viva una stanza ferma in sala d’attesa, che la pulizia automatica altrimenti cancellerebbe come una partita finita da cinque minuti.',
+          '**`admitNewPlayer` è diventata `seatForNewPlayer` e non dice più di no.** Risponde `now` o `nextMatch`; nel secondo caso il giocatore entra in `room.players` con `waiting: true`. Un elenco solo, quindi: si sta in stanza ma fuori dai punteggi. Prima la persona in sala d’attesa per la stanza non esisteva affatto, e infatti il link le veniva rifiutato.',
+          '**Gli eventi di gioco non vanno più a `io.to(code)` ma a `toPlaying(room)`** (`apps/server/src/index.ts`), che salta i socket di chi aspetta. La chat vocale resta a tutta la stanza: chi aspetta non gioca, ma sta lì con gli altri.',
+          '**Nuova suite end-to-end `tests/e2e/multiplayer-replay.mjs`** (27 verifiche, in `pnpm test:e2e`): due partite di fila nella stessa stanza con la griglia diversa, l’attesa di chi arriva a partita conclusa e di chi arriva al round 2, l’impossibilità di chiudere in mezzo a un round, la chiusura che arriva a tutti. `multiplayer-latejoin.mjs` è stata riscritta: verificava i rifiuti `GAME_STARTED`, ora verifica le sedute.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.48.0',
     date: '2026-10-08',

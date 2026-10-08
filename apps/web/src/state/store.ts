@@ -12,6 +12,7 @@ import {
   type PlayerPublic,
   type ProfilePrivate,
   type RoomState,
+  type RoomNewGamePayload,
   type RoundResultEntry,
   type SchedaVariant,
   type SfxSlot,
@@ -21,7 +22,7 @@ import { audio, type AudioSettings } from '../audio/AudioEngine.js';
 import { DEFAULT_AVATAR, avatarFromNickname, type Avatar } from '../avatars.js';
 import { getSocket, SERVER_BASE } from '../net/socket.js';
 import { voiceChat } from '../net/voiceChat.js';
-import { clearPlayedSchede } from '../game/schedeLoader.js';
+import { clearLocalSeen } from '../game/localSchedaMemory.js';
 
 /**
  * Scarica una clip audio AUTENTICATA e restituisce un blob URL riproducibile.
@@ -308,6 +309,13 @@ interface AppState {
   sfxUrls: Partial<Record<SfxSlot, string>>;
   profileBusy: boolean;
   profileError: string | null;
+  /**
+   * Quante griglie ricorda il profilo attivo (null = mai chiesto, o nessun
+   * profilo). È il numero dietro la scelta «non ripropormi le griglie già viste»:
+   * senza di esso la memoria è invisibile, e sembra un bug quando una griglia
+   * torna fuori (il catalogo di una difficoltà può esaurirsi).
+   */
+  playedSchedeCount: number | null;
 
   setScreen: (s: Screen) => void;
   refreshProfiles: () => void;
@@ -322,6 +330,13 @@ interface AppState {
   saveProfilePhoto: (dataUrl: string | null) => Promise<void>;
   saveProfileSfx: (slot: SfxSlot, dataUrl: string, durationMs: number) => Promise<void>;
   deleteProfileSfx: (slot: SfxSlot) => Promise<void>;
+  /** Chiede al server quante griglie ha già visto il profilo attivo. */
+  refreshPlayedSchede: () => Promise<void>;
+  /**
+   * Dimentica le griglie già viste: azzera la cronologia sul server e la copia
+   * locale. IRREVERSIBILE, ed è per questo che la UI chiede conferma.
+   */
+  forgetPlayedSchede: () => Promise<void>;
   setProfileMusic: (musicId: MusicChoice) => Promise<void>;
   /** Passa alla traccia successiva e, se era spenta, riattiva la musica. */
   nextMusicTrack: () => MusicChoice;
@@ -364,6 +379,26 @@ interface AppState {
   ) => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   startRoom: () => void;
+  /**
+   * L'host inizia una NUOVA partita nella stessa stanza: stesso codice, stessi
+   * giocatori, stesse impostazioni — punteggi azzerati e schede nuove.
+   *
+   * È il tasto che mancava: a fine partita l'unica uscita era «Torna alla home»,
+   * e per rigiocare con gli stessi amici bisognava rifare la stanza e rigirare il
+   * link. Vedi `room:newGame` nel protocollo.
+   */
+  startNewMatch: () => void;
+  /** L'host chiude la stanza per tutti (l'alternativa a «gioca ancora»). */
+  closeRoom: () => void;
+  /**
+   * Avviso nella sala d'attesa: «è iniziata una partita nuova», oppure «sei
+   * arrivato tardi, giochi alla prossima».
+   *
+   * Vive nello store e non nel componente perché arriva da un evento del socket,
+   * che può precedere il montaggio della schermata.
+   */
+  roomNotice: string | null;
+  clearRoomNotice: () => void;
   /** L'host pesca una nuova scheda per il round (visibile a tutti in lobby). */
   shuffleScheda: () => void;
   configureRoom: (
@@ -406,6 +441,7 @@ export const useAppStore = create<AppState>()(
       roundResults: null,
       missedWords: [],
       finalScores: null,
+      roomNotice: null,
       voiceSpeakers: [],
       voiceTalking: false,
       voiceMuted: false,
@@ -420,6 +456,7 @@ export const useAppStore = create<AppState>()(
       sfxUrls: {},
       profileBusy: false,
       profileError: null,
+      playedSchedeCount: null,
 
       setScreen: (screen) => set({ screen }),
       setSchedaId: (schedaId) => set({ schedaId }),
@@ -757,6 +794,52 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      refreshPlayedSchede: async () => {
+        const token = activeToken();
+        // Nessun profilo, nessuna cronologia: il server non ha un archivio da
+        // leggere e la memoria locale (offline) non è un numero da mostrare.
+        if (!token) {
+          set({ playedSchedeCount: null });
+          return;
+        }
+        try {
+          const res = await fetch(`${SERVER_BASE}/me/played-schede`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return;
+          const body = (await res.json()) as { count?: number };
+          set({ playedSchedeCount: Number(body.count ?? 0) });
+        } catch {
+          /* offline: resta il numero dell'ultima lettura */
+        }
+      },
+
+      /**
+       * «Dimentica le griglie già viste».
+       *
+       * La copia locale si cancella SEMPRE, anche se il server non risponde:
+       * altrimenti il tasto lascerebbe in piedi la memoria usata quando si gioca
+       * offline, che è esattamente quella che il giocatore voleva spegnere.
+       */
+      forgetPlayedSchede: async () => {
+        const token = activeToken();
+        clearLocalSeen();
+        set({ playedSchedeCount: 0, profileError: null });
+        if (!token) return;
+        set({ profileBusy: true });
+        try {
+          const res = await fetch(`${SERVER_BASE}/me/played-schede`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) set({ profileError: 'La cronologia sul server non è stata cancellata' });
+        } catch {
+          set({ profileError: 'La cronologia sul server non è stata cancellata' });
+        } finally {
+          set({ profileBusy: false });
+        }
+      },
+
       setProfileMusic: async (musicId) => {
         audio.setMusicTrack(musicId);
         set({ audioSettings: audio.getSettings() });
@@ -885,12 +968,14 @@ export const useAppStore = create<AppState>()(
 
       joinRoom: async (code) => {
         /*
-         * In MULTIPLAYER la cronologia personale non conta: le schede della
-         * stanza le decide l'host (o l'admin), quindi quello che ho visto da solo
-         * non deve filtrare le proposte degli altri. Si azzera la cronologia.
-         * Non si attende: e' accessorio e non deve ritardare l'ingresso.
+         * Nessuna cancellazione della cronologia personale, qui (fino alla
+         * 0.49.0 entrare in una stanza azzerava lo storico: «le schede le decide
+         * l'host, e quello che ho visto da solo non deve filtrare le proposte
+         * degli altri»). Dalla 0.50.0 la memoria personale è un dato CHE LA
+         * STANZA USA: unisce le cronologie dei presenti e pesa la griglia che
+         * nessuno ha mai visto. Cancellarla a chi entra romperebbe la funzione
+         * invece di proteggerla.
          */
-        void clearPlayedSchede();
         const socket = getSocket();
         const nickname = get().nickname || 'Giocatore';
         const avatar = get().avatar || avatarFromNickname(nickname);
@@ -901,13 +986,19 @@ export const useAppStore = create<AppState>()(
           socket.emit('room:join', { code: upperCode, nickname, avatar, playerId, token: activeToken() ?? undefined }, (res) => {
             if ('ok' in res && res.ok) {
               /*
-               * Si entra anche a partita INIZIATA (il server lo permette fino alla
-               * fine del primo round), quindi la schermata la decide la fase della
-               * stanza: chi capita a round in corso finisce in partita, non in sala
-               * d'attesa a guardare gli altri. Griglia e tempo restante arrivano con
-               * il `game:roundStart` che il server re-invia subito dopo l'ack.
+               * La schermata la decide quello che la stanza dice di ME, non la
+               * fase in astratto:
+               *  - `waiting` → sono arrivato quando la partita non era più
+               *    raggiungibile (dal round 2, o era già finita): la stanza mi
+               *    accoglie ma mi mette in attesa. Sala d'attesa e avviso, qui,
+               *    e niente partita in corso.
+               *  - round in corso → entro IN partita, con griglia e tempo restante
+               *    dal `game:roundStart` che il server re-invia subito dopo l'ack.
                */
-              const live = res.state.phase === 'playing' || res.state.phase === 'countdown';
+              const me = res.state.players.find((p) => p.id === res.playerId);
+              const waiting = me?.waiting === true;
+              const live =
+                !waiting && (res.state.phase === 'playing' || res.state.phase === 'countdown');
               set((s) => ({
                 roomCode: res.state.code,
                 playerId: res.playerId,
@@ -924,6 +1015,7 @@ export const useAppStore = create<AppState>()(
                 opponentEvents: [],
                 countdown: null,
                 screen: live ? 'mp-game' : 'lobby',
+                roomNotice: waiting ? WAITING_FOR_NEXT_MATCH : null,
               }));
               resolve();
             } else {
@@ -937,8 +1029,35 @@ export const useAppStore = create<AppState>()(
       startRoom: () => {
         const code = get().roomCode;
         if (!code) return;
+        // Si parte: l'avviso «gioca dalla prossima partita» non ha più senso.
+        set({ roomNotice: null });
         getSocket().emit('room:start', { code });
       },
+
+      startNewMatch: () => {
+        const code = get().roomCode;
+        if (!code) return;
+        getSocket().emit('room:newGame', { code }, (res) => {
+          if ('ok' in res && res.ok) {
+            // L'ack porta lo stesso stato che il server rimanda agli altri: si
+            // applica la stessa funzione, così host e ospiti restano allineati.
+            applyNewMatch(res.state);
+            return;
+          }
+          set({ errorMessage: 'message' in res ? res.message : 'Errore' });
+        });
+      },
+
+      closeRoom: () => {
+        const code = get().roomCode;
+        if (!code) return;
+        getSocket().emit('room:close', { code }, () => undefined);
+        // Chiudere la stanza vale anche per chi l'ha chiusa: non c'è più niente
+        // da vedere. L'evento `room:closed` arriva a tutti gli altri.
+        get().leaveRoom();
+      },
+
+      clearRoomNotice: () => set({ roomNotice: null }),
 
       shuffleScheda: () => {
         const code = get().roomCode;
@@ -1016,6 +1135,7 @@ export const useAppStore = create<AppState>()(
           finalScores: null,
           liveWords: [],
           opponentEvents: [],
+          roomNotice: null,
           screen: 'home',
         });
       },
@@ -1058,6 +1178,50 @@ export const useAppStore = create<AppState>()(
   ),
 );
 
+/*
+ * Messaggi della sala d'attesa. Stanno qui (e non nei componenti) perché li
+ * decide lo store, che è l'unico punto dove arrivano gli eventi del socket: le
+ * schermate si limitano a mostrare `roomNotice`.
+ */
+
+/** Sono arrivato quando la partita corrente non si può più raggiungere. */
+const WAITING_FOR_NEXT_MATCH =
+  'La partita è già iniziata: ti abbiamo messo in stanza e giochi dalla prossima. Resta qui, entri da solo quando chi ha creato la stanza preme «Gioca ancora».';
+
+/** L'host ha appena iniziato una partita nuova nella stessa stanza. */
+const NEW_MATCH_NOTICE =
+  'Nuova partita nella stessa stanza: punteggi azzerati e schede nuove da pescare.';
+
+/**
+ * Applica lo stato di una NUOVA partita nella stessa stanza.
+ *
+ * Serve un passaggio dedicato, non basta `room:update`: i client sono sulla
+ * classifica finale di una partita che non esiste più, con i suoi punteggi in
+ * `finalScores`/`roundResults`. Se si aggiornasse soltanto la stanza, resterebbe
+ * a schermo una classifica di zeri con sopra un podio vero.
+ *
+ * La schermata è sempre la sala d'attesa: chi era in partita, chi era già in
+ * lobby e chi aspettava una nuova partita si ritrovano tutti nello stesso posto,
+ * con lo stesso codice stanza di prima.
+ */
+export function applyNewMatch(state: RoomState): void {
+  useAppStore.setState({
+    room: state,
+    screen: 'lobby',
+    grid: null,
+    currentSchedaId: null,
+    roundEndsAt: 0,
+    roundDurationMs: state.roundDurationMs,
+    roundResults: null,
+    missedWords: [],
+    finalScores: null,
+    liveWords: [],
+    opponentEvents: [],
+    countdown: null,
+    roomNotice: NEW_MATCH_NOTICE,
+  });
+}
+
 /** Collega gli eventi Socket.IO allo store. Da chiamare una volta in App. */
 export function bindSocketEvents(): () => void {
   const socket = getSocket();
@@ -1090,6 +1254,9 @@ export function bindSocketEvents(): () => void {
       liveWords: [],
       opponentEvents: [],
       countdown: null,
+      // Il round è cominciato: l'avviso «gioca dalla prossima partita» è stato
+      // mantenuto fin qui, da adesso si gioca.
+      roomNotice: null,
       screen: 'mp-game',
     });
   const onPlayerWord = (p: {
@@ -1157,6 +1324,21 @@ export function bindSocketEvents(): () => void {
   const onCountdown = (p: { seconds: number }) =>
     set({ countdown: p.seconds, screen: 'mp-game', grid: null });
   const onError = (p: { message: string }) => set({ errorMessage: p.message });
+  /*
+   * Nuova partita nella STESSA stanza: chi ha premuto il tasto e chi lo ha
+   * subito ricevono lo stesso identico azzeramento.
+   */
+  const onNewGame = (p: RoomNewGamePayload) => applyNewMatch(p.state);
+  /*
+   * La stanza è stata chiusa da chi l'ha creata.
+   *
+   * Si esce in modo pulito invece di restare su una schermata che non può più
+   * parlare col server: `leaveRoom` libera anche i blob delle clip avversarie.
+   */
+  const onRoomClosed = () => {
+    get().leaveRoom();
+    set({ errorMessage: 'La stanza è stata chiusa da chi l’ha creata.' });
+  };
 
   /**
    * Riconnessione TRASPARENTE del socket.
@@ -1198,6 +1380,8 @@ export function bindSocketEvents(): () => void {
   socket.on('game:roundEnd', onRoundEnd);
   socket.on('game:gameEnd', onGameEnd);
   socket.on('game:countdown', onCountdown);
+  socket.on('room:newGame', onNewGame);
+  socket.on('room:closed', onRoomClosed);
   socket.on('voice:audio', onVoiceAudio);
   socket.on('error', onError);
   socket.on('connect', onConnect);
@@ -1209,6 +1393,8 @@ export function bindSocketEvents(): () => void {
     socket.off('game:roundEnd', onRoundEnd);
     socket.off('game:gameEnd', onGameEnd);
     socket.off('game:countdown', onCountdown);
+    socket.off('room:newGame', onNewGame);
+    socket.off('room:closed', onRoomClosed);
     socket.off('voice:audio', onVoiceAudio);
     socket.off('error', onError);
     socket.off('connect', onConnect);

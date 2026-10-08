@@ -876,6 +876,39 @@ button.home__learn--active {
   margin: 10px 0;
 }
 
+/*
+ * Avviso NEUTRO (non è un errore e non è una conferma): «sei arrivato tardi,
+ * giochi alla prossima», «è partita una nuova partita nella stessa stanza».
+ * Azzurrino per distinguerlo dal rosso senza gridare.
+ */
+.banner--info {
+  position: relative;
+  margin: 10px 0;
+  padding-right: 34px;
+  background: rgba(86, 154, 214, 0.14);
+  border: 1px solid rgba(86, 154, 214, 0.4);
+  color: var(--text);
+}
+
+/* X per togliere l'avviso senza uscire dalla schermata. */
+.banner__dismiss {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.banner__dismiss:hover {
+  opacity: 1;
+}
+
 /* ---------- Setup ---------- */
 
 .setup__back {
@@ -2427,6 +2460,22 @@ button.home__learn--active {
 .badge--off {
   background: var(--danger);
   color: #3a0505;
+}
+
+/*
+ * Chi è seduto in stanza ma gioca la PARTITA successiva (è arrivato a questa già
+ * troppo avanti). Ambra, non rosso: non è un problema, è un turno che arriva.
+ */
+.badge--waiting {
+  background: rgba(232, 168, 56, 0.22);
+  color: var(--text);
+}
+
+/* Righe di servizio sotto le liste della sala d'attesa. */
+.lobby__hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
 }
 
 .settings-grid {

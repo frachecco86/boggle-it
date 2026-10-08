@@ -1,10 +1,14 @@
 // Entrare in una stanza la cui partita è già iniziata (round 1).
 // Esecuzione: dalla root, `pnpm test:e2e` (richiede il server attivo su :3001).
 //
-// Copre la regola di `Room.admitNewPlayer`:
+// Copre la regola di `Room.seatForNewPlayer`:
 //  - round 1 in corso   → il nuovo giocatore ENTRA e gioca il tempo che resta;
 //  - pausa dopo il round 1 → entra e gioca dal round successivo;
-//  - dal round 2 in poi → rifiutato (`GAME_STARTED`);
+//  - dal round 2 in poi → entra lo stesso ma si SIEDE (`waiting`): nessuna
+//    griglia, nessuna parola accettata, nessun risultato. La 0.47.0 rispondeva
+//    «Partita già iniziata» e costringeva a rifare la stanza; dal 0.49.0 la
+//    stanza sopravvive alla partita, quindi chi arriva tardi gioca la prossima
+//    (vedi `multiplayer-replay.mjs`);
 //  - chi rientra con il SUO playerId entra sempre, anche a round 2.
 import { io } from 'socket.io-client';
 
@@ -148,10 +152,30 @@ const scelta2 = paroleSullaGriglia(round2.grid, dict).sort((a, b) => a.word.leng
 const ackGrace = await emitAck(grace, 'game:submitWord', { word: scelta2.word, path: scelta2.path });
 check('Grace gioca il round 2', ackGrace.accepted === true, `${scelta2.word} → +${ackGrace.points}`);
 
+/*
+ * Frank arriva quando il round 2 è già partito: la partita non è più
+ * raggiungibile, ma la porta non gli si chiude in faccia. Entra, si siede e
+ * aspetta la partita successiva — senza griglia e senza punti.
+ */
+const frankGrids = [];
 const frank = await connect();
+frank.on('game:roundStart', (p) => frankGrids.push(p));
 const frankJoin = await emitAck(frank, 'room:join', { code, nickname: 'Frank' });
-check('Frank NON entra durante il round 2', frankJoin.ok !== true, JSON.stringify(frankJoin));
-check('il rifiuto è GAME_STARTED', frankJoin.code === 'GAME_STARTED', frankJoin.message);
+check('Frank entra anche durante il round 2', frankJoin.ok === true, JSON.stringify({ ok: frankJoin.ok, code: frankJoin.code }));
+check(
+  'ma si siede in attesa della prossima partita',
+  frankJoin.state?.players.find((p) => p.id === frankJoin.playerId)?.waiting === true,
+);
+// Se gli avessero re-inviato la griglia lo si vedrebbe: si lascia passare un
+// giro di eventi, poi si verifica il silenzio.
+await new Promise((r) => setTimeout(r, 600));
+check('la griglia del round 2 non gli arriva', frankGrids.length === 0);
+const ackFrank = await emitAck(frank, 'game:submitWord', { word: scelta2.word, path: scelta2.path });
+check(
+  'le sue parole non sono accettate: non sta giocando questo round',
+  ackFrank.accepted === false && /attesa/i.test(ackFrank.reason ?? ''),
+  ackFrank.reason ?? '',
+);
 
 // Il rientro di chi c'era già non è un ingresso nuovo: vale a ogni round.
 const evaBackSocket = await connect();
@@ -160,6 +184,18 @@ check(
   'Eva rientra anche a round 2 con il suo playerId',
   evaBack.ok === true && evaBack.playerId === evaJoin.playerId,
   evaBack.ok === true ? 'stesso playerId' : JSON.stringify(evaBack),
+);
+
+/*
+ * Il round 2 è anche l'ultimo: chi era seduto non deve comparire nei risultati
+ * di una partita a cui non ha partecipato.
+ */
+const roundEnd2 = await onceOr(alice, 'game:roundEnd', 20_000);
+check('il round 2 si chiude', roundEnd2?.round === 2);
+check(
+  'Frank è fuori dai risultati',
+  (roundEnd2?.results ?? []).every((r) => r.nickname !== 'Frank'),
+  roundEnd2 ? roundEnd2.results.map((r) => r.nickname).join('  ') : '',
 );
 
 for (const s of [alice, bob, eva, grace, frank, evaBackSocket]) s.close();

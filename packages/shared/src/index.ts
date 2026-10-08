@@ -5,6 +5,7 @@ export * from './scoring.js';
 export * from './stats.js';
 export * from './solver.js';
 export * from './scheda.js';
+export * from './schedaMemory.js';
 export * from './schedaGen.js';
 export * from './schedaAle.js';
 export * from './schedaPool.js';

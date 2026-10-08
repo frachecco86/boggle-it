@@ -168,27 +168,58 @@ export class ProfileStore {
       /*
        * Schede GIA' GIOCATE da ogni profilo, per non riproporle.
        *
-       * PERCHE' UNA TABELLA A PARTE e non una colonna in 'games': qui conta solo
-       * COPPIA (profilo, scheda), non l'esito. Un INSERT OR IGNORE a ogni
-       * partita basta, senza duplicati, e la lettura e' un solo indice.
+       * PERCHE' UNA TABELLA A PARTE e non una colonna in 'games': qui conta la
+       * COPPIA (profilo, scheda), non l'esito. Un upsert a ogni partita, senza
+       * duplicati di righe, e la lettura e' un solo indice.
        *
        * PERCHE' NON SI USA games.scheda_id: quella tabella esiste solo per le
        * partite CONCLUSE e registrate, quindi chi abbandona a meta' partita (o
        * gioca offline in single player) non comparirebbe mai. Qui la scheda si
        * segna come vista indipendentemente da come finisce la partita.
        *
-       * played_at serve solo a poter ripulire le voci vecchie e a mostrare
-       * l'ordine: la regola "non riproporla" non dipende dal tempo.
+       * seen_count (0.50.0) conta QUANTE VOLTE quel profilo l'ha vista, non se
+       * l'ha vista: "vista di meno" significa somma dei contatori piu' bassa, e
+       * con il solo presenza/assenza una griglia giocata cento volte da uno
+       * sarebbe risultata preferibile a una vista da tutti una volta sola.
+       *
+       * played_at e' l'ULTIMA vista: serve a poter ripulire le voci vecchie e a
+       * mostrare l'ordine; la regola "non riproporla" non dipende dal tempo.
        */
       CREATE TABLE IF NOT EXISTS played_schede (
         profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
         scheda_id  TEXT NOT NULL,
         played_at  INTEGER NOT NULL,
+        seen_count INTEGER NOT NULL DEFAULT 1,
         PRIMARY KEY (profile_id, scheda_id)
       );
       CREATE INDEX IF NOT EXISTS idx_played_schede_profile ON played_schede(profile_id);
       CREATE INDEX IF NOT EXISTS idx_played_schede_scheda ON played_schede(scheda_id);
     `);
+    /*
+     * I database creati prima della 0.50.0 hanno `played_schede` senza
+     * `seen_count`: `CREATE TABLE IF NOT EXISTS` non li tocca, e una query che
+     * nomina la colonna caderebbe. La migrazione e' un ALTER con DEFAULT 1, cioe'
+     * il significato storico delle voci: «l'hai vista, una volta».
+     */
+    this.ensureColumn('played_schede', 'seen_count', 'INTEGER NOT NULL DEFAULT 1');
+  }
+
+  /**
+   * Aggiunge una colonna a una tabella nata con una versione precedente.
+   *
+   * SQLite non ha `ADD COLUMN IF NOT EXISTS` e `CREATE TABLE IF NOT EXISTS` non
+   * integra le tabelle esistenti: senza questo controllo, su un database reale
+   * la migrazione fallirebbe a ogni avvio dopo il primo.
+   *
+   * La `DEFAULT` e' obbligatoria per una colonna NOT NULL su una tabella non
+   * vuota, ed e' anche la scelta giusta: le voci storiche valgono una vista.
+   */
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const existing = this.db
+      .prepare('SELECT 1 AS hit FROM pragma_table_info(?) WHERE name = ?')
+      .get(table, column);
+    if (existing) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 
   /** Nickname normalizzato per il confronto (minuscolo, senza spazi doppi). */
@@ -775,10 +806,15 @@ export class ProfileStore {
    * quante partite sono state giocate. Alimenta l'anteprima della scheda.
    */
   /**
-   * Segna una scheda come GIA' GIOCATA da questo profilo.
+   * Segna una scheda come GIA' GIOCATA da questo profilo: una vista in piu'.
    *
-   * Idempotente (`INSERT OR IGNORE`): rigiocare la stessa scheda non crea una
-   * seconda voce e non aggiorna la data — quello che conta e' "l'ho vista".
+   * Upsert: la riga (profilo, scheda) resta UNA sola (la chiave primaria), e
+   * `seen_count` cresce a ogni ripetizione. Il conteggio e' cio' che permette alla
+   * pesca di preferire, fra le schede gia' viste, quelle viste MENO volte; la
+   * presenza/assenza da sola direbbe solo «l'ho gia' vista».
+   *
+   * `played_at` segue l'ultima vista: la data serve a mostrare l'ordine e a
+   * ripulire il vecchio, non a decidere se riproporre la scheda.
    *
    * Silenzioso su profilo inesistente: la chiave esterna lo bloccherebbe con un
    * errore, ma segnare una scheda non deve mai far fallire una partita. Se il
@@ -789,8 +825,10 @@ export class ProfileStore {
     try {
       this.db
         .prepare(
-          `INSERT OR IGNORE INTO played_schede (profile_id, scheda_id, played_at)
-           VALUES (?, ?, ?)`,
+          `INSERT INTO played_schede (profile_id, scheda_id, played_at, seen_count)
+           VALUES (?, ?, ?, 1)
+           ON CONFLICT(profile_id, scheda_id) DO UPDATE
+             SET seen_count = seen_count + 1, played_at = excluded.played_at`,
         )
         .run(profileId, schedaId, Date.now());
     } catch {
@@ -798,14 +836,16 @@ export class ProfileStore {
     }
   }
 
-  /** Segna PIU' schede in una volta (una transazione, non N insert). */
+  /** Segna PIU' schede in una volta (una transazione, non N upsert). */
   markSchedePlayed(profileId: string, schedaIds: readonly string[]): void {
     if (!profileId || schedaIds.length === 0) return;
     const now = Date.now();
     try {
       const stmt = this.db.prepare(
-        `INSERT OR IGNORE INTO played_schede (profile_id, scheda_id, played_at)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO played_schede (profile_id, scheda_id, played_at, seen_count)
+         VALUES (?, ?, ?, 1)
+         ON CONFLICT(profile_id, scheda_id) DO UPDATE
+           SET seen_count = seen_count + 1, played_at = excluded.played_at`,
       );
       this.db.exec('BEGIN');
       for (const id of schedaIds) {
@@ -839,12 +879,54 @@ export class ProfileStore {
   }
 
   /**
+   * Quante VOLTE ogni scheda e' stata vista sommando piu' profili.
+   *
+   * E' la domanda del MULTIPLAYER (0.50.0): la griglia la sceglie la stanza per
+   * tutti, e "l'ho gia' vista" diventa "l'ha gia' visto qualcuno dei presenti".
+   *
+   * Il numero e' la SOMMA dei contatori, non il numero di chi l'ha vista: e' la
+   * differenza fra «quanti lo sanno» e «quanto e' gia' stata giocata», e vince la
+   * seconda (vedi `pickScheda`). Misurato sul caso reale: una griglia vista 100
+   * volte da un solo giocatore vale 100, una vista una volta sola da sette vale 7
+   * e quindi viene prima.
+   *
+   * Una sola query per tutta la lista: in una stanza al massimo sono otto
+   * profili, ma la si chiama a ogni pesca e la risposta finisce intera nella
+   * memoria della stanza.
+   */
+  playedSchedaCounts(profileIds: readonly string[]): Map<string, number> {
+    const out = new Map<string, number>();
+    // Lista in ordine sparso, con duplicati e id vuoti: ripulita prima di
+    // farne i segnaposto della query. Un profilo aperto su due dispositivi non
+    // deve contare doppio.
+    const ids = [...new Set(profileIds.filter((id) => typeof id === 'string' && id.length > 0))];
+    if (ids.length === 0) return out;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT scheda_id, SUM(seen_count) AS seen
+         FROM played_schede
+         WHERE profile_id IN (${placeholders})
+         GROUP BY scheda_id`,
+      )
+      .all(...ids) as Array<{ scheda_id: string; seen: number }>;
+    for (const row of rows) out.set(row.scheda_id, Number(row.seen));
+    return out;
+  }
+
+  /**
    * Cancella lo storico delle schede giocate.
    *
-   * Serve al MULTIPLAYER: in stanza la partita non e' del singolo giocatore, e
-   * "la scheda che ho gia' visto da solo" non deve escluderla per tutti. La
-   * stanza usa le schede scelte dall'host/admin, non la cronologia personale.
-   * Ritorna quante voci sono state rimosse (per il pannello admin).
+   * STORICO: dalla 0.48.0 il client lo chiamava entrando in una stanza, perche'
+   * in multiplayer la cronologia personale non contava e non doveva filtrare le
+   * schede degli altri. La 0.50.0 ha capovolto la regola (la stanza unisce le
+   * cronologie dei presenti e sceglie la griglia che nessuno ha visto): cancellare
+   * la storia di chi entra sarebbe peggio che ignorarla, quindi il client non la
+   * chiama piu'.
+   *
+   * L'endpoint resta: e' l'unico modo di far ripartire da zero la memoria di un
+   * profilo (diagnosi dal pannello, e una futura "dimentica le griglie gia'
+   * viste"). E' IRREVERSIBILE. Ritorna quante voci sono state rimosse.
    */
   clearPlayedSchede(profileId: string): number {
     const result = this.db
