@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.44.0';
+export const APP_VERSION = '0.45.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,33 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.45.0',
+    date: '2026-10-08',
+    title: 'I test non dipendono più dal `.env` della macchina',
+    promo: {
+      emoji: '🧪',
+      headline: 'Test verdi anche senza un server proprio',
+      text: 'Due test dell’app fallivano su qualsiasi computer che non avesse il collegamento al server di produzione configurato: controllavano gli inviti e la musica dell’APK, che hanno senso solo con un server remoto. Ora il server se lo danno da sé: `pnpm test` è verde anche partendo da zero.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**`pnpm test` passa anche a chi non ha `VITE_SERVER_URL` configurato.** Due test — l’invito multiplayer dall’APK e la musica caricata dall’amministratore — fallivano sul `.env` vuoto, cioè sulla configurazione di chi sviluppa col proxy locale e di qualsiasi persona cloni il repository. Non era la logica ad essere rotta: era il test a chiedere all’ambiente un valore che non gli compete.',
+          '**Nessuna regressione copriva sé stessa.** I due test sono stati ri-scritti in modo che il risultato non cambi fra il portatile, la CI e chi ha il `.env` puntato a un server vero (verificato con tutti e quattro gli assetti: `.env` vuoto, `.env` di produzione, variabile di shell, variabile assurda).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Il server remoto lo dichiara il test, non l’ambiente.** `SERVER_URL` è una *costante di modulo* letta da `import.meta.env`, quindi si fissa quando il modulo è caricato; i test la forzavano per via indiretta, ereditandola dal `.env`. Ora usano `vi.stubEnv` + `vi.resetModules` + import dinamico (`roomLinkBuiltWith` / `storeBuiltWith`): il modulo viene ricaricato con il server voluto, come se l’app fosse stata compilata così.',
+          '**Coperto anche il caso opposto**, che prima non era testato: senza server remoto configurato l’invito resta `localhost` e la traccia resta un percorso relativo — ed è il comportamento giusto, perché l’indirizzo della pagina è già quello giusto (stesso host di Vite in sviluppo, monolite in produzione). Prima questi due test verificavano una *disparità* (`not.toBe`): ora confrontano l’URL esatto.',
+          '**Verificato che i test non siano vacui**: introducendo di proposito il difetto originale (`publicAppHref` che non sostituisce `localhost`, `absoluteMusicTrack` che non assolutizza) falliscono 3 test, non 0.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.44.0',
     date: '2026-10-05',

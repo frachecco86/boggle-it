@@ -7,7 +7,7 @@
  * "Standard" e si giocavano le schede sbagliate, mentre il server (che usa la
  * funzione condivisa) serviva correttamente le Ale su ogni griglia.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /*
  * Lo store è creato con il middleware `persist`, che tocca `localStorage` già
@@ -67,25 +67,56 @@ describe('schedaVariantFor', () => {
  * server (`/music/up-xxx/file`). Nell'APK la WebView serve il bundle da
  * `https://localhost`, quindi un percorso relativo cercava il file DENTRO l'app
  * invece che sul server: la musica "non si sentiva" senza alcun errore.
+ *
+ * **Perché il server lo mette il test.** `absoluteMusicTrack` usa `SERVER_BASE`,
+ * che in `net/socket.ts` è una **costante di modulo** letta da `import.meta.env`.
+ * Dipendeva dunque dal `.env` di chi esegue i test: con `VITE_SERVER_URL=` vuoto
+ * (la config di chi sviluppa col proxy di Vite, e il default di chi non ha un
+ * server suo) non c'era alcun server da anteporre e il test falliva pur con la
+ * logica giusta. `stubEnv` + `resetModules` + import dinamico costruiscono il
+ * modulo con il server voluto, così il risultato non cambia fra un portatile e la
+ * CI — e si può verificare anche il caso same-origin.
  */
 describe('absoluteMusicTrack', () => {
-  it('rende assoluto il percorso delle tracce caricate', async () => {
-    const { absoluteMusicTrack } = await import('./store.js');
-    const track = absoluteMusicTrack({
-      id: 'up-1',
-      label: 'X',
-      mood: '',
-      credits: '',
-      file: '/music/up-1/file',
-      uploaded: true,
-    });
+  const REMOTE = 'https://boggle-it-production.up.railway.app';
+
+  /** Re-importa lo store **come se l'app fosse compilata con `serverUrl`**. */
+  async function storeBuiltWith(serverUrl: string) {
+    vi.resetModules();
+    vi.stubEnv('VITE_SERVER_URL', serverUrl);
+    return import('./store.js');
+  }
+
+  /** Traccia caricata dall'admin: il file vive sul server. */
+  const uploaded = {
+    id: 'up-1',
+    label: 'X',
+    mood: '',
+    credits: '',
+    file: '/music/up-1/file',
+    uploaded: true,
+  };
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('con un server remoto rende assoluto il percorso delle tracce caricate', async () => {
+    const { absoluteMusicTrack } = await storeBuiltWith(REMOTE);
+    const track = absoluteMusicTrack(uploaded);
+    expect(track.file).toBe(`${REMOTE}/music/up-1/file`);
     expect(track.file).not.toBe('/music/up-1/file');
     expect(track.file.startsWith('http')).toBe(true);
     expect(track.file.endsWith('/music/up-1/file')).toBe(true);
   });
 
+  it('senza server remoto (monolite o sviluppo) il percorso resta relativo', async () => {
+    // `file` è già corretto rispetto all'origine che serve la pagina: non c'è
+    // nulla da assolutizzare, e la musica funziona anche con la rete assente.
+    const { absoluteMusicTrack } = await storeBuiltWith('');
+    expect(absoluteMusicTrack(uploaded).file).toBe('/music/up-1/file');
+  });
+
   it('lascia relativo il percorso delle tracce del bundle', async () => {
-    const { absoluteMusicTrack } = await import('./store.js');
+    const { absoluteMusicTrack } = await storeBuiltWith(REMOTE);
     const track = absoluteMusicTrack({
       id: 'classica',
       label: 'Classica',
@@ -97,7 +128,7 @@ describe('absoluteMusicTrack', () => {
   });
 
   it('non tocca un URL già assoluto', async () => {
-    const { absoluteMusicTrack } = await import('./store.js');
+    const { absoluteMusicTrack } = await storeBuiltWith(REMOTE);
     const track = absoluteMusicTrack({
       id: 'up-2',
       label: 'Y',

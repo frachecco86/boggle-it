@@ -7,7 +7,7 @@
  *
  * Qui l'URL è **sempre passato come stringa**: nessun browser, nessun mock.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   consumeRoomCodeFromUrl,
   normalizeRoomCode,
@@ -100,15 +100,52 @@ describe('invito consumato una volta sola', () => {
  * WebView è `https://localhost`, che esiste solo dentro il telefono. Un invito
  * così è inutile per chi lo riceve (bug "Il link multiplayer creato dall' apk è
  * un link localhost").
+ *
+ * **Perché i moduli si ricaricano a ogni test.** `roomUrl()` prende il server
+ * remoto da `SERVER_URL`, che in `socket.ts` è una **costante di modulo** letta
+ * da `import.meta.env` — cioè fissata quando il modulo è caricato. Lasciandola
+ * all'ambiente, il risultato dipendeva dal `.env` di chi esegue i test: con
+ * `VITE_SERVER_URL=` vuoto (la config giusta per sviluppare col proxy di Vite, e
+ * il default di chi non ha un server suo) `publicAppHref()` non ha un server a
+ * cui riscrivere l'indirizzo e il test falliva per un motivo che non c'entra
+ * niente con la logica. Qui il server lo mette il test (`stubEnv`) e il modulo
+ * viene ricaricato con quel valore (`resetModules` + import dinamico): il test
+ * passa uguale sul portatile, in CI e su chi ha il `.env` puntato a un server
+ * vero — e in più si può provare anche il caso opposto.
  */
 describe('roomLink — invito da APK (origine localhost)', () => {
   const REMOTE = 'https://boggle-it-production.up.railway.app';
 
-  it("dall'APK il link punta al server, non a localhost", () => {
+  /** Carica `roomLink` **come se l'app fosse stata compilata con `serverUrl`. */
+  async function roomLinkBuiltWith(serverUrl: string) {
+    vi.resetModules();
+    vi.stubEnv('VITE_SERVER_URL', serverUrl);
+    return import('./roomLink.js');
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("dall'APK il link punta al server, non a localhost", async () => {
+    const { roomUrl } = await roomLinkBuiltWith(REMOTE);
     const link = roomUrl('K7QM2P', 'https://localhost/');
+    expect(link).toBe(`${REMOTE}/?stanza=K7QM2P`);
     expect(link).not.toContain('localhost');
     expect(link).toContain(ROOM_QUERY_PARAM);
     expect(link).toContain('K7QM2P');
+  });
+
+  it('in sviluppo (nessun server remoto) localhost resta localhost', async () => {
+    // Non è un difetto: senza un server configurato non c'è un indirizzo da
+    // inventare, e su Vite l'indirizzo corrente è già quello giusto.
+    const { roomUrl } = await roomLinkBuiltWith('');
+    expect(roomUrl('K7QM2P', 'http://localhost:5173/')).toBe(
+      'http://localhost:5173/?stanza=K7QM2P',
+    );
+  });
+
+  it("il server remoto non cambia l'invito partito da un indirizzo pubblico", async () => {
+    const { roomUrl } = await roomLinkBuiltWith(REMOTE);
+    expect(roomUrl('K7QM2P', BASE)).toBe(`${BASE}?stanza=K7QM2P`);
   });
 
   it('publicAppHref sostituisce origini locali con il server remoto', () => {
