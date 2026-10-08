@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.46.0';
+export const APP_VERSION = '0.47.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,35 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.47.0',
+    date: '2026-10-08',
+    title: 'Le schede conoscono di nuovo tutto il dizionario',
+    promo: {
+      emoji: '🃏',
+      headline: 'Parole vere che prima venivano rifiutate',
+      text: 'Alcune parole italiane c’erano già nel dizionario del gioco, ma la partita le rifiutava: le schede avevano l’elenco delle soluzioni vecchio, fermo a prima delle 4.339 parole tecniche riammesse nella 0.43.0. Gli elenchi sono stati ricalcolati su tutto il dizionario: 315 parole in più accettate, nessuna tolta.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le schede di base accettano di nuovo ogni voce del dizionario.** Le schede contengono le soluzioni già risolte, e il gioco accetta solo quelle: se il dizionario cresce e le schede restano ferme, una parola vera viene rifiutata. Misurato con il dizionario giusto: **101 schede su 270 disallineate** (63 ale, 27 standard, 11 full), **+315 parole accettate e 0 tolte** — è la famiglia delle parole tecniche: `ierica` e `torica` (scheda `4-facile-012`), `sudorale`, `tumorosa` e `torosa` (`4-facile-015`), `cine`, `cotale`, `segosi`, `ramosa`…',
+          '**Le griglie non sono cambiate di una cella.** `sync:schede` riscrive solo gli elenchi `words`/`allWords` con la stessa pipeline del generatore: verificato, **0 griglie modificate** su 270. Le partite già giocate restano riproducibili e la calibrazione delle ale resta valida.',
+          '**I criteri di qualità reggono ancora.** `pnpm --filter @boggle/server verify:schede`: nessuna violazione su tutte e nove le combinazioni dimensione × difficoltà.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**`words.txt` era fermo a 368.100 forme.** È un file generato (gitignored), e su questa macchina era precedente alla 0.43.0: le 4.339 parole tecniche di `technical-words.txt` non c’erano, quindi anche riallineare le schede non sarebbe bastato. Ricreato da `words.br` (versionato, 372.439 forme, `setosa` compresa) con `pnpm --filter @boggle/dictionary build`. Chi riallinea le schede **deve prima ricostruire il dizionario**, altrimenti congela la deriva nel commit.',
+          '**⚠️ DA FARE UNA VOLTA SOLA DOPO QUESTO DEPLOY: rigenerare le ale (e le extra) del volume.** `pnpm sync:schede` allinea **solo le schede versionate** in `packages/shared/schede/`. Quelle generate dall’amministratore vivono nel volume (`schede-ale/`, `schede-extra/`), **non sono in git e non si aggiornano da sole**: restano risolte sul dizionario del giorno in cui sono state create e continuano a rifiutare le parole nuove — è esattamente il caso di **`setosa` sulla scheda ale `6-facile-085`**. Procedura in **`docs/ALE-RUNTIME-SERVER.md`**: pannello admin (elimina + Genera) oppure `node tools/rigenera-ale-server.mjs` (dry-run di default). **Una tantum**: non serve a ogni deploy.',
+          '**Nessun allineamento automatico in build o in deploy, per scelta.** La generazione delle ale costa ~450 MB di picco e alcuni minuti: farla a ogni rilascio sarebbe uno spreco, e il dizionario deployato è sempre lo stesso perché arriva da `words.br` versionato (`ensure-words` lo decomprime, `build-words` prende il ramo offline e conserva i file). Per questo `sync:schede` resta un comando da tastiera e la nuova `pnpm check:schede` è **sola diagnosi** (`sync:schede --check`: non scrive nulla, esce 1 se c’è deriva). Da eseguire **quando cambia il dizionario** (`words.br`, `technical-words.txt`, `consonant-endings.txt`, `frequency-it.txt`), non a ogni rilascio.',
+          '**La validazione è contro la scheda, non contro il dizionario** — e lo era già in entrambe le modalità, mentre la specifica diceva altro. `Room.submitWord` valida contro `roundValidWords` (l’insieme accettato della scheda) e usa il dizionario **solo come ripiego** quando il round gira senza scheda (test o catalogo vuoto); il client single player usa `acceptedWords(scheda)`. Il percorso legale (`isValidPath` + `pathMatchesWord`) garantisce già la componibilità, quindi la scheda è la materializzazione preventiva di «dizionario ∩ componibili»: serve a non avere un solver nel client. Corretta la **SPEC §4.4**, che prometteva la validazione a dizionario.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.46.0',
     date: '2026-10-08',

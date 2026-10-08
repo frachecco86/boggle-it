@@ -198,6 +198,35 @@ pnpm check:context
 
 ---
 
+## ⚠️ Dopo il deploy: le schede generate dall'amministratore
+
+Il deploy aggiorna codice, dizionario e **schede versionate** (`packages/shared/schede/`, che il
+`Dockerfile` copia nell'immagine). **NON** aggiorna le schede generate dal pannello admin: quelle
+vivono nel volume (`schede-ale/`, `schede-extra/`), non sono in git e restano risolte sul
+dizionario del giorno in cui sono state create.
+
+Quindi, **quando il dizionario è cambiato** (`words.br`, `technical-words.txt`,
+`consonant-endings.txt`, `frequency-it.txt`), dopo il deploy vanno svuotate e rigenerate dal
+pannello admin o con `node tools/rigenera-ale-server.mjs` — procedura in
+**[`ALE-RUNTIME-SERVER.md`](./ALE-RUNTIME-SERVER.md)**.
+
+Non va fatto **a ogni deploy**: il dizionario deployato è sempre lo stesso (deriva da `words.br`
+versionato), quindi le schede restano allineate finché qualcuno non tocca il lessico. Nessun hook
+lo automatizza: la generazione ale costa ~450 MB di picco e alcuni minuti.
+
+```bash
+pnpm check:schede   # sola diagnosi: le schede versionate sono allineate al dizionario? (exit 1 se no)
+```
+
+**Pendenza aperta con la 0.47.0:** le ale del volume sono ferme al dizionario pre-0.43 e rifiutano
+ancora parole come `setosa`. Al primo deploy di questa versione → rigenerarle una volta.
+
+L'altra metà della stessa modifica vive nel repo: `pnpm sync:schede` riallinea le schede
+versionate e va **committata** insieme al cambio del dizionario (README, «Cambiare il
+dizionario richiede di riallineare le schede»).
+
+---
+
 ## Sviluppo locale
 
 ```bash

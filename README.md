@@ -204,6 +204,7 @@ deployato — `node tools/rigenera-ale-server.mjs` (dry-run di default) e la pro
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
 | `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
+| `pnpm check:schede` | **Sola diagnosi**: le schede versionate sono allineate al dizionario? (esce 1 se c'è deriva; non scrive nulla) |
 | `pnpm check:version` | Verifica che la versione sia avanzata di almeno 0.1 e abbia la sua voce |
 
 ### Feedback sonoro
@@ -335,7 +336,27 @@ pnpm --filter @boggle/server verify:schede    # controlla i criteri di qualità
 `pnpm sync:schede` ricalcola gli elenchi con la **stessa pipeline del generatore** e non tocca le
 griglie: le schede `ale` usano il proprio trie (`Dict'`, 16 lettere), le altre il pool classico
 (14 lettere, con il filtro sulle consonanti finali). Senza questo passaggio il gioco rifiuta
-parole che il server accetta: era il caso di **168 schede su 270**.
+parole che il server accetta: era il caso di **168 schede su 270**, ed è ancora il caso della
+0.47.0: **101 schede su 270** disallineate, **+315 parole accettate** (`ierica`, `torica`,
+`sudorale`, `cine`, `cotale`…).
+
+Prima di riallineare, **ricostruire il dizionario**: `words.txt` è generato e può essere vecchio
+(su una macchina era fermo a 368.100 forme contro le 372.439 di `words.br`). Se si fa `sync:schede`
+con il dizionario vecchio, la deriva viene **congelata nel commit** invece di essere corretta.
+
+> ## ⚠️ `sync:schede` NON tocca le schede generate dall'amministratore
+>
+> Le schede create dal pannello admin vivono **nel volume** (`schede-ale/`, `schede-extra/`),
+> **non sono in git e non si riallineano da sole**: restano risolte sul dizionario del giorno in
+> cui sono state generate. Dopo un cambio di dizionario vanno **svuotate e rigenerate** dal
+> pannello admin (elimina + Genera) o con `node tools/rigenera-ale-server.mjs` — procedura in
+> **[`docs/ALE-RUNTIME-SERVER.md`](docs/ALE-RUNTIME-SERVER.md)**. È il motivo per cui una scheda
+> ale già in produzione continua a rifiutare `setosa` anche dopo la 0.47.0.
+>
+> **Nessun hook lo fa in automatico, né in build né in deploy**: rigenerare le ale costa ~450 MB
+> di picco e alcuni minuti, e il dizionario deployato è sempre lo stesso perché arriva da
+> `words.br` versionato. Il momento giusto è **quando cambia il dizionario**, non a ogni rilascio.
+> `pnpm check:schede` (sola diagnosi, esce 1) esiste per non dimenticarsene.
 
 ---
 

@@ -195,11 +195,22 @@ In caso di parola trovata da più giocatori, ognuno prende i punti base.
 - Le schede sono servite dal catalogo in RAM: `/schede`, `/schede/:id`, `/preview`.
 
 ### 4.4 Validazione
-- **Client (single player)**: validazione istantanea contro l'elenco parole della scheda.
-- **Server (multiplayer)**: ricalcola e valida ogni parola ricevuta (dizionario + percorso).
-  Il client non può inventare parole o percorsi.
-- **Schede**: generate offline o dall'admin, mai dal giocatore: le parole sono già filtrate
-  per qualità.
+
+La regola del gioco è: **una parola vale se è nel dizionario ED è composta da un percorso legale
+sulla griglia**. Il percorso legale (adiacenza a 8 direzioni + nessuna cella ripetuta) garantisce
+GIÀ la componibilità, quindi l'elenco della scheda non è una regola in più: è la **materializzazione
+preventivizzata** di «dizionario ∩ componibili», e serve a non avere un solver nel client.
+
+- **Client (single player)**: validazione istantanea contro `acceptedWords(scheda)` (=`allWords`),
+  più `isValidPath` e `pathMatchesWord`. Nessun dizionario nel client (niente download da 4 MB).
+- **Server (multiplayer)**: ricalcola percorso e parola (`isValidPath`, `pathMatchesWord`) e valida
+  contro l'insieme accettato della scheda (`roundValidWords`). **Il dizionario è solo il ripiego**
+  quando il round gira senza scheda (test, o catalogo vuoto). Il client non può inventare né parole
+  né percorsi: il server ricalcola tutto.
+- **Conseguenza da conoscere** (0.47.0): la scheda è un'**istantanea** del dizionario. Se il
+  dizionario cambia e le schede no, il gioco rifiuta parole vere (`setosa`). Rimedio:
+  `pnpm sync:schede` per le schede versionate + **rigenerazione delle schede dell'admin nel
+  volume**, che `sync:schede` non tocca (vedi README, «Cambiare il dizionario»).
 
 ---
 
