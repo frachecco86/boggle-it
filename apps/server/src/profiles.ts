@@ -720,11 +720,18 @@ export class ProfileStore {
       .sort((a, b) => a.length - b.length);
 
     // Storico partite, dalla più recente.
+    //
+    // Il tie-break sul `rowid` non è cosmetico: `played_at` è `Date.now()`, quindi
+    // due partite salvate nello stesso millisecondo hanno la STESSA chiave di
+    // ordinamento e, senza un secondo criterio, SQLite le restituisce in ordine
+    // qualunque — la storia personale si riordinava da sola fra un refresh e
+    // l'altro. Il `rowid` è il proxy corretto della "salvata dopo"; `id` non si
+    // può usare perché è un UUID e non cresce col tempo.
     const history = this.db
       .prepare(
         `SELECT id, score, words, word_count, longest, difficulty, grid_size, mode, played_at
            FROM games WHERE profile_id = ?
-          ORDER BY played_at DESC LIMIT ?`,
+          ORDER BY played_at DESC, rowid DESC LIMIT ?`,
       )
       .all(profileId, STATS_HISTORY_LIMIT) as Array<{
       id: string;

@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.45.0';
+export const APP_VERSION = '0.46.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,32 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.46.0',
+    date: '2026-10-08',
+    title: 'Lo storico delle partite non si riordina più da solo',
+    promo: {
+      emoji: '🕒',
+      headline: 'Le partite recenti restano in ordine',
+      text: 'Due partite finite a un soffio l’una dall’altra (stesso millisecondo) apparivano nello storico in ordine qualunque: chiudendo e riaprendo il profilo potevano scambiarsi di posto. Ora l’ordine è sempre quello reale, dall’ultima alla prima.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le due partite più vicine non si scambiano più di posto.** Lo storico in `Profilo → Le mie statistiche` ordinava solo per istante di fine partita, e due partite salvate nello stesso millisecondo hanno lo stesso identico istante: l’elenco poteva uscire in un ordine e, ricaricando, in quello opposto. Ora il secondo criterio è l’ordine di salvataggio, quindi l’ultima partita giocata è sempre la prima della lista.',
+          '**Corretto anche un test che passava a caso.** Il test dello storico falliva circa **una esecuzione su due** senza che nessuno toccasse niente: inserisce due partite di seguito, cioè proprio il caso in cui il millisecondo collide. È il motivo per cui il difetto è rimasto invisibile così a lungo — quando il test falliva sembrava colpa dell’ambiente, non del codice.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Tie-break sulla `rowid`, non sull’`id`.** La chiave primaria di `games` è un UUID: ordinare per `id` darebbe un ordine sì deterministico ma privo di significato. La `rowid` di SQLite cresce con l’inserimento, quindi è esattamente “salvata dopo”. La query dello storico diventa `ORDER BY played_at DESC, rowid DESC`.',
+          '**Il nuovo test congela l’orologio** (`vi.spyOn` su `Date.now`): tutte le partite hanno lo stesso `played_at` per costruzione, così il test non può passare per caso se il tie-break manca e non può nemmeno diventare verde solo perché il millisecondo è scattato. Misurato: `stats.test.ts` **10 esecuzioni su 10 verdi** (prima: 3 fallimenti su 5).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.45.0',
     date: '2026-10-08',
