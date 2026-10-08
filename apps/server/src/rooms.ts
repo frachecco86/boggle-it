@@ -86,6 +86,18 @@ export interface Player {
   connected: boolean;
 }
 
+/**
+ * Esito dell'ingresso di un giocatore NUOVO, cioè di chi non ha ancora un
+ * `playerId` in quella stanza. Rientrare con il proprio id non passa di qui ed
+ * è sempre ammesso (vedi `room:rejoin`).
+ *
+ * `code` usa i codici del protocollo Socket.IO: `GAME_STARTED` (partita troppo
+ * avanti) e `GAME_ENDED` (partita conclusa).
+ */
+export type JoinAdmission =
+  | { ok: true }
+  | { ok: false; code: 'GAME_STARTED' | 'GAME_ENDED'; message: string };
+
 export class Room {
   readonly code: string;
   hostId: string;
@@ -228,6 +240,49 @@ export class Room {
 
   get isFull(): boolean {
     return this.players.size >= this.maxPlayers;
+  }
+
+  /**
+   * Può entrare un giocatore NUOVO, anche se la partita è già iniziata?
+   *
+   * Regola: **si entra fino alla fine del primo round**. Prima, la stanza
+   * rifiutava chiunque non fosse arrivato in lobby ("Partita gia' iniziata") e
+   * chi era in ritardo restava fuori per tutta la partita.
+   *
+   *  - lobby, o countdown che precede il round 1 → sì (come sempre);
+   *  - **round 1 in corso** → sì: chi arriva in ritardo gioca il tempo che
+   *    resta, con griglia e scadenza re-inviati subito (`resendRoundIfPlaying`);
+   *  - pausa dopo il round 1 e countdown del round 2 → sì: gioca dalla griglia
+   *    successiva, con un round intero davanti;
+   *  - **dal round 2 in poi** → no. Chi entra a questo punto ha già perso un
+   *    round intero di parole e di raddoppi sulle uniche: la classifica non
+   *    sarebbe più confrontabile, e il ritardo di uno non lo paga chi gioca
+   *    dall'inizio.
+   *
+   * La partita conclusa ha un codice proprio (`GAME_ENDED`) perché il messaggio
+   * è diverso: non è un ingresso in ritardo, quella partita non esiste più.
+   *
+   * Risponde `ok` anche a stanza piena: la capienza la verifica chi chiama
+   * (`room:join` in `index.ts`), così il messaggio dice PERCHÉ non si entra
+   * invece di mischiare due motivi diversi.
+   */
+  admitNewPlayer(): JoinAdmission {
+    // Partita finita: schermata finale, oppure ultimo round appena chiuso e pausa
+    // in corso. In entrambi i casi non c'è più nulla a cui aggregarsi.
+    const finished =
+      this.phase === 'gameEnd' || (this.phase === 'roundEnd' && this.currentRound >= this.rounds);
+    if (finished) return { ok: false, code: 'GAME_ENDED', message: "La partita e' gia' finita" };
+
+    // Nessun round ancora giocato: lobby o countdown del round 1.
+    if (this.currentRound === 0) return { ok: true };
+    // Il primo round in corso, la sua pausa o il countdown del successivo.
+    if (this.currentRound === 1) return { ok: true };
+
+    return {
+      ok: false,
+      code: 'GAME_STARTED',
+      message: `La partita e' gia' al round ${this.currentRound}: si puo' entrare solo durante il primo`,
+    };
   }
 
   publicState(): RoomState {

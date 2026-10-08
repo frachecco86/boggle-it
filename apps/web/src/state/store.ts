@@ -900,12 +900,30 @@ export const useAppStore = create<AppState>()(
         await new Promise<void>((resolve, reject) => {
           socket.emit('room:join', { code: upperCode, nickname, avatar, playerId, token: activeToken() ?? undefined }, (res) => {
             if ('ok' in res && res.ok) {
+              /*
+               * Si entra anche a partita INIZIATA (il server lo permette fino alla
+               * fine del primo round), quindi la schermata la decide la fase della
+               * stanza: chi capita a round in corso finisce in partita, non in sala
+               * d'attesa a guardare gli altri. Griglia e tempo restante arrivano con
+               * il `game:roundStart` che il server re-invia subito dopo l'ack.
+               */
+              const live = res.state.phase === 'playing' || res.state.phase === 'countdown';
               set((s) => ({
                 roomCode: res.state.code,
                 playerId: res.playerId,
                 playerIds: { ...s.playerIds, [res.state.code]: res.playerId },
                 room: res.state,
-                screen: 'lobby',
+                grid: null,
+                // Senza questi due il timer della partita ripartirebbe dalla durata
+                // dell'ultima partita giocata su questo dispositivo.
+                roundEndsAt: res.state.endsAt ?? 0,
+                roundDurationMs: res.state.roundDurationMs,
+                roundResults: null,
+                finalScores: null,
+                liveWords: [],
+                opponentEvents: [],
+                countdown: null,
+                screen: live ? 'mp-game' : 'lobby',
               }));
               resolve();
             } else {

@@ -66,6 +66,7 @@ const suites = [
   'multiplayer-fullgame.mjs',
   'multiplayer-reconnect.mjs',
   'multiplayer-rejoin.mjs',
+  'multiplayer-latejoin.mjs',
   'opponent-privacy.mjs',
   'voice.mjs',
 ];

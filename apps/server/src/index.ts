@@ -1482,8 +1482,14 @@ function attachSocketToRoom(socket: Socket, room: Room, playerId: string): void 
 
 /**
  * A un round in corso, reinvia griglia e scadenza a un socket che è appena
- * rientrato. Emesso in un tick successivo perché il client deve prima registrare
- * i listener (dopo l'ack di join/rejoin).
+ * entrato o rientrato nella stanza.
+ *
+ * Due casi, stessa spedizione: chi si riconnette a metà round (vedi
+ * `room:rejoin`) e chi entra mentre il round è già partito (vedi `room:join` e
+ * `Room.admitNewPlayer`): senza griglia non potrebbe giocare.
+ *
+ * Emesso in un tick successivo perché il client deve prima registrare i listener
+ * (dopo l'ack di join/rejoin).
  */
 function resendRoundIfPlaying(socket: Socket, room: Room): void {
   if (room.phase !== 'playing' || !room.grid) return;
@@ -1636,8 +1642,16 @@ io.on('connection', (socket) => {
       existing.socketId = socket.id;
       playerId = existing.id;
     } else {
-      if (room.phase !== 'lobby') return ack(errorPayload('GAME_STARTED', 'Partita gia\' iniziata'));
+      /*
+       * Giocatore NUOVO: prima la stanza rispondeva "Partita gia' iniziata" a
+       * chiunque arrivasse dopo l'avvio. Ora si entra anche a partita corsa,
+       * fino alla fine del primo round: la regola sta in `Room.admitNewPlayer`,
+       * qui arrivano solo i messaggi. La capienza si verifica prima perché
+       * "stanza piena" è un motivo più concreto di "troppo tardi".
+       */
       if (room.isFull) return ack(errorPayload('ROOM_FULL', 'Stanza piena'));
+      const admission = room.admitNewPlayer();
+      if (!admission.ok) return ack(errorPayload(admission.code, admission.message));
       const profile = resolveProfile(payload?.token);
       playerId = randomUUID();
       const player = room.addPlayer(
@@ -1652,10 +1666,16 @@ io.on('connection', (socket) => {
     ack({ ok: true as const, playerId, state: room.publicState() });
     broadcastState(room);
 
-    // Reconnecting a round in corso: reinvia la griglia e la scadenza.
-    // Emesso in un tick successivo, cosi' il client ha il tempo di registrare i listener
-    // dopo aver ricevuto l'ack di room:join.
-    if (existing) resendRoundIfPlaying(socket, room);
+    /*
+     * Round in corso: reinvia griglia e scadenza a chi è appena entrato. Non
+     * riguarda più solo chi si riconnette — è esattamente ciò che permette a un
+     * giocatore nuovo di giocare il round 1 già partito invece di guardare gli
+     * altri dalla lobby.
+     *
+     * Emesso in un tick successivo, così il client ha il tempo di registrare i
+     * listener dopo aver ricevuto l'ack di room:join.
+     */
+    resendRoundIfPlaying(socket, room);
   });
 
   /**

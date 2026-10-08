@@ -67,6 +67,10 @@ codice già nel campo “Entra”. Dove la condivisione non c'è, il link si cop
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
   clip audio personale, se ne hanno registrata una, a metà volume.
+- **Si entra anche a partita iniziata** (fino alla fine del **primo round**): chi arriva in
+  ritardo apre il link della stanza e si ritrova in gioco, con la griglia in corso e il tempo che
+  resta. Nella pausa dopo il round 1 si entra ancora (si gioca dal round successivo); dal round 2
+  la stanza è chiusa, perché un round intero di parole e di raddoppi già giocati non si recupera.
 - **Riconnessione**: il giocatore viene marcato "offline" e la partita continua; rientrando
   (anche con una **riconnessione automatica** del socket) recupera griglia, timer e punteggio
   senza interrompere la partita.

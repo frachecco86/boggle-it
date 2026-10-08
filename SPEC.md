@@ -287,6 +287,11 @@ cancellazione (per ambito o variante, con conferma digitata); tab **Musica** e *
 - Nella schermata di fine round ogni giocatore vede le parole trovate dagli altri.
 - Gestione disconnessione: il giocatore viene marcato "offline"; la partita continua.
 - Riconnessione con lo stesso `playerId` recupera lo stato della stanza.
+- **Si entra anche a partita iniziata** (0.48.0), ma **solo durante il primo round**: chi
+  arriva in ritardo riceve la griglia in corso e gioca il tempo che resta. Nella pausa dopo il
+  round 1 si entra ancora (si gioca dal round successivo); dal round 2 in poi la stanza è chiusa
+  (`GAME_STARTED`), perché un round di parole e di raddoppi già giocati non è recuperabile. La
+  partita conclusa risponde `GAME_ENDED`. Regola intera in `Room.admitNewPlayer`.
 - **Riconnessione trasparente**: se il socket si riconnette da solo (rete instabile, app in background), il client rientra in stanza con `room:rejoin` e riprende a inviare parole. Prima il server perdeva il legame e rispondeva "Non in una stanza".
 - **Voce in stanza**: tasto col microfono in basso a destra, si **tiene premuto** per parlare; gli altri
   sentono la voce quasi in diretta (~0,2 s). Tre barrette accanto al nome mostrano chi parla; un secondo
@@ -376,7 +381,7 @@ sbooble/
 
 **Client → Server**
 - `room:create` `{ nickname, avatar, gridSize, difficulty, rounds, roundDurationMs }` → `{ roomCode, playerId, state }`
-- `room:join` `{ roomCode, nickname, playerId? }` → `{ state }`
+- `room:join` `{ roomCode, nickname, playerId?, token? }` → `{ playerId, state }` | `{ code, message }`. Con il proprio `playerId` è un **rientro** ed è sempre ammesso, a qualunque round. Senza `playerId` è un **ingresso nuovo**: ammesso in lobby e fino alla fine del round 1 (vedi `Room.admitNewPlayer`); i rifiuti sono `ROOM_FULL`, `GAME_STARTED` (round 2 in poi) e `GAME_ENDED` (partita conclusa). Se il round è in corso, il server re-invia `game:roundStart` con griglia e scadenza.
 - `room:rejoin` `{ code, playerId }` → `{ playerId, state }` — rientro dopo una **riconnessione trasparente** del socket: il server ricostruisce il legame socket ↔ giocatore (che Socket.IO perde cambiando `socket.id`) senza far ripartire la partita.
 - `room:start` `{ roomCode }` (solo host)
 - `game:submitWord` `{ word, path }` → `{ accepted, reason?, word?, points? }`

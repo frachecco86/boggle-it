@@ -382,3 +382,80 @@ describe('Room: schede già giocate', () => {
     expect(room.playedSchedaIds.size).toBe(0);
   });
 });
+
+/*
+ * Ingresso di un giocatore NUOVO a partita già iniziata.
+ *
+ * La stanza una volta rifiutava chiunque non fosse arrivato in lobby ("Partita
+ * già iniziata"). Ora si entra fino alla fine del primo round: la regola vive
+ * tutta in `Room.admitNewPlayer` e si misura qui, fase per fase.
+ */
+describe('Room.admitNewPlayer: entrare a partita iniziata', () => {
+  /** Stanza con l'host, spinta alla fase richiesta senza passare dal timer. */
+  function roomAt(opts: {
+    phase: Room['phase'];
+    currentRound?: number;
+    rounds?: number;
+  }) {
+    const room = new Room('AMM01', DICT, 4, opts.rounds ?? 3);
+    room.addPlayer('p1', 'Alice');
+    room.currentRound = opts.currentRound ?? 0;
+    room.phase = opts.phase;
+    return room;
+  }
+
+  it('in lobby entra sempre (comportamento storico)', () => {
+    expect(roomAt({ phase: 'lobby' }).admitNewPlayer().ok).toBe(true);
+  });
+
+  it('entra durante il countdown che precede il round 1', () => {
+    const res = roomAt({ phase: 'countdown', currentRound: 0 }).admitNewPlayer();
+    expect(res.ok).toBe(true);
+  });
+
+  it('entra con il round 1 in corso', () => {
+    expect(roomAt({ phase: 'playing', currentRound: 1 }).admitNewPlayer().ok).toBe(true);
+  });
+
+  it('entra nella pausa dopo il round 1: gioca dal round successivo', () => {
+    expect(roomAt({ phase: 'roundEnd', currentRound: 1, rounds: 3 }).admitNewPlayer().ok).toBe(true);
+  });
+
+  it('entra nel countdown del round 2 (il primo round è ancora uno solo)', () => {
+    expect(roomAt({ phase: 'countdown', currentRound: 1 }).admitNewPlayer().ok).toBe(true);
+  });
+
+  it('rifiuta chi arriva dal round 2 in poi, con il numero di round nel messaggio', () => {
+    const res = roomAt({ phase: 'playing', currentRound: 2 }).admitNewPlayer();
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.code).toBe('GAME_STARTED');
+      expect(res.message).toMatch(/round 2/);
+    }
+    expect(roomAt({ phase: 'playing', currentRound: 3 }).admitNewPlayer().ok).toBe(false);
+    expect(roomAt({ phase: 'roundEnd', currentRound: 2, rounds: 3 }).admitNewPlayer().ok).toBe(false);
+  });
+
+  it('la partita conclusa ha il suo codice: GAME_ENDED', () => {
+    const res = roomAt({ phase: 'gameEnd', currentRound: 3, rounds: 3 }).admitNewPlayer();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.code).toBe('GAME_ENDED');
+  });
+
+  it('con un solo round, la pausa dopo il round 1 è già la fine della partita', () => {
+    // round 1 = ultimo round: non c'è un round successivo da giocare.
+    const res = roomAt({ phase: 'roundEnd', currentRound: 1, rounds: 1 }).admitNewPlayer();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.code).toBe('GAME_ENDED');
+    // Il round 1 in corso, invece, si può ancora raggiungere.
+    expect(roomAt({ phase: 'playing', currentRound: 1, rounds: 1 }).admitNewPlayer().ok).toBe(true);
+  });
+
+  it('un round in corso è un round in corso anche per una partita già conclusa sulla carta', () => {
+    // `isGameOver()` guarda i round GIOCATI: con un solo round, mentre il round 1
+    // è in corso restituisce true. L'ammissione non deve confondersi.
+    const room = roomAt({ phase: 'playing', currentRound: 1, rounds: 1 });
+    expect(room.isGameOver()).toBe(true);
+    expect(room.admitNewPlayer().ok).toBe(true);
+  });
+});

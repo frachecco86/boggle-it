@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.47.0';
+export const APP_VERSION = '0.48.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,38 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.48.0',
+    date: '2026-10-08',
+    title: 'Si entra in partita anche arrivando in ritardo',
+    promo: {
+      emoji: '🚪',
+      headline: 'Chi arriva dopo gioca lo stesso',
+      text: 'Se gli amici hanno già iniziato la partita non resti più fuori a guardare: il link della stanza funziona lo stesso e ti ritrovi in gioco, con la griglia in corso e il tempo che resta. Si può entrare finché dura il primo round; dal secondo in poi la partita è chiusa, altrimenti chi arriva tardi parte già con un round di vantaggio o di svantaggio.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Si entra in una stanza anche a partita iniziata.** Il link dell’invito vale mentre gira il **round 1**: chi arriva in ritardo riceve la griglia in corso, gioca il tempo che resta e compare subito in classifica insieme agli altri. Prima la stanza rispondeva “Partita già iniziata” e chi era in ritardo restava fuori per tutta la partita.',
+          '**Chi arriva nella pausa tra un round e l’altro gioca dal round successivo**: ha un giro intero davanti, quindi entra senza penalità.',
+          '**Il round 2 è la frontiera, ed è chiusa.** Da lì in poi il ritardo ha già perso un round di parole e di parole uniche raddoppiate: la classifica non sarebbe più confrontabile, e il ritardo di uno non lo paga chi gioca dall’inizio. Il messaggio lo dice chiaramente: “La partita è già al round 2: si può entrare solo durante il primo”.',
+          '**Una partita finita ha un messaggio suo.** “La partita è già finita” invece del generico “Partita già iniziata”: non è un ingresso in ritardo, quella partita non esiste più.',
+          '**Il rientro non cambia.** Chi ha già giocato e perde la rete rientra a qualunque round, come prima: la restrizione riguarda solo chi entra per la prima volta.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La regola sta in un punto solo: `Room.admitNewPlayer()`** (`apps/server/src/rooms.ts`). Risponde `ok` in lobby, al countdown del round 1, durante il round 1, nella sua pausa e al countdown del round 2; altrimenti `GAME_STARTED` con il numero di round nel messaggio, o `GAME_ENDED` se la partita è conclusa. Nove test in `rooms.test.ts`, incluso il caso insidioso: con `rounds: 1`, `isGameOver()` è vero **mentre** il round 1 è in corso, e chi giudica dalla sola `phase` sbaglia in un senso o nell’altro.',
+          '**La griglia del round in corso si re-invia a chi entra**, non più solo a chi si riconnette: `resendRoundIfPlaying` è uscita dal ramo “giocatore esistente” di `room:join`. Senza quel reinvio il nuovo arrivato sarebbe agganciato alla stanza ma senza griglia, e la schermata di gioco resterebbe “In attesa della griglia…”.',
+          '**Il client finisce sulla schermata giusta secondo la fase della stanza**: `joinRoom` non manda più sempre in lobby. A round in corso va direttamente in partita (griglia e tempo restante dal `game:roundStart` che il server re-invia subito dopo l’ack) e azzera il timer locale, che altrimenti partirebbe dalla durata dell’ultima partita giocata su quel dispositivo.',
+          '**Conseguenza nota, accettata: il raddoppio si può perdere dopo.** “Parola trovata da uno solo vale doppio” si calcola a fine round contando le scoperte: se chi è entrato in ritardo trova la stessa parola di chi c’era dall’inizio, il raddoppio salta per entrambi. È la stessa regola di sempre (la parola è ancora componibile, quindi resta giocabile), solo più visibile: il ritardo non può anche togliere le parole agli altri.',
+          '**Nuova suite end-to-end: `tests/e2e/multiplayer-latejoin.mjs`** (20 verifiche, entra in `pnpm test:e2e`): ingresso a round 1 con griglia e scadenza identiche agli altri, parola accettata a round in corso, ingresso nella pausa, rifiuto al round 2, rientro con `playerId` ancora valido. Aggiornati i due smoke test che davano per scontato il vecchio rifiuto.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.47.0',
     date: '2026-10-08',
