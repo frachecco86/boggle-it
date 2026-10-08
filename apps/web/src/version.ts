@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.50.0';
+export const APP_VERSION = '0.51.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,35 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.51.0',
+    date: '2026-10-09',
+    title: 'Cambi nome e avatar valgono anche in partita',
+    promo: {
+      emoji: '🪪',
+      headline: 'Il nome e l’avatar che scegli sei tu',
+      text: 'Cambi nome o avatar nella sala d’attesa di una stanza? Adesso ti riconoscono davvero: il nuovo nome e la nuova faccina compaiono nella barra dei punizioni durante la partita, nel podio finale e nell’elenco dei giocatori. Se hai un profilo, l’avatar cambia anche lì e quando giochi da solo.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Nome e avatar scelti in sala d’attesa arrivano finalmente in partita.** Cambiarli aggiornava solo il tuo dispositivo: la barra sotto la griglia, il podio e l’elenco dei giocatori continuavano a mostrare nome e avatar letti quando eri entrato nella stanza. Ora la modifica parte verso il server e la vedono tutti, in tempo reale.',
+          '**Vale anche a partita già cominciata.** Se cambi nome fra un round e l’altro, i risultati del round e la classifica finale riportano quello nuovo: chi guarda legge sempre l’ultimo nome che ti sei dato.',
+          '**L’avatar, con un profilo, si salva anche sul profilo.** Se sei loggato, il cambio di avatar dalla lobby aggiorna anche il profilo: lo rivedi nella home e giocando da solo, non solo in quella stanza.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Nuovo evento `room:updateIdentity`** (`packages/shared/src/types.ts`): il client manda nome e avatar, il server aggiorna il giocatore e rimanda lo stato a tutta la stanza con il solito `room:update`. Prima nome e avatar salivano solo a `room:create`/`room:join`, e non c’era modo di cambiarli a stanza aperta.',
+          '**La modifica vive nel metodo `Room.setIdentity`** (`apps/server/src/rooms.ts`), accanto a `setMusic`: aggiorna il `Player` in memoria con la stessa normalizzazione di `addPlayer` (nome ≤ 20, avatar ≤ 8). Un campo assente o vuoto non azzera l’altro. È una modifica **effimera** alla stanza: non rinomina il profilo (l’handle di accesso ha un vincolo di unicità e non si tocca da qui).',
+          '**Il client accoda l’invio con un debounce di 250 ms** (`scheduleIdentityPush`, `apps/web/src/state/store.ts`): `setNickname` gira a ogni tasto, e mandare un broadcast a tutta la stanza per ogni lettera sarebbe un bombardamento. Fuori da una stanza è un no-op, quindi l’editore della home continua a funzionare come sempre.',
+          '**Test.** `Room.setIdentity` ha 5 casi in `rooms.test.ts` (aggiorna i valori, non azzera il campo mancante, normalizza, rifiuta un giocatore assente, e — la regressione vera — i risultati del round e la finale usano il nome nuovo); la parte client ha 5 casi in `store.identity.test.ts` (emette in stanza, non emette fuori, una raffica di tasti produce un solo invio col valore finale).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.50.0',
     date: '2026-10-08',

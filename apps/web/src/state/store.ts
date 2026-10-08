@@ -882,8 +882,20 @@ export const useAppStore = create<AppState>()(
         set({ musicCatalog: tracks, audioSettings: audio.getSettings() });
       },
 
-      setNickname: (nickname) => set({ nickname: nickname.slice(0, 20) }),
-      setAvatar: (avatar) => set({ avatar }),
+      setNickname: (nickname) => {
+        set({ nickname: nickname.slice(0, 20) });
+        // In stanza il nome nuovo deve arrivare al server: senza, la barra avatar
+        // in partita, il podio e i risultati continuano a mostrare quello letto
+        // all'ingresso (vedi `room:updateIdentity`).
+        scheduleIdentityPush();
+      },
+      setAvatar: (avatar) => {
+        set({ avatar });
+        // Con un profilo attivo l'avatar si salva anche lì: così la scelta si
+        // vede nel profilo e nel single player, non solo nella stanza.
+        if (get().activeProfileId) void get().setProfileAvatar(avatar);
+        scheduleIdentityPush();
+      },
       setSoloSetup: (gridSize, difficulty, rounds, roundDurationMs) =>
         set({
           soloGridSize: gridSize,
@@ -1191,6 +1203,30 @@ const WAITING_FOR_NEXT_MATCH =
 /** L'host ha appena iniziato una partita nuova nella stessa stanza. */
 const NEW_MATCH_NOTICE =
   'Nuova partita nella stessa stanza: punteggi azzerati e schede nuove da pescare.';
+
+/*
+ * Spinta dell'identità nella stanza.
+ *
+ * `setNickname` cambia il nome a ogni tasto: emettere `room:updateIdentity` a
+ * ogni colpo farebbe un `broadcastState` a tutta la stanza per ogni lettera.
+ * Si accoda con un piccolo debounce e si manda una volta sola il valore finale.
+ * Fuori da una stanza (nessun `roomCode`/`playerId`) è un no-op: l'editore di
+ * nome/avatar vive anche in home, dove non c'è nulla da propagare.
+ */
+let identityPushTimer: ReturnType<typeof setTimeout> | undefined;
+function scheduleIdentityPush(delayMs = 250): void {
+  if (identityPushTimer) clearTimeout(identityPushTimer);
+  identityPushTimer = setTimeout(() => {
+    identityPushTimer = undefined;
+    const { roomCode, playerId, nickname, avatar } = useAppStore.getState();
+    if (!roomCode || !playerId) return;
+    // Nome vuoto: non ha senso sovrascrivere (il server terrebbe il precedente);
+    // si manda comunque l'avatar, che è sempre valorizzato.
+    const trimmed = nickname.trim();
+    const payload = trimmed ? { nickname: trimmed, avatar } : { avatar };
+    getSocket().emit('room:updateIdentity', payload);
+  }, delayMs);
+}
 
 /**
  * Applica lo stato di una NUOVA partita nella stessa stanza.

@@ -204,6 +204,33 @@ export interface RoomClosedPayload {
   code: string;
 }
 
+/**
+ * Payload di `room:updateIdentity`: cambia nome e/o avatar del giocatore che
+ * lo invia, nella stanza in cui si trova.
+ *
+ * Perché serve un evento dedicato: nome e avatar arrivavano al server solo a
+ * `room:create`/`room:join`. Cambiarli nella sala d'attesa aggiornava soltanto
+ * lo store locale del client: lo stato della stanza (che è l'unica fonte delle
+ * barre avatar in partita, del podio e dei risultati di round) restava fermo
+ * all'ingresso, e tutti continuavano a vedere il nome/avatar vecchi.
+ *
+ * I campi sono opzionali: si manda solo ciò che è cambiato. Un campo assente o
+ * vuoto NON sovrascrive il valore corrente.
+ *
+ * È una modifica EFFIMERA alla stanza: aggiorna l'identità mostrata in quella
+ * partita, non il profilo sul server (il nickname del profilo è l'handle di
+ * accesso, con vincolo di unicità, e non si rinomina da qui).
+ */
+export interface RoomUpdateIdentityPayload {
+  nickname?: string;
+  avatar?: string;
+}
+
+/** Risposta di `room:updateIdentity`. */
+export interface RoomUpdateIdentityAck {
+  ok: true;
+}
+
 export interface RoomConfigPayload {
   code: string;
   gridSize: GridSize;
@@ -415,6 +442,18 @@ export interface ClientToServerEvents {
    */
   'room:close': (payload: { code: string }, ack: (res: { ok: true } | ErrorPayload) => void) => void;
   'room:config': (payload: RoomConfigPayload) => void;
+  /**
+   * Aggiorna nome e/o avatar del mittente nella stanza, e avvisa tutti.
+   *
+   * Si può chiamare in qualunque fase: chi cambia nome a partita in corso lo
+   * vede riflesso nella barra avatar, nel podio e nei risultati dei round
+   * successivi (i risultati portano il nickname letto dal server al momento
+   * della chiusura del round).
+   */
+  'room:updateIdentity': (
+    payload: RoomUpdateIdentityPayload,
+    ack?: (res: RoomUpdateIdentityAck | ErrorPayload) => void,
+  ) => void;
   /** L'host pesca una nuova scheda per il prossimo round (visibile a tutti). */
   'room:shuffleScheda': (payload: { code: string }) => void;
   'game:submitWord': (payload: SubmitWordPayload, ack: (res: SubmitWordAck) => void) => void;

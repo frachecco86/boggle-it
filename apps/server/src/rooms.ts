@@ -657,6 +657,34 @@ export class Room {
   }
 
   /**
+   * Cambia nome e/o avatar di un giocatore nella stanza.
+   *
+   * È l'identità EFFIMERA mostrata in partita: aggiorna il `Player` in memoria,
+   * non il profilo sul server (il nickname del profilo è l'handle di accesso,
+   * con vincolo di unicità). Fino ad ora nome e avatar salivano al server solo a
+   * `addPlayer` (creazione/ingresso): modificarli nella sala d'attesa non
+   * aggiornava `publicPlayers`, quindi la barra avatar, il podio e i risultati
+   * restavano ai valori vecchi.
+   *
+   * Normalizzazione identica ad `addPlayer` (nome ≤ 20, avatar ≤ 8). Solo un
+   * campo presente e non vuoto sovrascrive: un payload parziale non azzera
+   * l'altro valore. Ritorna false se il giocatore non è in stanza.
+   */
+  setIdentity(
+    playerId: string,
+    patch: { nickname?: string; avatar?: string },
+  ): boolean {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    const nickname = typeof patch.nickname === 'string' ? patch.nickname.trim() : '';
+    if (nickname) player.nickname = nickname.slice(0, 20);
+    const avatar = typeof patch.avatar === 'string' ? patch.avatar : '';
+    if (avatar) player.avatar = avatar.slice(0, 8);
+    this.lastActivityAt = Date.now();
+    return true;
+  }
+
+  /**
    * true se la traccia scelta esiste ancora nel catalogo.
    *
    * Serve perché l'admin può CANCELLARE una traccia caricata: una stanza che la

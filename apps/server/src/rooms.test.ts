@@ -311,6 +311,64 @@ describe('Clip audio condivise in stanza', () => {
   });
 });
 
+describe('Room.setIdentity: cambiare nome e avatar in partita', () => {
+  it('aggiorna nickname e avatar mostrati in publicPlayers', () => {
+    const room = new Room('IDN01', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice', '🐱');
+
+    expect(room.setIdentity('p1', { nickname: 'Aldo', avatar: '🦊' })).toBe(true);
+
+    const [pub] = room.publicState().players;
+    expect(pub!.nickname).toBe('Aldo');
+    expect(pub!.avatar).toBe('🦊');
+  });
+
+  it('un campo assente o vuoto non azzera l\'altro', () => {
+    const room = new Room('IDN02', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice', '🐱');
+
+    // Solo avatar: il nome resta.
+    room.setIdentity('p1', { avatar: '🦄' });
+    let [pub] = room.publicState().players;
+    expect(pub!.nickname).toBe('Alice');
+    expect(pub!.avatar).toBe('🦄');
+
+    // Solo nome (vuoto): non sovrascrive nulla, l\'avatar resta.
+    room.setIdentity('p1', { nickname: '   ' });
+    [pub] = room.publicState().players;
+    expect(pub!.nickname).toBe('Alice');
+    expect(pub!.avatar).toBe('🦄');
+  });
+
+  it('normalizza come addPlayer: taglia nome a 20 e avatar a 8', () => {
+    const room = new Room('IDN03', DICT, 4, 3);
+    room.addPlayer('p1', 'Alice', '🐱');
+
+    room.setIdentity('p1', { nickname: '  Nome Molto Lungo Qualsiasi  ', avatar: 'abcdefghij' });
+    const [pub] = room.publicState().players;
+    // Il nome si taglia a 20 caratteri (dopo il trim), l\'avatar a 8.
+    expect(pub!.nickname).toBe('Nome Molto Lungo Qualsiasi'.slice(0, 20));
+    expect(pub!.nickname).toHaveLength(20);
+    expect(pub!.avatar).toBe('abcdefgh');
+  });
+
+  it('ritorna false se il giocatore non è in stanza', () => {
+    const room = new Room('IDN04', DICT, 4, 3);
+    expect(room.setIdentity('fantasma', { nickname: 'X' })).toBe(false);
+  });
+
+  it('i risultati del round e la classifica finale usano il nome aggiornato', () => {
+    // È il sintomo del bug: il podio mostrava il nome vecchio.
+    const room = new Room('IDN05', DICT, 4, 1);
+    room.addPlayer('p1', 'Alice', '🐱');
+    room.startRound();
+    room.setIdentity('p1', { nickname: 'Aldo' });
+
+    expect(room.endRound()[0]!.nickname).toBe('Aldo');
+    expect(room.finalScores()[0]!.nickname).toBe('Aldo');
+  });
+});
+
 describe('musica della stanza e tracce disabilitate', () => {
   it('una traccia non più suonabile viene sostituita', () => {
     const room = new Room('MUS01', DICT, 4, 3);

@@ -2025,6 +2025,38 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 
+  /**
+   * Cambia nome e/o avatar del mittente nella stanza.
+   *
+   * Il bug che risolve: nome e avatar salivano al server solo a `room:create`/
+   * `room:join`. Cambiarli nella sala d'attesa aggiornava soltanto lo store
+   * locale: `room.players` (unica fonte della barra avatar in partita, del podio
+   * e dei risultati) restava all'identità dell'ingresso, quindi in partita si
+   * vedevano sempre i valori vecchi.
+   *
+   * La modifica è EFFIMERA alla stanza: tocca il `Player` in memoria, non il
+   * profilo sul server. Il nickname del profilo è l'handle di accesso (unicità)
+   * e non si rinomina da qui; per l'avatar persistente c'è il profilo.
+   *
+   * Solo campo presente e non vuoto sovrascrive: un payload parziale non azzera
+   * l'altro valore. La normalizzazione ricalca `Room.addPlayer` (nome ≤ 20,
+   * avatar ≤ 8), così il valore mostrato è identico a quello dell'ingresso.
+   */
+  socket.on('room:updateIdentity', (payload, ack) => {
+    ack = safeAck(ack);
+    const st = socketState.get(socket.id);
+    if (!st) return ack(errorPayload('NOT_IN_ROOM', 'Non in una stanza'));
+    const room = registry.get(st.code);
+    if (!room) return ack(errorPayload('ROOM_NOT_FOUND', 'Stanza non trovata'));
+    const updated = room.setIdentity(st.playerId, {
+      nickname: payload?.nickname,
+      avatar: payload?.avatar,
+    });
+    if (!updated) return ack(errorPayload('PLAYER_NOT_FOUND', 'Giocatore non in stanza'));
+    ack({ ok: true });
+    broadcastState(room);
+  });
+
   socket.on('game:submitWord', (payload, ack) => {
     ack = safeAck(ack);
     const st = socketState.get(socket.id);
