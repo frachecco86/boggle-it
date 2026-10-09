@@ -16,6 +16,7 @@
     "test:e2e": "node tests/e2e/run-all.mjs",
     "typecheck": "pnpm -r typecheck",
     "check:context": "node tools/check-context.mjs",
+    "check:schede": "pnpm --filter @boggle/server sync:schede -- --check",
     "check:version": "node tools/check-version.mjs"
   },
   "packageManager": "pnpm@10.8.1",

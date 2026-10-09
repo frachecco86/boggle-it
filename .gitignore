@@ -2,6 +2,11 @@ node_modules/
 dist/
 .turbo/
 
+# Impostazioni locali dell'agente di coding (`.pi/settings.json`): puntano a
+# pacchetti npm installati sulla macchina di chi lavora, non c'entrano niente
+# con il gioco e non hanno senso su un'altra installazione.
+.pi/
+
 # Log e OS
 *.log
 .DS_Store

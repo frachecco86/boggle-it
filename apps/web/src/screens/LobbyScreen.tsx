@@ -26,10 +26,14 @@ export function LobbyScreen() {
     avatar,
     setAvatar,
     startRoom,
+    startNewMatch,
+    closeRoom,
     shuffleScheda,
     configureRoom,
     leaveRoom,
     playerId,
+    roomNotice,
+    clearRoomNotice,
   } = useAppStore();
   const [copied, setCopied] = useState(false);
   /** Messaggio momentaneo sotto il codice stanza ("Link copiato!"). */
@@ -40,6 +44,23 @@ export function LobbyScreen() {
   const isHost = room?.hostId === playerId;
 
   const canStart = (room?.players.filter((p) => p.connected).length ?? 0) >= 1;
+
+  /*
+   * Partita già conclusa: l'ultimo round è chiuso (pausa in corso) o la stanza è
+   * alla classifica finale.
+   *
+   * Si arriva qui di solito dalla schermata finale, ma non sempre: chi è arrivato
+   * tardi è in sala d'attesa da prima, e se l'host se n'è andato il ruolo è
+   * passato a lui. In quel caso i pulsanti giusti sono «Gioca ancora» e «Chiudi
+   * la stanza», non «Avvia partita» — che il server non eseguirebbe comunque.
+   */
+  const matchOver =
+    room !== null &&
+    (room.phase === 'gameEnd' ||
+      (room.phase === 'roundEnd' && room.currentRound >= room.rounds));
+  /** Chi è seduto qui ma gioca la partita successiva. */
+  const waitingPlayers = room?.players.filter((p) => p.waiting) ?? [];
+  const iAmWaiting = room?.players.some((p) => p.id === playerId && p.waiting) ?? false;
 
   const copyCode = async () => {
     if (!roomCode) return;
@@ -114,7 +135,24 @@ export function LobbyScreen() {
   return (
     <div className="screen lobby">
       <BackHome confirm onLeave={leaveRoom} />
-      <h2 className="screen__title">Sala d'attesa</h2>
+      <h2 className="screen__title">
+        {/* Con una partita già giocata alle spalle, «sala d'attesa» dice poco. */}
+        {room.matchNumber > 1 ? `Sala d'attesa — partita ${room.matchNumber}` : "Sala d'attesa"}
+      </h2>
+
+      {/*
+        Avviso dello store: «è iniziata una partita nuova» o «sei arrivato tardi,
+        giochi alla prossima». Arriva da un evento del socket, per questo vive
+        nello store e non in un `useState` del componente.
+      */}
+      {roomNotice && (
+        <div className="banner banner--info" role="status">
+          {roomNotice}
+          <button className="banner__dismiss" onClick={clearRoomNotice} aria-label="Nascondi l'avviso">
+            ×
+          </button>
+        </div>
+      )}
 
       <button className="room-code" onClick={copyCode} title="Copia il codice" aria-label={`Codice stanza ${roomCode}: copia il codice`}>
         <span className="room-code__label">Codice stanza</span>
@@ -155,10 +193,23 @@ export function LobbyScreen() {
               </span>
               {p.isHost && <span className="badge">host</span>}
               {p.id === playerId && <span className="badge badge--you">tu</span>}
+              {/* In attesa della prossima partita: è in stanza, non gioca questa. */}
+              {p.waiting && (
+                <span className="badge badge--waiting" title="Giocherà con la prossima partita">
+                  in attesa
+                </span>
+              )}
               {!p.connected && <span className="badge badge--off">offline</span>}
             </li>
           ))}
         </ul>
+        {waitingPlayers.length > 0 && (
+          <p className="lobby__hint">
+            {waitingPlayers.length === 1
+              ? `${waitingPlayers[0]!.nickname} giocherà con la prossima partita.`
+              : `${waitingPlayers.length} giocatori giocheranno con la prossima partita.`}
+          </p>
+        )}
       </section>
 
       <section className="lobby__section">
@@ -321,7 +372,27 @@ export function LobbyScreen() {
         )}
       </div>
 
-      {isHost ? (
+      {/*
+        I pulsanti in fondo cambiano con la fase della stanza:
+         - partita conclusa → si decide se rigiocare o chiudere la stanza;
+         - si aspetta la prossima partita → niente da avviare, solo l'attesa;
+         - altrimenti → il solito «Avvia partita».
+      */}
+      {isHost && matchOver ? (
+        <div className="summary__actions">
+          <button className="btn btn--primary btn--big" onClick={startNewMatch}>
+            Gioca ancora nella stessa stanza
+          </button>
+          <button className="btn btn--ghost" onClick={closeRoom}>
+            Chiudi la stanza
+          </button>
+        </div>
+      ) : iAmWaiting ? (
+        <p className="lobby__waiting">
+          Sei in stanza: giochi non appena parte una partita nuova. Nel frattempo puoi
+          parlare con gli altri col microfono.
+        </p>
+      ) : isHost ? (
         <button className="btn btn--primary btn--big" disabled={!canStart} onClick={startRoom}>
           Avvia partita
         </button>

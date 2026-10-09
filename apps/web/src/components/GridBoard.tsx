@@ -8,8 +8,16 @@ interface GridBoardProps {
   selectedPath: readonly number[];
   onPathChange: (path: number[]) => void;
   onCommit: (path: number[]) => void;
-  /** Flash rosso discreto su parola non valida (niente scuotimento). */
-  flashError?: boolean;
+  /**
+   * Segnale di parola NON valida: un contatore che cresce a ogni rifiuto.
+   *
+   * È un NUMERO e non un booleano, e la differenza è il punto: un booleano
+   * legato all'esito corrente (`feedback?.kind === 'invalid'`) resta `true` finché
+   * il giocatore non tocca una lettera nuova, cioè mette una CLASSE su una
+   * ANIMAZIONE one-shot. Con il contatore `GridBoard` arma la vibrazione per la
+   * sua durata e la spegne da sé; due rifiuti di fila la fanno ripartire.
+   */
+  errorSignal?: number;
   /**
    * Percorso da ANIMARE come suggerimento (modalità apprendimento): le celle si
    * accendono in sequenza, dalla prima all'ultima. `null` quando non c'è nulla
@@ -80,6 +88,24 @@ function buildArrows(points: { x: number; y: number }[]): TrailArrow[] {
  */
 export const HINT_STEP_MS = 150;
 
+/**
+ * Durata della vibrazione d'errore, in millisecondi.
+ *
+ * Deve essere poco più lunga dell'animazione CSS `grid-nudge` (0,18s): se il
+ * timeout bruciasse la fine dell'animazione, la classe sparirebbe a metà e la
+ * griglia resterebbe fermata su uno `translateX` intermedio.
+ */
+export const ERROR_PULSE_MS = 220;
+
+/**
+ * Impulso tattile di un rifiuto: due tick brevi.
+ *
+ * È un cenno, non un allarme: la parola trovata vibra 30ms secco (vedi
+ * `AudioEngine.playWordFound`), il rifiuto deve sentirsi DIFFERENTE al tatto.
+ * Dove `navigator.vibrate` non c'è (iOS) la chiamata è un niente.
+ */
+export const ERROR_HAPTIC_MS = [14, 45, 14];
+
 /** Ritardo dell'accensione della cella in posizione `index` del percorso. */
 export function hintTileDelayMs(index: number): number {
   return index * HINT_STEP_MS;
@@ -122,8 +148,16 @@ export function gridTrackStyle(size: number): { gridTemplateColumns: string } {
  * Il riconoscimento delle celle è delegato a `SwipeController`
  * (settori angolari + deadzone + isteresi): vedi `game/cellTracker.ts`.
  */
-export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashError, hintPath }: GridBoardProps) {
+export function GridBoard({ grid, selectedPath, onPathChange, onCommit, errorSignal, hintPath }: GridBoardProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  /**
+   * Riferimenti agli INVOLUCRI delle celle (`.grid-cell`), non ai quadratini.
+   *
+   * La geometria di gioco si misura qui, e l'involucro è l'unico rettangolo che
+   * non si muove: la cella selezionata è `scale(0.96)` e fino a qui l'ingresso la
+   * animava da `scale(0.4)`. Misurare l'involucro significa avere centri e passo
+   * (la `tolerance` dello swipe) costanti, animazioni in corso o meno.
+   */
   const cellRefs = useRef<(HTMLDivElement | null)[]>([]);
   /** SVG del trail: serve per convertire le coordinate al momento del disegno. */
   const trailSvgRef = useRef<SVGSVGElement>(null);
@@ -139,6 +173,30 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
   onCommitRef.current = onCommit;
   // Suono di selezione: lo emettiamo quando il percorso si estende, non ad ogni move.
   const lastPathLenRef = useRef(0);
+
+  /**
+   * true mentre la griglia sta vibrando per un rifiuto.
+   *
+   * Vive QUI e non nello stato del gioco: è un dettaglio di resa della griglia,
+   * e così single player e multiplayer si comportano allo stesso modo (prima il
+   * multiplayer si spegneva da sé dopo 500ms, il single player MAI).
+   */
+  const [errorPulse, setErrorPulse] = useState(false);
+  const errorTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    // 0 = nessun rifiuto: al primo render non si vibra.
+    if (!errorSignal) return;
+    setErrorPulse(true);
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate?.(ERROR_HAPTIC_MS);
+    }
+    if (errorTimer.current) window.clearTimeout(errorTimer.current);
+    errorTimer.current = window.setTimeout(() => setErrorPulse(false), ERROR_PULSE_MS);
+    return () => {
+      if (errorTimer.current) window.clearTimeout(errorTimer.current);
+    };
+  }, [errorSignal]);
 
   /**
    * Layout fresco al momento della chiamata: i centri delle celle sono in
@@ -261,9 +319,15 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
   return (
     <div
       ref={containerRef}
-      className={`grid-board${flashError ? ' grid-board--error' : ''}`}
+      className={`grid-board${errorPulse ? ' grid-board--error' : ''}`}
       style={{ ['--grid-size' as string]: grid.size }}
       onContextMenu={(e) => e.preventDefault()}
+      /*
+       * Il dito che riparte SPEGNE la vibrazione: la fase capture gira prima dei
+       * listener sul `window` dello SwipeController, quindi il nuovo gesto non la
+       * vede proprio (non ferma il tocco: non previene nulla).
+       */
+      onPointerDownCapture={() => setErrorPulse(false)}
     >
       <svg ref={trailSvgRef} className="grid-trail" aria-hidden>
         {arrows.map((arrow, i) => (
@@ -323,31 +387,33 @@ export function GridBoard({ grid, selectedPath, onPathChange, onCommit, flashErr
           const hintIndex = hintPath ? hintPath.indexOf(tile.index) : -1;
           const hinted = hintIndex >= 0;
           return (
+            /*
+             * Due livelli: l'involucro (`grid-cell`) e il quadratino (`tile`).
+             *
+             * L'ingresso (`tile-in`, scaglionato per riga+colonna) vive
+             * sull'involucro e il ritardo del suggerimento (`--hint-delay`) sul
+             * quadratino: sono due proprietà `animation` diverse, quindi non si
+             * calpestano più. Prima stavano sullo stesso elemento e il ritardo
+             * era UNO solo: vinceva quello del suggerimento e le celle si
+             * accendevano tutte insieme.
+             */
             <div
               key={tile.index}
               ref={(el) => {
                 cellRefs.current[tile.index] = el;
               }}
-              className={`tile${selected ? ' tile--selected' : ''}${hinted ? ' tile--hint' : ''}`}
-              style={{
-                /*
-                 * `animation-delay` è UNA proprietà: il valore d'ingresso della
-                 * cella (scaglionato per riga+colonna) e il ritardo del
-                 * suggerimento non possono convivere via stile inline — l'ultimo
-                 * vince e le celle si accendevano tutte insieme.
-                 *
-                 * Quando la cella fa parte del suggerimento si usa `--hint-delay`
-                 * (letto dalla regola `.tile--hint`, che ha la precedenza) e NON
-                 * si scrive `animationDelay`: così le celle si accendono in
-                 * sequenza, una alla volta.
-                 */
-                ...(hinted
-                  ? { ['--hint-delay' as string]: `${hintTileDelayMs(hintIndex)}ms` }
-                  : { animationDelay: `${(tile.row + tile.col) * 40}ms` }),
-                ['--order' as string]: pathIndex,
-              }}
+              className="grid-cell"
+              style={{ animationDelay: `${(tile.row + tile.col) * 40}ms` }}
             >
-              <span className="tile__letter">{tile.display}</span>
+              <div
+                className={`tile${selected ? ' tile--selected' : ''}${hinted ? ' tile--hint' : ''}`}
+                style={{
+                  ...(hinted ? { ['--hint-delay' as string]: `${hintTileDelayMs(hintIndex)}ms` } : null),
+                  ['--order' as string]: pathIndex,
+                }}
+              >
+                <span className="tile__letter">{tile.display}</span>
+              </div>
             </div>
           );
         })}

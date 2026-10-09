@@ -163,9 +163,9 @@ describe('ProfileStore: elenco e cancellazione (admin)', () => {
  * Schede gia' giocate: e' la memoria che impedisce di riproporre la stessa
  * scheda allo stesso giocatore in due partite single player diverse.
  *
- * Contano tre cose: l'idempotenza (rigiocare non duplica), la separazione PER
- * PROFILO (la cronologia di uno non tocca l'altro) e la cancellazione (serve al
- * multiplayer, dove le schede le decide l'host).
+ * Contano tre cose: i CONTATORI (rigiocare non duplica la riga ma conta una
+ * vista in più), la separazione PER PROFILO (la cronologia di uno non tocca
+ * l'altro) e l'unione con somma, che è quella che usa la stanza.
  */
 describe('ProfileStore: schede gia\' giocate', () => {
   it('segna una scheda e la ritrova', async () => {
@@ -181,6 +181,50 @@ describe('ProfileStore: schede gia\' giocate', () => {
     store.markSchedaPlayed(p.id, 'x');
     store.markSchedaPlayed(p.id, 'x');
     expect(store.playedSchede(p.id).size).toBe(1);
+  });
+
+  it('ma il contatore cresce: «vista di meno» conta le VOLTE', async () => {
+    // La riga resta una (chiave primaria), a crescere è `seen_count`. Senza
+    // questo numero la stanza non può distinguere una griglia vista una volta da
+    // una vista cento, e la scelta «la meno vista» degenera.
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    for (let i = 0; i < 5; i++) store.markSchedaPlayed(p.id, 'x');
+    store.markSchedaPlayed(p.id, 'y');
+    expect(store.playedSchedaCounts([p.id])).toEqual(new Map([['x', 5], ['y', 1]]));
+  });
+
+  it('unisce più profili SOMMANDO i contatori', async () => {
+    // Il caso della stanza: la query deve rispondere «quante volte questa griglia
+    // e' gia' passata fra queste persone», non «quante persone la conoscono».
+    const a = await store.register('Anna', 'segreta123', '🐱');
+    const b = await store.register('Bruno', 'segreta123', '🐶');
+    const c = await store.register('Carla', 'segreta123', '🦊');
+    store.markSchedePlayed(a.id, ['ripetuta', 'singola']);
+    for (let i = 0; i < 3; i++) store.markSchedaPlayed(a.id, 'ripetuta');
+    store.markSchedaPlayed(b.id, 'ripetuta');
+    store.markSchedaPlayed(c.id, 'solo-carla');
+
+    // Anna e Bruno: `ripetuta` 5 (4 di Anna, 1 di Bruno), `singola` 1.
+    expect(store.playedSchedaCounts([a.id, b.id])).toEqual(
+      new Map([
+        ['ripetuta', 5],
+        ['singola', 1],
+      ]),
+    );
+    // Carla non c'entra: la sua scheda non entra nell'unione.
+    expect(store.playedSchedaCounts([a.id, b.id]).has('solo-carla')).toBe(false);
+    // E con Carla nell'unione, la somma cresce di niente per le sue schede.
+    expect(store.playedSchedaCounts([a.id, b.id, c.id]).get('solo-carla')).toBe(1);
+  });
+
+  it('lista con duplicati, id vuoti e profili inesistenti', async () => {
+    // `profileIds` arriva dalla stanza (`Room.profileIds`): il profilo aperto su
+    // due dispositivi sarebbe due volte, e un id vuoto non deve bucare la query.
+    const p = await store.register('Anna', 'segreta123', '🐱');
+    store.markSchedaPlayed(p.id, 'x');
+    expect(store.playedSchedaCounts([p.id, p.id, ''])).toEqual(new Map([['x', 1]]));
+    expect(store.playedSchedaCounts(['non-esiste'])).toEqual(new Map());
+    expect(store.playedSchedaCounts([])).toEqual(new Map());
   });
 
   it('la cronologia e\' PER PROFILO: uno non vede quella dell\'altro', async () => {

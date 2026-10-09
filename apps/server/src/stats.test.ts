@@ -4,7 +4,7 @@
  * Usiamo un database su file temporaneo (non `:memory:`) perché il ProfileStore
  * apre il file con WAL e vi si appoggia per il checkpoint.
  */
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -645,6 +645,42 @@ describe('statistiche personali: parole, modalità e storico', () => {
     expect(history[0]!.score).toBe(40);
     expect(history[1]!.mode).toBe('solo');
     expect(history[0]!.gridSize).toBe(5);
+  });
+
+  /*
+   * REGRESSIONE. `played_at` è `Date.now()`, quindi due partite salvate nello
+   * stesso millisecondo hanno la stessa chiave di ordinamento: la query dello
+   * storico ordinava SOLO per `played_at` e SQLite le restituiva in ordine
+   * qualunque. Non un dettaglio: il test qui sopra falliva circa una volta su
+   * due da solo, perché inserisce due partite di fila, e nell'app la storia
+   * personale si riordinava da sola fra un refresh e l'altro.
+   *
+   * Qui l'orologio è CONGELATO, così `played_at` è identico per costruzione e il
+   * test non può mai diventare verde per caso (capita il contrario: un test che
+   * passa solo quando il millisecondo cambia).
+   */
+  it('a pari millisecondo lo storico tiene l’ordine di salvataggio (rovesciato)', async () => {
+    const a = await profile('Anna');
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_760_000_000_000);
+    try {
+      store.recordGame(a, game({ score: 10, mode: 'solo' }));
+      store.recordGame(a, game({ score: 20, mode: 'solo' }));
+      store.recordMultiplayerGames(
+        [{ profileId: a, score: 30, words: 3, longest: 'albero' }],
+        { difficulty: 'facile', gridSize: 5, schedaId: null },
+      );
+    } finally {
+      clock.mockRestore();
+    }
+
+    const history = store.playerStats(a).history;
+    // Stessa chiave temporale, verificato: è esattamente la situazione da tie-break.
+    expect(new Set(history.map((g) => g.playedAt)).size).toBe(1);
+    // L'ultima salvata per prima, e in modo deterministico.
+    expect(history.map((g) => g.score)).toEqual([30, 20, 10]);
+    expect(history.map((g) => g.mode)).toEqual(['multi', 'solo', 'solo']);
+    // Rileggere non deve cambiare nulla.
+    expect(store.playerStats(a).history.map((g) => g.score)).toEqual([30, 20, 10]);
   });
 
   it('senza partite le statistiche sono vuote ma ben formate', async () => {

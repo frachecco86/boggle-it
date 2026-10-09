@@ -1,8 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createRequire } from 'node:module';
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ProfileStore } from './profiles.js';
+
+/**
+ * `node:sqlite` come in `profiles.ts`: Vite non conosce questo builtin recente
+ * e ne romperebbe la risoluzione. Serve per manomettere lo schema e simulare un
+ * database di una installazione vecchia.
+ */
+const require_ = createRequire(import.meta.url);
+const { DatabaseSync } = require_('node:sqlite') as typeof import('node:sqlite');
 
 /**
  * Persistenza su disco: il database deve restare valido anche da solo.
@@ -54,8 +63,7 @@ describe('ProfileStore su disco', () => {
     reopened.close();
   });
 
-  it('sopravvive a più cicli di scrittura e riapertura', async () => {
-    for (let i = 0; i < 3; i++) {
+  it('sopravvive a più cicli di scrittura e riapertura', async () => {    for (let i = 0; i < 3; i++) {
       const store = new ProfileStore(dbPath);
       await store.register(`Utente${i}`, 'password1', '🐱');
       store.close();
@@ -65,6 +73,37 @@ describe('ProfileStore su disco', () => {
       expect(await store.verify(`Utente${i}`, 'password1')).toBeTruthy();
     }
     store.close();
+  });
+
+  /**
+   * Migrazione dello schema (0.50.0): i database creati prima non hanno la
+   * colonna `seen_count` di `played_schede`, e da allora ogni query sulla
+   * cronologia la nomina (`SUM(seen_count)`).
+   *
+   * E' il test che blocca la regressione più costosa di questa funzionalità:
+   * `CREATE TABLE IF NOT EXISTS` non integra le tabelle esistenti, quindi senza
+   * `ensureColumn` il server nuovo avrebbe smesso di leggere le schede già viste
+   * su TUTTI i volumi già deployati — con l'effetto opposto: riproporre sempre le
+   * stesse griglie. Le voci storiche valgono una vista («l'hai vista»), che è
+   * esattamente il loro significato prima dei contatori.
+   */
+  it('migra played_schede senza seen_count e continua a contare', async () => {
+    const store = new ProfileStore(dbPath);
+    const p = await store.register('Vintage', 'password1', '🐱');
+    store.markSchedaPlayed(p.id, 'vintage');
+    store.close();
+
+    // Si torna indietro nello schema come un'installazione della 0.49.0.
+    const old = new DatabaseSync(dbPath);
+    old.exec('ALTER TABLE played_schede DROP COLUMN seen_count');
+    old.close();
+
+    const reopened = new ProfileStore(dbPath);
+    expect(reopened.playedSchedaCounts([p.id])).toEqual(new Map([['vintage', 1]]));
+    // E da qui in poi i contatori funzionano anche sul database vecchio.
+    reopened.markSchedaPlayed(p.id, 'vintage');
+    expect(reopened.playedSchedaCounts([p.id])).toEqual(new Map([['vintage', 2]]));
+    reopened.close();
   });
 
   it('backupTo produce una copia consistente e riutilizzabile', async () => {

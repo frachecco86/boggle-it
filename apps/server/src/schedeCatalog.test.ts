@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { SCHEDA_FORMAT_VERSION, type Scheda } from '@boggle/shared';
+import { SCHEDA_FORMAT_VERSION, SchedaMemory, type Scheda } from '@boggle/shared';
 import { SchedaCatalog } from './schede.js';
 
 /** Crea una scheda minima valida per il catalogo. */
@@ -97,6 +97,11 @@ describe('SchedaCatalog: cancellazione', () => {
  * scheda due volte nella stessa partita": i pool sono piccoli (10-15 schede per
  * griglia/difficoltà/variante), quindi una scelta puramente casuale ripeteva la
  * stessa scheda nel 17-28% delle partite da 3 round.
+ *
+ * Dal 0.49.0 non prende più un elenco di id da escludere ma una `SchedaMemory`
+ * (partita / stanza / passato dei giocatori): la rivincita nella stessa stanza
+ * deve pescare schede nuove, e i tre livelli non hanno la stessa forza. I test
+ * sul rilassamento sono la parte delicata.
  */
 describe('SchedaCatalog: scelta senza ripetizioni', () => {
   function catalogWith(ids: string[]): SchedaCatalog {
@@ -105,33 +110,59 @@ describe('SchedaCatalog: scelta senza ripetizioni', () => {
     return catalog;
   }
 
-  it('non ripesca una scheda già giocata', () => {
+  it('non ripesca una scheda già giocata nella partita', () => {
     const catalog = catalogWith(['a', 'b', 'c']);
-    const exclude = new Set(['a', 'b']);
+    const memory = new SchedaMemory({ match: ['a', 'b'] });
     // Con un solo id disponibile, qualunque valore di `rng` deve darlo.
     for (const r of [0, 0.4, 0.99]) {
-      expect(catalog.randomUnplayed(4, 'facile', () => r, 'standard', exclude)?.id).toBe('c');
+      expect(catalog.randomUnplayed(4, 'facile', () => r, 'standard', memory)?.id).toBe('c');
     }
   });
 
-  it('senza esclusioni si comporta come `random`', () => {
+  it('senza memoria si comporta come `random`', () => {
     const catalog = catalogWith(['a', 'b', 'c']);
-    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'standard', new Set())?.id).toBe('a');
+    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'standard', new SchedaMemory())?.id).toBe('a');
+    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'standard')?.id).toBe('a');
   });
 
-  it('quando TUTTE sono state giocate riparte da capo, non si blocca', () => {
+  it('dopo la rivincita non ripropone le schede della partita precedente', () => {
+    // Il caso nuovo: chi rigioca nella stessa stanza. `startMatch` azzera il
+    // livello della partita, quello della stanza resta ed è lui che pesca.
+    const catalog = catalogWith(['a', 'b', 'c']);
+    const memory = new SchedaMemory();
+    memory.record('a');
+    memory.startMatch();
+    expect(memory.ids('match').size).toBe(0);
+    expect(memory.ids('room').has('a')).toBe(true);
+    for (const r of [0, 0.4, 0.99]) {
+      expect(catalog.randomUnplayed(4, 'facile', () => r, 'standard', memory)?.id).not.toBe('a');
+    }
+  });
+
+  it('quando la stanza ha visto TUTTE le schede riparte da capo, non si blocca', () => {
     const catalog = catalogWith(['a', 'b']);
-    const exclude = new Set(['a', 'b']);
-    const picked = catalog.randomUnplayed(4, 'facile', () => 0, 'standard', exclude);
+    const memory = new SchedaMemory({ room: ['a', 'b'] });
+    const picked = catalog.randomUnplayed(4, 'facile', () => 0, 'standard', memory);
     expect(picked).toBeDefined();
     expect(['a', 'b']).toContain(picked!.id);
+  });
+
+  it('allenta il livello più morbido per primo: il passato, non la partita', () => {
+    // Nessuna scheda pulita: la `a` l'ho vista in passato, la `b` la sto
+    // giocando. Il passato è una preferenza, la partita un vincolo: tocca alla
+    // `a`, per qualunque sorteggio.
+    const catalog = catalogWith(['a', 'b']);
+    const memory = new SchedaMemory({ player: ['a'], match: ['b'] });
+    for (const r of [0, 0.5, 0.99]) {
+      expect(catalog.randomUnplayed(4, 'facile', () => r, 'standard', memory)?.id).toBe('a');
+    }
   });
 
   it('rispetta la variante come `random`', () => {
     const catalog = new SchedaCatalog();
     catalog.add(scheda('std', 'standard'));
     catalog.add(scheda('ale-1', 'ale'));
-    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'ale', new Set())?.id).toBe('ale-1');
+    expect(catalog.randomUnplayed(4, 'facile', () => 0, 'ale', new SchedaMemory())?.id).toBe('ale-1');
   });
 
   it('su un gruppo inesistente ritorna undefined', () => {

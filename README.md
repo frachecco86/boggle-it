@@ -4,7 +4,7 @@ Gioco di parole in italiano (stile Boggle) con il logo di una margherita.
 Single player e multiplayer con codice stanza, **app Android** e **profili persistenti**.
 Le parole si compongono **scorrendo il dito sulle lettere** del quadrato.
 
-> **Stato: v0.44.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
+> **Stato: v0.49.0** — la cronologia completa è in [`apps/web/src/version.ts`](apps/web/src/version.ts)
 > e nella pagina **Novità** dell'app (numero di versione in alto a destra).
 > Specifica completa in [`SPEC.md`](./SPEC.md).
 
@@ -67,6 +67,27 @@ codice già nel campo “Entra”. Dove la condivisione non c'è, il link si cop
   classifica live, riconnessione a partita in corso. Le **parole degli avversari restano
   nascoste**: si vede solo un badge "+N" accanto al nome, con un suono discreto — la loro
   clip audio personale, se ne hanno registrata una, a metà volume.
+- **Si entra anche a partita iniziata** (fino alla fine del **primo round**): chi arriva in
+  ritardo apre il link della stanza e si ritrova in gioco, con la griglia in corso e il tempo che
+  resta. Nella pausa dopo il round 1 si entra ancora (si gioca dal round successivo).
+- **Chi arriva troppo tardi si siede, non resta fuori** (0.49.0): dal round 2 in avanti, o a
+  partita conclusa, il link funziona comunque. Si entra in stanza con la fascetta **in attesa**,
+  si chiacchiera con gli altri e si gioca la partita successiva — senza griglia, senza punteggi e
+  senza classifiche di una partita a cui non si sta partecipando.
+- **Si rigioca nella stessa stanza** (0.49.0): a fine partita chi ha creato la stanza scegle tra
+  **Gioca ancora nella stessa stanza** e **Chiudi la stanza**. Rigiocando restano codice, link,
+  giocatori e impostazioni (ritoccabili tra un giro e l'altro); si azzerano i punteggi e le
+  schede sono **nuove**, perché la stanza ha memoria di quelle già giocate.
+- **Memoria per profilo anche in multiplayer** (0.50.0): le stanze uniscono le cronologie dei
+  giocatori presenti e pescano la griglia che **nessuno di loro** ha mai visto. Se una griglia
+  pulita non esiste più (i gruppi hanno 10-15 schede), non si pesca a caso: vince la **somma dei
+  contatori** più bassa, cioè quella **vista di meno** — una griglia giocata cento volte da uno pesa
+  cento e viene dopo una giocata una volta da sette. Le partite in stanza entrano nella cronologia
+  personale, entrare in una stanza **non cancella più** lo storico, e il profilo mostra quante
+  griglie ricorda (con un tasto per dimenticarle). Offline, l'app ricorda sul dispositivo.
+- **Le schede contano le ripetizioni** (0.50.0): `played_schede` ha `seen_count`, e i livelli di
+  `SchedaMemory` portano i conteggi (`views`) invece dei soli insiemi: è ciò che permette a
+  `pickScheda` di ripiegare sulla scheda **meno vista** quando le pulite finiscono.
 - **Riconnessione**: il giocatore viene marcato "offline" e la partita continua; rientrando
   (anche con una **riconnessione automatica** del socket) recupera griglia, timer e punteggio
   senza interrompere la partita.
@@ -103,8 +124,8 @@ codice già nel campo “Entra”. Dove la condivisione non c'è, il link si cop
   precisione millimetrica, le celle non si accendono "sfiorando il pixel" e non
   "sfarfallano" sul bordo.
 - **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
-  flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
-  Tutte rispettano `prefers-reduced-motion`.
+  un tremito di 180 ms (spostamento di 3 px, mai una scala) con vibrazione sul parola non valida,
+  countdown, confetti a fine round. Tutte rispettano `prefers-reduced-motion`.
 
 ---
 
@@ -204,6 +225,7 @@ deployato — `node tools/rigenera-ale-server.mjs` (dry-run di default) e la pro
 | `pnpm test` | Test unitari (`vitest`) di logica condivisa |
 | `pnpm test:e2e` | Smoke test multiplayer (richiede il server attivo) |
 | `pnpm check:context` | Verifica che il contesto di build contenga il dizionario |
+| `pnpm check:schede` | **Sola diagnosi**: le schede versionate sono allineate al dizionario? (esce 1 se c'è deriva; non scrive nulla) |
 | `pnpm check:version` | Verifica che la versione sia avanzata di almeno 0.1 e abbia la sua voce |
 
 ### Feedback sonoro
@@ -335,7 +357,27 @@ pnpm --filter @boggle/server verify:schede    # controlla i criteri di qualità
 `pnpm sync:schede` ricalcola gli elenchi con la **stessa pipeline del generatore** e non tocca le
 griglie: le schede `ale` usano il proprio trie (`Dict'`, 16 lettere), le altre il pool classico
 (14 lettere, con il filtro sulle consonanti finali). Senza questo passaggio il gioco rifiuta
-parole che il server accetta: era il caso di **168 schede su 270**.
+parole che il server accetta: era il caso di **168 schede su 270**, ed è ancora il caso della
+0.47.0: **101 schede su 270** disallineate, **+315 parole accettate** (`ierica`, `torica`,
+`sudorale`, `cine`, `cotale`…).
+
+Prima di riallineare, **ricostruire il dizionario**: `words.txt` è generato e può essere vecchio
+(su una macchina era fermo a 368.100 forme contro le 372.439 di `words.br`). Se si fa `sync:schede`
+con il dizionario vecchio, la deriva viene **congelata nel commit** invece di essere corretta.
+
+> ## ⚠️ `sync:schede` NON tocca le schede generate dall'amministratore
+>
+> Le schede create dal pannello admin vivono **nel volume** (`schede-ale/`, `schede-extra/`),
+> **non sono in git e non si riallineano da sole**: restano risolte sul dizionario del giorno in
+> cui sono state generate. Dopo un cambio di dizionario vanno **svuotate e rigenerate** dal
+> pannello admin (elimina + Genera) o con `node tools/rigenera-ale-server.mjs` — procedura in
+> **[`docs/ALE-RUNTIME-SERVER.md`](docs/ALE-RUNTIME-SERVER.md)**. È il motivo per cui una scheda
+> ale già in produzione continua a rifiutare `setosa` anche dopo la 0.47.0.
+>
+> **Nessun hook lo fa in automatico, né in build né in deploy**: rigenerare le ale costa ~450 MB
+> di picco e alcuni minuti, e il dizionario deployato è sempre lo stesso perché arriva da
+> `words.br` versionato. Il momento giusto è **quando cambia il dizionario**, non a ogni rilascio.
+> `pnpm check:schede` (sola diagnosi, esce 1) esiste per non dimenticarsene.
 
 ---
 
@@ -386,6 +428,13 @@ I deploy sono **riproducibili offline**: `words.br` (626 KB) è versionato, quin
   il controller "agganciato".
 - **Parole duplicate**: il punteggio base va a tutti; il raddoppio spetta a chi trova una
   parola che **nessun altro** ha trovato.
+- **Le colonne del layout di partita hanno un pavimento di 0**: `.game__main` dichiara
+  `grid-template-columns: minmax(0, 1fr)`. Senza, la traccia implicita `auto` ha come minimo la
+  *min-content* degli item, e il banner della parola (`white-space: nowrap`) la allargava oltre lo
+  schermo: la griglia — che legge la propria larghezza in `cqw` — cresceva e perdeva le colonne
+  fuori dal bordo. Si vedeva solo sotto i ~560 px di viewport, quindi sembrava un bug del mobile
+  (con «Sito desktop», 980 px, spariva). Stessa ragione per `min-width: 0` + `overflow: hidden` su
+  `.current-word-wrap`: l’automatic minimum si annulla sul **grid item**, non su un figlio.
 
 ---
 

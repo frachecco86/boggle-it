@@ -27,6 +27,7 @@ import {
   acceptedWords,
   isSchedaVariant,
   resolveSchedaVariant,
+  SchedaMemory,
   schedaVariantForSize,
   schedaVariantOf,
   schedaWordPoints,
@@ -214,16 +215,24 @@ app.get('/preview', (req, res) => {
    * profilo non esiste una cronologia, e il comportamento resta quello di prima.
    * Il token arriva dal client che ha il profilo attivo (vedi `loadRandomScheda`).
    *
-   * PERCHE' SOLO IN SINGLE PLAYER: in una stanza la partita e' di tutti, e la
-   * cronologia personale di un giocatore non deve decidere le schede degli altri.
-   * Il multiplayer non passa da qui (usa `room:shuffleScheda` e `Room`).
+   * QUI C'È SOLO IL SINGLE PLAYER, ma non è più l'unico posto dove la memoria
+   * personale conta: dal 0.50.0 anche le stanze pescano tenendo conto delle
+   * cronologie dei presenti (vedi `syncRoomMemory` in questo file). La
+   * differenza è solo il livello `player` da caricare: qui uno solo, lì la somma
+   * di chi è in stanza.
    */
   const token = bearerToken(req);
   const profile = token ? profiles.getByToken(token) : null;
-  const exclude = profile ? profiles.playedSchede(profile.id) : undefined;
+  /*
+   * Una memoria con il SOLO livello `player`: qui non c'è né partita né stanza,
+   * c'è solo la cronologia personale di chi ha chiesto il sorteggio. Stesso
+   * oggetto usato dalle stanze, quindi stessa regola quando la cronologia copre
+   * tutto il gruppo: si riparte da capo invece di fermarsi.
+   */
+  const memory = profile ? new SchedaMemory({ player: profiles.playedSchede(profile.id) }) : undefined;
 
   res.setHeader('Cache-Control', 'no-store');
-  const scheda = schede.randomUnplayed(gridSize, difficulty, Math.random, variant, exclude);
+  const scheda = schede.randomUnplayed(gridSize, difficulty, Math.random, variant, memory);
   if (!scheda) {
     return res.json({
       gridSize,
@@ -661,10 +670,14 @@ app.get('/me/played-schede', (req, res) => {
 /**
  * Dimentica la cronologia delle schede giocate (profilo autenticato).
  *
- * Serve al MULTIPLAYER: in una stanza le schede le decide l'host (o l'admin), e
- * quello che ho visto da solo non deve influire sulla partita degli altri. Il
- * client la chiama entrando in una stanza, così le schede della stanza non
- * vengono filtrate dalla cronologia personale.
+ * IRREVERSIBILE. Dalla 0.50.0 il client NON la chiama più: fino alla 0.49.0
+ * entrava in una stanza cancellando lo storico, perché la cronologia personale
+ * non doveva filtrare le schede degli altri. Ora vale il contrario — la stanza
+ * unisce le cronologie dei presenti e sceglie la griglia che nessuno ha visto —
+ * e cancellarla a chi entra sarebbe peggio che ignorarla.
+ *
+ * L'endpoint resta: è l'unico modo di far ripartire da zero la memoria di un
+ * profilo (diagnosi dal pannello, e una futura «dimentica le griglie già viste»).
  */
 app.delete('/me/played-schede', (req, res) => {
   const profile = requireProfile(req, res);
@@ -1465,6 +1478,23 @@ function broadcastState(room: Room): void {
 }
 
 /**
+ * Operatore di broadcast per gli eventi di UN ROUND: tutta la stanza tranne chi
+ * è seduto in attesa della partita successiva.
+ *
+ * Chi aspetta non gioca il round corrente: se gli arrivano `game:roundStart` e
+ * company, il client lo porta sulla schermata di gioco e gli fa leggere le parole
+ * del riepilogo di un round a cui non ha partecipato. `room:update` invece NO,
+ * quello gli serve: è ciò che gli mostra la sala d'attesa.
+ *
+ * Con nessuno in attesa (il caso normale) è `io.to(code)` di prima: nessuna
+ * lista da costruire a ogni evento.
+ */
+function toPlaying(room: Room) {
+  const waiting = room.waitingSockets();
+  return waiting.length > 0 ? io.to(room.code).except(waiting) : io.to(room.code);
+}
+
+/**
  * Lega un socket alla stanza e al giocatore.
  *
  * Estratto perché la stessa operazione serve sia all'ingresso (`room:join`) sia
@@ -1482,11 +1512,34 @@ function attachSocketToRoom(socket: Socket, room: Room, playerId: string): void 
 
 /**
  * A un round in corso, reinvia griglia e scadenza a un socket che è appena
- * rientrato. Emesso in un tick successivo perché il client deve prima registrare
- * i listener (dopo l'ack di join/rejoin).
+ * entrato o rientrato nella stanza.
+ *
+ * Due casi, stessa spedizione: chi si riconnette a metà round (vedi
+ * `room:rejoin`) e chi entra mentre il round è già partito (vedi `room:join` e
+ * `Room.seatForNewPlayer`): senza griglia non potrebbe giocare.
+ *
+ * `markSeen` dice che questo giocatore quella griglia la sta vedendo PER LA
+ * PRIMA VOLTA (l'ingresso in ritardo), quindi entra nella sua cronologia:
+ * rimandarla a chi si riconnette non è una vista nuova, e i conti gonfi
+ * deformerebbero la scelta «vista di meno» dei round successivi.
+ *
+ * Emesso in un tick successivo perché il client deve prima registrare i listener
+ * (dopo l'ack di join/rejoin).
  */
-function resendRoundIfPlaying(socket: Socket, room: Room): void {
+function resendRoundIfPlaying(
+  socket: Socket,
+  room: Room,
+  playerId?: string,
+  markSeen = false,
+): void {
   if (room.phase !== 'playing' || !room.grid) return;
+  // Chi è seduto in attesa della prossima partita NON riceve la griglia: non
+  // gioca questo round, e non deve vedere le lettere né sentire i round altrui.
+  const player = playerId ? room.players.get(playerId) : undefined;
+  if (player?.waiting) return;
+  if (markSeen && player?.profileId && room.schedaId) {
+    profiles.markSchedaPlayed(player.profileId, room.schedaId);
+  }
   const payload = {
     round: room.currentRound,
     grid: room.grid,
@@ -1522,7 +1575,10 @@ function recordMultiplayerGames(room: Room): void {
     longest: string;
     foundWords: Array<{ word: string; points: number }>;
   }> = [];
-  for (const p of room.players.values()) {
+  // `matchPlayers`, non `players`: chi è seduto in attesa della partita dopo non
+  // ha giocato questa, e scriverle una partita da 0 punti vorrebbe dire
+  // riempire la classifica di zeri che non ha mai giocato.
+  for (const p of room.matchPlayers()) {
     if (!p.profileId) continue;
     // Le parole della partita sono per-round: `p.words` accumula TUTTI i round,
     // quindi è già il totale della partita.
@@ -1545,6 +1601,53 @@ function recordMultiplayerGames(room: Room): void {
     console.log(`✓ Multiplayer: salvate ${saved} partite su ${entries.length} giocatori con profilo`);
   } catch (err) {
     console.error('✗ Multiplayer: salvataggio partite fallito:', err);
+  }
+}
+
+/**
+ * Rimette il livello `player` della memoria di stanza allineato ai presenti.
+ *
+ * È il pezzo che porta la memoria per profilo in MULTIPLAYER (0.50.0): la
+ * cronologia personale smette di essere un fatto privato di chi gioca da solo e
+ * diventa un vincolo condiviso — la stanza pesca la griglia che NESSUNO dei
+ * presenti ha mai visto e, quando non esiste (con pool da 10-15 schede capita
+ * dopo poche partite), quella con la somma dei contatori più bassa.
+ *
+ * Due scelte da non perdere:
+ *  - si chiama a ogni PESCA, non a ogni ingresso/uscita: l'unico consumatore è
+ *    `pickScheda` (vedi `Room.syncPlayerMemory`), quindi così è sempre fresca e
+ *    non c'è una strada di ingresso che possa dimenticarsi il sync;
+ *  - una query sola per tutta la stanza, con la somma già fatta in SQL: il
+ *    confronto «vista di meno» con i soli insiemi non si poteva fare.
+ *
+ * Chi non ha un profilo non c'è: senza cronologia non ha voce, e una stanza di
+ * soli anonimi pesca come prima della 0.50.0.
+ */
+function syncRoomMemory(room: Room): void {
+  room.syncPlayerMemory((ids) => profiles.playedSchedaCounts(ids));
+}
+
+/**
+ * La scheda del round entra nella cronologia PERSONALE di chi la sta vedendo.
+ *
+ * Perché SÌ: «non rivedere le griglie già viste» vale anche in multiplayer. Se
+ * le partite di stanza non alimentarono lo storico, dopo una sera a giocare in
+ * quattro il single player ripropone le stesse identiche griglie.
+ *
+ * Perché a ogni ROUND e non a fine partita: quella griglia l'hanno vista davvero,
+ * anche se poi chiudono la stanza a metà (vedi il commento su `played_schede`:
+ * `games.scheda_id` esiste solo per le partite CONCLUSE, ed è proprio il motivo
+ * per cui non basta).
+ *
+ * Solo `matchPlayers()`: chi è seduto in attesa della partita dopo la griglia non
+ * l'ha vista (vedi `waitingSockets`) e segnarla vorrebbe dire escluderla da una
+ * partita a cui parteciperà.
+ */
+function recordRoundScheda(room: Room): void {
+  const id = room.schedaId;
+  if (!id) return;
+  for (const p of room.matchPlayers()) {
+    if (p.profileId) profiles.markSchedaPlayed(p.profileId, id);
   }
 }
 
@@ -1631,13 +1734,25 @@ io.on('connection', (socket) => {
     // Riconnessione con playerId esistente: ammessa anche a partita iniziata.
     const existing = payload.playerId ? room.players.get(payload.playerId) : undefined;
     let playerId: string;
+    // true solo nel ramo del giocatore NUOVO: serve a dire che la griglia in
+    // arrivo è la prima volta che la vede (vedi `resendRoundIfPlaying`).
+    let joinedNow = false;
     if (existing) {
       existing.connected = true;
       existing.socketId = socket.id;
       playerId = existing.id;
     } else {
-      if (room.phase !== 'lobby') return ack(errorPayload('GAME_STARTED', 'Partita gia\' iniziata'));
+      /*
+       * Giocatore NUOVO: la 0.47.0 rispondeva "Partita gia' iniziata" a chiunque
+       * arrivasse dopo l'avvio; la 0.48.0 ha aperto le porte fino alla fine del
+       * round 1. Dal 0.49.0 non c'è più un rifiuto: la stanza sopravvive alla
+       * partita, quindi chi arriva troppo tardi ENTRA lo stesso e si siede
+       * (vedi `Room.seatForNewPlayer`) e gioca la partita successiva. La capienza
+       * si verifica prima perché "stanza piena" è un motivo più concreto di
+       * "troppo tardi".
+       */
       if (room.isFull) return ack(errorPayload('ROOM_FULL', 'Stanza piena'));
+      const seat = room.seatForNewPlayer();
       const profile = resolveProfile(payload?.token);
       playerId = randomUUID();
       const player = room.addPlayer(
@@ -1647,15 +1762,25 @@ io.on('connection', (socket) => {
         profile ? profileRefFor(profile) : null,
       );
       player.socketId = socket.id;
+      // `nextMatch` = entra in stanza ma non in partita: nessun punteggio e
+      // nessun evento di round. È il flag che fa scegliere la schermata giusta.
+      player.waiting = seat === 'nextMatch';
+      joinedNow = true;
     }
     attachSocketToRoom(socket, room, playerId);
     ack({ ok: true as const, playerId, state: room.publicState() });
     broadcastState(room);
 
-    // Reconnecting a round in corso: reinvia la griglia e la scadenza.
-    // Emesso in un tick successivo, cosi' il client ha il tempo di registrare i listener
-    // dopo aver ricevuto l'ack di room:join.
-    if (existing) resendRoundIfPlaying(socket, room);
+    /*
+     * Round in corso: reinvia griglia e scadenza a chi è appena entrato. Non
+     * riguarda più solo chi si riconnette — è esattamente ciò che permette a un
+     * giocatore nuovo di giocare il round 1 già partito invece di guardare gli
+     * altri dalla lobby.
+     *
+     * Emesso in un tick successivo, così il client ha il tempo di registrare i
+     * listener dopo aver ricevuto l'ack di room:join.
+     */
+    resendRoundIfPlaying(socket, room, playerId, joinedNow);
   });
 
   /**
@@ -1683,7 +1808,7 @@ io.on('connection', (socket) => {
     attachSocketToRoom(socket, room, player.id);
     ack({ ok: true as const, playerId: player.id, state: room.publicState() });
     broadcastState(room);
-    resendRoundIfPlaying(socket, room);
+    resendRoundIfPlaying(socket, room, player.id);
   });
 
   /**
@@ -1696,12 +1821,18 @@ io.on('connection', (socket) => {
     if (!room || !st || st.code !== room.code) return;
     if (st.playerId !== room.hostId) return;
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
+    /*
+     * Anche l'anteprima dell'host respesta la memoria dei presenti: far
+     * comparire in lobby una griglia che il gruppo ha già giocato vorrebbe dire
+     * scoprire la ripetizione solo a round partito.
+     */
+    syncRoomMemory(room);
     const scheda = schede.randomUnplayed(
       room.gridSize,
       room.difficulty,
       Math.random,
       room.schedaVariant,
-      room.playedSchedaIds,
+      room.schedaMemory,
     );
     if (!scheda) return;
     room.pendingSchedaId = scheda.id;
@@ -1716,11 +1847,24 @@ io.on('connection', (socket) => {
     if (room.phase !== 'lobby' && room.phase !== 'roundEnd') return;
 
     const startRound = () => {
+      // La stanza può essere stata chiusa (o azzerata) durante il countdown: far
+      // partire un round senza più una stanza dietro manderebbe i client su una
+      // griglia che non può accettare parole. Si confronta l'oggetto, non solo
+      // il codice: fra la chiusura e il timer qualcuno potrebbe aver creato una
+      // stanza con lo stesso codice.
+      if (registry.get(room.code) !== room || room.phase !== 'countdown') return;
+      /*
+       * La memoria dei presenti si rinfresca ADESSO, non all'ingresso in stanza:
+       * da allora qualcuno può essere entrato, può essere uscito, o può aver
+       * giocato qui una scheda che non aveva mai visto (vedi `syncRoomMemory`).
+       */
+      syncRoomMemory(room);
       // Usa la scheda scelta in lobby se c'è (l'host l'ha vista e approvata),
-      // altrimenti ne pesca una a caso — mai una già giocata in questa partita
-      // (vedi `Room.playedSchedaIds`: i pool sono piccoli e la ripetizione era
-      // frequente). Per i round successivi al primo, se non c'è una pending si
-      // pesca una scheda nuova.
+      // altrimenti ne pesca una a caso — mai una già vista in questa partita né,
+      // per quanto il catalogo lo consente, in questa stanza (vedi
+      // `Room.schedaMemory`: i pool sono piccoli e la ripetizione era frequente).
+      // Per i round successivi al primo, se non c'è una pending si pesca una
+      // scheda nuova.
       const fromPending = room.pendingSchedaId ? schede.get(room.pendingSchedaId) : undefined;
       const scheda =
         fromPending ??
@@ -1729,12 +1873,15 @@ io.on('connection', (socket) => {
           room.difficulty,
           Math.random,
           room.schedaVariant,
-          room.playedSchedaIds,
+          room.schedaMemory,
         );
       // La pending è consumata: il prossimo round ne pescherà una nuova.
       room.pendingSchedaId = null;
       const { grid, endsAt } = room.startRound(scheda);
-      io.to(room.code).emit('game:roundStart', {
+      // Da qui la griglia è sugli schermi di chi gioca: entra nella cronologia
+      // personale di ognuno (vedi `recordRoundScheda`).
+      recordRoundScheda(room);
+      toPlaying(room).emit('game:roundStart', {
         round: room.currentRound,
         grid,
         endsAt,
@@ -1757,11 +1904,91 @@ io.on('connection', (socket) => {
     const seconds = Math.max(1, Math.round(COUNTDOWN_MS / 1000));
     for (let s = seconds; s >= 1; s--) {
       setTimeout(
-        () => io.to(room.code).emit('game:countdown', { seconds: s }),
+        () => toPlaying(room).emit('game:countdown', { seconds: s }),
         (seconds - s) * 1000,
       );
     }
     setTimeout(startRound, COUNTDOWN_MS);
+  });
+
+  /*
+   * «Gioca ancora»: una partita NUOVA nella stessa stanza.
+   *
+   * La richiesta arriva dalla schermata di classifica finale, dove prima c'era
+   * solo «Torna alla home»: chi voleva rigiocare con gli stessi amici doveva
+   * ricreare la stanza e riscrivere (o rigirare) il link. Qui la stanza resta
+   * com'è — codice, giocatori, impostazioni, musica — e si azzera la partita.
+   *
+   * Due cose da non dimenticare:
+   *  1. la partita che finisce va scritta in classifica PRIMA di azzerare i
+   *     punteggi (`recordMultiplayerGames` è idempotente: se il timer di
+   *     `gameEnd` l'ha già fatto, non scrive due volte);
+   *  2. chi era seduto in attesa di una nuova partita, da qui gioca: il flag
+   *     `waiting` si azzera dentro `startNewGame`.
+   */
+  socket.on('room:newGame', (payload, ack) => {
+    ack = safeAck(ack);
+    const st = socketState.get(socket.id);
+    const code = String(payload?.code ?? st?.code ?? '').toUpperCase();
+    const room = registry.get(code);
+    if (!room || !st || st.code !== room.code) {
+      return ack(errorPayload('NOT_IN_ROOM', 'Non in una stanza'));
+    }
+    if (st.playerId !== room.hostId) {
+      return ack(errorPayload('NOT_HOST', 'Solo chi ha creato la stanza può iniziare una nuova partita'));
+    }
+    if (room.phase === 'playing' || room.phase === 'countdown') {
+      return ack(errorPayload('GAME_RUNNING', 'La partita è ancora in corso'));
+    }
+    if (room.phase === 'lobby') {
+      // Nessun punteggio da azzerare: qui il tasto giusto è «Avvia partita».
+      // Si risponde invece di fare finta di niente e far crescere `matchNumber`
+      // a vuoto, perché il numero delle partite deve raccontare quante ne sono
+      // state giocate.
+      return ack(errorPayload('NOTHING_TO_RESTART', 'La partita deve ancora iniziare'));
+    }
+    recordMultiplayerGames(room);
+    room.startNewGame();
+    // Evento dedicato (e non solo `room:update`): i client sono sulla classifica
+    // finale di una partita che non esiste più, devono scordarla.
+    io.to(room.code).emit('room:newGame', { state: room.publicState() });
+    broadcastState(room);
+    ack({ ok: true as const, state: room.publicState() });
+  });
+
+  /**
+   * «Chiudi la stanza»: l'alternativa a «gioca ancora».
+   *
+   * Senza questo tasto una stanza finita la partita restava aperta per inerzia:
+   * chi aveva il link entrava in una sala d'attesa senza futuro. Si può chiudere
+   * solo fra una partita e l'altra — durante un round si esce, che è già quello
+   * che si è sempre fatto.
+   */
+  socket.on('room:close', (payload, ack) => {
+    ack = safeAck(ack);
+    const st = socketState.get(socket.id);
+    const code = String(payload?.code ?? st?.code ?? '').toUpperCase();
+    const room = registry.get(code);
+    if (!room || !st || st.code !== room.code) {
+      return ack(errorPayload('NOT_IN_ROOM', 'Non in una stanza'));
+    }
+    if (st.playerId !== room.hostId) {
+      return ack(errorPayload('NOT_HOST', 'Solo chi ha creato la stanza può chiuderla'));
+    }
+    if (room.phase === 'playing' || room.phase === 'countdown') {
+      return ack(errorPayload('GAME_RUNNING', 'Si chiude la stanza solo a partita finita'));
+    }
+    // La partita conclusa finisce qui se nessuno ha premuto «gioca ancora».
+    recordMultiplayerGames(room);
+    io.to(room.code).emit('room:closed', { code: room.code });
+    // Il legame socket → stanza va rotto a mano: i client riceveranno `room:closed`
+    // e usciranno, ma un `game:submitWord` in volo non deve trovare un riferimento
+    // a una stanza che non esiste più.
+    for (const p of room.players.values()) {
+      if (p.socketId) socketState.delete(p.socketId);
+    }
+    registry.delete(room.code);
+    ack({ ok: true as const });
   });
 
   socket.on('room:config', ({ code, gridSize, difficulty, rounds, roundDurationMs, musicId }) => {
@@ -1798,6 +2025,38 @@ io.on('connection', (socket) => {
     broadcastState(room);
   });
 
+  /**
+   * Cambia nome e/o avatar del mittente nella stanza.
+   *
+   * Il bug che risolve: nome e avatar salivano al server solo a `room:create`/
+   * `room:join`. Cambiarli nella sala d'attesa aggiornava soltanto lo store
+   * locale: `room.players` (unica fonte della barra avatar in partita, del podio
+   * e dei risultati) restava all'identità dell'ingresso, quindi in partita si
+   * vedevano sempre i valori vecchi.
+   *
+   * La modifica è EFFIMERA alla stanza: tocca il `Player` in memoria, non il
+   * profilo sul server. Il nickname del profilo è l'handle di accesso (unicità)
+   * e non si rinomina da qui; per l'avatar persistente c'è il profilo.
+   *
+   * Solo campo presente e non vuoto sovrascrive: un payload parziale non azzera
+   * l'altro valore. La normalizzazione ricalca `Room.addPlayer` (nome ≤ 20,
+   * avatar ≤ 8), così il valore mostrato è identico a quello dell'ingresso.
+   */
+  socket.on('room:updateIdentity', (payload, ack) => {
+    ack = safeAck(ack);
+    const st = socketState.get(socket.id);
+    if (!st) return ack(errorPayload('NOT_IN_ROOM', 'Non in una stanza'));
+    const room = registry.get(st.code);
+    if (!room) return ack(errorPayload('ROOM_NOT_FOUND', 'Stanza non trovata'));
+    const updated = room.setIdentity(st.playerId, {
+      nickname: payload?.nickname,
+      avatar: payload?.avatar,
+    });
+    if (!updated) return ack(errorPayload('PLAYER_NOT_FOUND', 'Giocatore non in stanza'));
+    ack({ ok: true });
+    broadcastState(room);
+  });
+
   socket.on('game:submitWord', (payload, ack) => {
     ack = safeAck(ack);
     const st = socketState.get(socket.id);
@@ -1812,7 +2071,7 @@ io.on('connection', (socket) => {
       // quali parole esistono sulla griglia). Nel feed live inviamo solo chi e quanti
       // punti, cosi' il client puo' mostrare "+2" accanto al nome.
       // Al proprietario inviamo la parola (serve per la propria lista).
-      io.to(room.code).except(player.socketId ?? '').emit('game:playerWord', {
+      io.to(room.code).except([player.socketId ?? '', ...room.waitingSockets()]).emit('game:playerWord', {
         playerId: player.id,
         nickname: player.nickname,
         avatar: player.avatar,
@@ -1932,7 +2191,7 @@ function scheduleRoundEnd(room: Room): void {
     if (room.phase !== 'playing') return;
     const results = room.endRound();
     const missed = computeMissedWords(room);
-    io.to(room.code).emit('game:roundEnd', {
+    toPlaying(room).emit('game:roundEnd', {
       round: room.currentRound,
       results,
       missedWords: missed,
@@ -1941,12 +2200,27 @@ function scheduleRoundEnd(room: Room): void {
     broadcastState(room);
 
     if (room.isGameOver()) {
+      // Numero della partita che si sta chiudendo: serve al timer qui sotto per
+      // accorgersi se, nei dieci secondi di pausa, la stanza è ripartita.
+      const endingMatch = room.matchNumber;
       setTimeout(() => {
+        // Doppia guardia, e non è pignoleria: «Gioca ancora» può arrivare dentro
+        // quella pausa (chi è arrivato tardi lo vede già dalla sala d'attesa).
+        // Riportare una partita appena nata alla fase `gameEnd` di quella finita
+        // vorrebbe dire griglia sparita e classifica di una partita che non c'è
+        // più.
+        if (
+          registry.get(room.code) !== room ||
+          room.matchNumber !== endingMatch ||
+          room.phase !== 'roundEnd'
+        ) {
+          return;
+        }
         room.phase = 'gameEnd';
         // Prima di avvisare i client, la partita viene registrata per la
         // classifica: se fallisce, il gioco continua comunque (best effort).
         recordMultiplayerGames(room);
-        io.to(room.code).emit('game:gameEnd', { finalScores: room.finalScores() });
+        toPlaying(room).emit('game:gameEnd', { finalScores: room.finalScores() });
         broadcastState(room);
       }, ROUND_END_PAUSE_MS);
     }

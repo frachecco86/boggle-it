@@ -8,6 +8,24 @@ Le schede del catalogo arrivano da **due famiglie diverse**:
 | ale **a runtime** | `<volume>/schede-ale/` | tasto **Genera** del pannello admin | **no** |
 | standard / full a runtime | `<volume>/schede-extra/` | tasto **Genera** | no |
 
+> ## ⚠️ Da fare **una volta sola**: dopo il deploy della 0.47.0
+>
+> Le 270 schede **versionate** sono state riallineate al dizionario con `pnpm sync:schede`
+> (101 schede toccate, **+315 parole accettate**, griglie intatte). Le ale **a runtime** del
+> volume no: sono rimaste risolte sul dizionario di quando sono state generate — quello **senza**
+> le 4.339 parole tecniche riammesse nella 0.43.0 — e continuano a rifiutare parole come
+> **`setosa`** (segnalato sulla scheda ale `6-facile-085`, 6×6 facile).
+>
+> **Dopo questo deploy: svuotare e rigenerare le ale** (e le `schede-extra/`, se si usano).
+> È un'operazione **una tantum**: non è parte del deploy, nessun hook la esegue, e va ripetuta
+> solo se cambia di nuovo il dizionario. Costo ~450 MB di picco e alcuni minuti — ecco perché non
+> la si automatizza a ogni rilascio.
+>
+> Verifica rapida che il volume sia ancora vecchio: il totale ale nel pannello admin è molto più
+> alto di `15 × 9 = 135` (lotti accumulati), e su una scheda ale che compone `s-e-t-o-s-a` la
+> parola viene rifiutata in single player.
+
+
 Le ale a runtime sono comode (si generano lotti nuovi senza toccare il repo), ma
 **non seguono il codice**: restano nel volume con la semantica del giorno in cui
 sono state create. Quando cambia la calibrazione (metrica ad anelli, rail delle
@@ -27,6 +45,10 @@ Sintomo tipico: nel pannello admin il totale ale è molto più alto di
 
 ## Quando rigenerare
 
+- **dopo un cambio del dizionario** (`words.br`, `technical-words.txt`, `consonant-endings.txt`,
+  `frequency-it.txt`): le schede del volume restano risolte sul dizionario vecchio e rifiutano le
+  parole riammesse. È il caso della 0.47.0 (blocco ⚠ qui sopra); `pnpm check:schede` dice se le
+  schede *versionate* sono allineate, ma **non vede quelle del volume**;
 - dopo un cambio di calibrazione (`calibration.json`) o della scala punteggi;
 - quando le ale a runtime non rispettano più i gate delle rare (le difficili
   devono averne almeno una, le facili al massimo una);

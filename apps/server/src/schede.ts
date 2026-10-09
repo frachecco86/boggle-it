@@ -20,6 +20,9 @@ import { loadDefinitions, loadWordIndex, type WordIndex } from './wordIndex.js';
 import {
   acceptedWords,
   normalizeWord,
+  pickScheda,
+  SCHEDA_MEMORY_LABELS,
+  SchedaMemory,
   schedaFileName,
   schedaKey,
   schedaVariantOf,
@@ -242,30 +245,46 @@ export class SchedaCatalog {
   }
 
   /**
-   * Scheda casuale che NON sia già stata giocata in questa partita.
+   * Scheda casuale che NON sia già stata vista, secondo la memoria data.
    *
-   * `exclude` sono gli id già usati (vedi `Room.playedSchedaIds`): con i pool
+   * `memory` è la `SchedaMemory` di chi sta pescando: quella della stanza
+   * (partita + stanza) per il multiplayer, una memoria con il solo livello
+   * `player` per il single player autenticato (vedi `GET /preview`). Con i pool
    * piccoli del catalogo (10-15 schede) una scelta puramente casuale ripeteva la
    * stessa scheda due volte nella stessa partita nel 17-28% dei casi su 3 round.
    *
-   * Se tutte le schede del gruppo sono state giocate si RIPARTE da capo
-   * (`exclude` ignorato) invece di ritornare `undefined`: una partita da 5 round
-   * su un pool da 10 è legittima, e fermare il gioco sarebbe peggio di una
+   * Se la memoria ha coperto tutto il gruppo si RIPARTE da capo (vedi
+   * `pickScheda`, che allenta prima il livello più morbido): una partita da 5
+   * round su un pool da 10 è legittima, e fermare il gioco sarebbe peggio di una
    * ripetizione. Meglio una scheda già vista che nessuna scheda.
+   *
+   * Ritorna `undefined` solo se il gruppo (dimensione × difficoltà × variante)
+   * non esiste: lì non si ripiega, giocare criteri diversi da quelli scelti è
+   * peggio di un errore.
    */
   randomUnplayed(
     size: GridSize,
     difficulty: Difficulty,
     rng: () => number = Math.random,
     variant: SchedaVariant = 'standard',
-    exclude?: ReadonlySet<string>,
+    memory?: SchedaMemory,
   ): Scheda | undefined {
     const all = this.randomPool(size, difficulty, variant);
-    if (all.length === 0) return undefined;
-    if (!exclude || exclude.size === 0) return all[Math.floor(rng() * all.length)];
-    const fresh = all.filter((s) => !exclude.has(s.id));
-    const pool = fresh.length > 0 ? fresh : all;
-    return pool[Math.floor(rng() * pool.length)];
+    // `relaxed` non finisce in partita, ma è il numero che dice QUANDO la
+    // memoria ha smesso di bastare: con i pool da 10-15 succede dopo poche
+    // partite nella stessa stanza. Un log discreto evita che la ripetizione di
+    // una griglia sembri di nuovo il bug di prima, e `seenTimes` dice quanto è
+    // grossa la ripetizione (in stanza: quante volte quel gruppo l'ha già vista).
+    const choice = pickScheda(all, memory, rng);
+    if (choice && choice.relaxed.length > 0) {
+      const layers = choice.relaxed.map((layer) => SCHEDA_MEMORY_LABELS[layer]).join(', ');
+      console.info(
+        `  scheda: catalogo di ${size}×${size}/${difficulty}/${variant} esaurito, ` +
+          `si ripropone una scheda già vista (memoria allentata: ${layers}; ` +
+          `viste accumulate: ${choice.seenTimes})`,
+      );
+    }
+    return choice?.scheda;
   }
 
   /** Le schede di un gruppo compatibili con la variante richiesta. */

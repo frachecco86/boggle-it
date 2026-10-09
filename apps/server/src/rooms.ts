@@ -9,6 +9,7 @@ import {
   rowsToGrid,
   scoreForWord,
   normalizeWord,
+  SchedaMemory,
   type Difficulty,
   type FoundWord,
   type Grid,
@@ -84,7 +85,40 @@ export interface Player {
    */
   roundTimeline: FoundWord[];
   connected: boolean;
+  /**
+   * true se il giocatore è **seduto in stanza ma non gioca la partita in corso**.
+   *
+   * Ci finisce chi arriva quando la partita è già troppo avanti per unirsi (dal
+   * round 2) o è già finita: entra lo stesso, guarda la sala d'attesa e gioca la
+   * partita successiva. Vale tre cose:
+   *  - non può inviare parole (vedi `submitWord`);
+   *  - non compare nei risultati di round, nella classifica finale né nelle
+   *    partite scritte in classifica (vedi `matchPlayers`);
+   *  - non riceve gli eventi del round in corso (vedi `waitingSockets` in
+   *    `index.ts`): senza griglia e senza parole altrui non si trova
+   *    accidentalmente a giocare — e a leggere le soluzioni — un round che non
+   *    ha giocato.
+   *
+   * Si azzera a `startNewGame`: da lì in poi il giocatore gioca.
+   */
+  waiting: boolean;
 }
+
+/**
+ * Dove entra un giocatore NUOVO, cioè chi non ha ancora un `playerId` in quella
+ * stanza. Rientrare con il proprio id non passa di qui ed è sempre ammesso
+ * (vedi `room:rejoin`).
+ *
+ *  - `now` → gioca la partita in corso (lobby, primo round e sua pausa);
+ *  - `nextMatch` → si siede in stanza e gioca la PARTITA SUCCESSIVA: la partita
+ *    corrente è già troppo avanti, o è già finita.
+ *
+ * Sostituisce il rifiuto della 0.48.0 (`GAME_STARTED` / `GAME_ENDED`): la stanza
+ * ora sopravvive alla partita, quindi chi arriva tardi non sente più «partita
+ * finita» e non resta fuori: si siede e gioca la rivincita (vedi
+ * `Room.seatForNewPlayer`).
+ */
+export type JoinSeat = 'now' | 'nextMatch';
 
 export class Room {
   readonly code: string;
@@ -102,19 +136,44 @@ export class Room {
   schedaVariant: SchedaVariant = 'standard';
   currentRound = 0;
   phase: RoomState['phase'] = 'lobby';
+  /**
+   * Quale partita sta giocando la stanza: 1 alla prima, +1 a ogni `startNewGame`.
+   *
+   * La stanza sopravvive alla partita (stesso codice, stessi giocatori), quindi
+   * «round 2 di 3» da solo non dice più niente: con due partite in corso serve
+   * dire di quale si tratta.
+   */
+  matchNumber = 1;
   grid: Grid | null = null;
   /** Id della scheda in gioco nel round corrente. */
   schedaId: string | null = null;
   /**
-   * Id di TUTTE le schede giocate in questa partita (anche quelle dei round
-   * passati).
+   * Memoria delle schede già viste in questa stanza (a livelli: partita, stanza,
+   * passato dei giocatori).
    *
    * Serve a non riproporre la stessa scheda due volte nella stessa partita: i
    * pool sono piccoli (10-15 schede per griglia/difficoltà/variante), quindi su
    * 3 round la probabilità di ripescare per caso una scheda già giocata è del
    * 17-28% circa. Senza questo elenco il server non aveva memoria fra i round.
+   *
+   * Il livello `match` si azzera a `startNewGame`, il livello `room` NO: è
+   * esattamente ciò che rende «schede nuove» una rivincita nella stessa stanza.
+   * Il livello `player`, dal 0.50.0, porta le cronologie sommate dei presenti
+   * (vedi `syncPlayerMemory`): la griglia è quella che nessuno in stanza ha mai
+   * visto e, se non esiste, quella con la somma dei contatori più bassa.
    */
-  playedSchedaIds = new Set<string>();
+  readonly schedaMemory = new SchedaMemory();
+  /**
+   * Ultimo momento in cui la stanza ha fatto qualcosa di reale (parola, round,
+   * ingresso, nuova partita).
+   *
+   * `cleanup` lo usa per capire se una stanza è abbandonata: i giocatori possono
+   * restare iscritti a una stanza che nessuno guarda più (scheda del telefono che
+   * muore in background), e dal 0.49.0 le stanze restano aperte apposta dopo la
+   * classifica finale. Senza un orologio di attività una stanza aperta per
+   * dimenticanza non si cancellerebbe mai.
+   */
+  lastActivityAt = Date.now();
   /**
    * Scheda scelta in lobby per il prossimo round.
    * Persiste fra i round finché l'host non ne pesca un'altra.
@@ -220,14 +279,168 @@ export class Room {
       roundWords: new Set(),
       roundTimeline: [],
       connected: true,
+      waiting: false,
     };
     this.players.set(id, player);
     if (!this.hostId) this.hostId = id;
+    this.lastActivityAt = Date.now();
     return player;
   }
 
   get isFull(): boolean {
     return this.players.size >= this.maxPlayers;
+  }
+
+  /**
+   * In quale partita entra un giocatore NUOVO.
+   *
+   * Regola: **si gioca la partita in corso solo se si arriva presto**.
+   *
+   *  - lobby, o countdown che precede il round 1 → `now` (come sempre);
+   *  - **round 1 in corso** → `now`: chi arriva in ritardo gioca il tempo che
+   *    resta, con griglia e scadenza re-inviati subito (`resendRoundIfPlaying`);
+   *  - pausa dopo il round 1 e countdown del round 2 → `now`: gioca dalla griglia
+   *    successiva, con un round intero davanti;
+   *  - **dal round 2 in poi**, o **partita già conclusa** → `nextMatch`: si entra
+   *    in stanza ma si aspetta la partita dopo.
+   *
+   * Il confine del round 2 resta, e per lo stesso motivo di sempre: chi entra a
+   * questo punto ha già perso un round intero di parole e di raddoppi sulle
+   * uniche, e il ritardo di uno non lo paga chi gioca dall'inizio. Cambia cosa
+   * succede dopo il «troppo tardi»: la 0.48.0 rispondeva `GAME_STARTED` /
+   * `GAME_ENDED` e lasciava la persona fuori dalla stanza; dal 0.49.0 la stanza
+   * sopravvive alla partita, quindi chi arriva tardi si siede, vede la sala
+   * d'attesa con gli altri e gioca la rivincita da subito (`startNewGame`).
+   *
+   * La capienza NON si verifica qui: la controlla chi chiama (`room:join` in
+   * `index.ts`), così il messaggio dice PERCHÉ non si entra invece di mischiare
+   * due motivi diversi.
+   */
+  seatForNewPlayer(): JoinSeat {
+    // Partita conclusa: schermata finale, oppure ultimo round appena chiuso e pausa
+    // in corso. Attenzione a `phase === 'playing'`: con un solo round
+    // `isGameOver()` è vero MENTRE il round 1 gira, e chi arriva in quel momento
+    // deve giocare, non mettersi in attesa.
+    const matchOver =
+      this.phase === 'gameEnd' || (this.phase !== 'playing' && this.currentRound >= this.rounds);
+    if (matchOver) return 'nextMatch';
+    return this.currentRound <= 1 ? 'now' : 'nextMatch';
+  }
+
+  /** Chi GIOCA la partita in corso: esclude chi è seduto in attesa della prossima. */
+  matchPlayers(): Player[] {
+    return [...this.players.values()].filter((p) => !p.waiting);
+  }
+
+  /**
+   * Profili dei giocatori PRESENTI in stanza, senza duplicati.
+   *
+   * Sono «i presenti», non «chi gioca la partita in corso»: anche chi è seduto
+   * in attesa della prossima partita guarda le griglie (e le giocherà tra poco),
+   * quindi la sua storia personale conta. Gli anonimi — senza profilo non esiste
+   * una cronologia — non compaiono e non influenzano la pesca.
+   *
+   * L'insieme è anche la risposta al «lo stesso account su due dispositivi»:
+   * contato due volte, ogni sua scheda raddoppierebbe il peso e la stanza la
+   * eviterebbe più del dovuto.
+   */
+  profileIds(): string[] {
+    const ids = new Set<string>();
+    for (const p of this.players.values()) {
+      if (p.profileId) ids.add(p.profileId);
+    }
+    return [...ids];
+  }
+
+  /**
+   * Ricalcola il livello `player` con le cronologie SOMMATE dei presenti.
+   *
+   * La stanza non sa leggere SQLite: chi chiama passa una funzione che, data la
+   * lista dei profili, risponde con «quante volte ogni scheda è stata vista»
+   * sommandoli (nel server è `ProfileStore.playedSchedaCounts`).
+   *
+   * Si RICALCOLA invece di accumulare, perché il livello dipende da CHI è in
+   * stanza: se Dario esce, la sua storia deve uscire con lui (altrimenti la sua
+   * cronologia continuerebbe a escludere schede per gente che non c'è più).
+   *
+   * Va chiamata a ogni **pesca**, non a ogni ingresso/uscita: l'unico
+   * consumatore del livello è `pickScheda`, quindi ricalcolarla lì significa
+   * essere sempre allineati senza dover ricordare il sync in ogni punto che
+   * tocca `players` (e un giocatore entra anche da strade di recupero, dove
+   * aggiungerlo sarebbe facile dimenticare).
+   *
+   * Ritorna quante schede la memoria ha imparato (per i log: 0 = tutti anonimi,
+   * e la pesca si comporta come prima della 0.50.0).
+   */
+  syncPlayerMemory(
+    historiesOf: (profileIds: readonly string[]) => ReadonlyMap<string, number>,
+  ): number {
+    const ids = this.profileIds();
+    // Con nessuno loggato il livello va SVUOTATO, non lasciato com'è: chi esce
+    // dall'ultima postazione loggata porta via la sua cronologia.
+    const counts = ids.length === 0 ? new Map<string, number>() : historiesOf(ids);
+    this.schedaMemory.setViews('player', counts);
+    return counts.size;
+  }
+
+  /**
+   * Socket di chi è in attesa della prossima partita.
+   *
+   * Da escludere dai broadcast del round (`game:roundStart`, `game:playerWord`,
+   * `game:roundEnd`, `game:gameEnd`, `game:countdown`): non giocano quel round,
+   * e mandarglielo significa far aprire la schermata di gioco a chi non deve
+   * giocare e, peggio, fargli leggere le parole di un round a cui non ha
+   * partecipato.
+   */
+  waitingSockets(): string[] {
+    return [...this.players.values()]
+      .filter((p) => p.waiting && p.socketId)
+      .map((p) => p.socketId!);
+  }
+
+  /**
+   * Ricomincia a giocare nella STESSA stanza: stesso codice, stessi giocatori,
+   * stesse impostazioni e stessa musica — partita nuova.
+   *
+   * Cosa si azzera: i round giocati, i punteggi, le parole, la scheda in gioco e
+   * la memoria della partita. Cosa RESTA: l'identità della stanza, l'host, le
+   * impostazioni, la musica e la memoria delle schede già viste nella stanza —
+   * che è il motivo per cui la rivincita si gioca su griglie nuove.
+   *
+   * ⚠️ Chiama `recordMultiplayerGames` PRIMA di questo metodo: i punteggi della
+   * partita che finisce vivono solo qui dentro e, una volta azzerati, non
+   * entrano più in classifica. `gamesPersisted` si azzera qui perché la partita
+   * nuova va salvata a sua volta.
+   *
+   * Non avvia niente: dopo, la stanza è in `lobby` come dopo la creazione, e
+   * l'host vede di nuovo «Avvia partita» (potendo cambiare impostazioni fra una
+   * partita e l'altra, che prima non si poteva fare).
+   */
+  startNewGame(): void {
+    this.matchNumber++;
+    this.currentRound = 0;
+    this.phase = 'lobby';
+    this.grid = null;
+    this.schedaId = null;
+    // La scheda scelta in lobby apparteneva alla partita finita: si riparte da
+    // una pesca nuova invece di riesumare la griglia di cinque minuti prima.
+    this.pendingSchedaId = null;
+    this.roundEndsAt = 0;
+    this.roundStartedAt = 0;
+    this.gamesPersisted = false;
+    this.lastActivityAt = Date.now();
+    for (const p of this.players.values()) {
+      // Chi aspettava una nuova partita, da qui gioca.
+      p.waiting = false;
+      p.totalScore = 0;
+      p.roundScore = 0;
+      p.words = [];
+      p.roundWords = new Set();
+      p.roundTimeline = [];
+    }
+    // MEMORIA: si azzera solo il livello della partita. Quello della stanza resta:
+    // è ciò che fa pescare schede nuove alla rivincita (vedi `SchedaMemory`).
+    this.schedaMemory.startMatch();
   }
 
   publicState(): RoomState {
@@ -242,6 +455,7 @@ export class Room {
       schedaVariant: this.schedaVariant,
       currentRound: this.currentRound,
       phase: this.phase,
+      matchNumber: this.matchNumber,
       players: this.publicPlayers(),
       endsAt: this.phase === 'playing' ? this.roundEndsAt : undefined,
       schedaId: this.schedaId ?? undefined,
@@ -250,7 +464,8 @@ export class Room {
     };
   }
 
-  publicPlayers(): PlayerPublic[] {    return [...this.players.values()].map((p) => ({
+  publicPlayers(): PlayerPublic[] {
+    return [...this.players.values()].map((p) => ({
       id: p.id,
       nickname: p.nickname,
       avatar: p.avatar,
@@ -260,6 +475,7 @@ export class Room {
       score: p.totalScore,
       connected: p.connected,
       isHost: p.id === this.hostId,
+      waiting: p.waiting || undefined,
     }));
   }
 
@@ -273,8 +489,9 @@ export class Room {
     this.phase = 'playing';
     this.grid = scheda ? rowsToGrid(scheda.grid) : generateGrid(this.gridSize, Math.random, this.difficulty);
     this.schedaId = scheda?.id ?? null;
-    // La scheda entra nello storico: il prossimo round non la ripescherà.
-    if (this.schedaId) this.playedSchedaIds.add(this.schedaId);
+    // La scheda entra nella memoria della stanza: il prossimo round della stessa
+    // partita non la ripesca, e nemmeno la partita dopo nella stessa stanza.
+    if (this.schedaId) this.schedaMemory.record(this.schedaId);
     this.roundValidWords = new Set(scheda ? acceptedWords(scheda) : []);
     this.roundExpectedWords = new Set(scheda?.words ?? []);
     this.roundFoundWords = new Set();
@@ -285,6 +502,7 @@ export class Room {
     }
     this.roundStartedAt = Date.now();
     this.roundEndsAt = this.roundStartedAt + this.roundDurationMs;
+    this.lastActivityAt = this.roundStartedAt;
     return { grid: this.grid, endsAt: this.roundEndsAt };
   }
 
@@ -294,8 +512,21 @@ export class Room {
    * dizionario -> lunghezza -> duplicato.
    */
   submitWord(playerId: string, rawWord: string, path: number[]): { accepted: boolean; reason?: string; word?: string; points?: number } {
+    /*
+     * I `reason` si VEDONO: finiscono nel rettangolo sopra la griglia, accanto
+     * alla parola, su una riga sola (`nowrap`) larga quanto lo schermo del
+     * telefono. Il testo in più viene tagliato con i puntini, ma tenere le frasi
+     * sopra le ~24 lettere significa nascondere metà messaggio: quando si aggiunge
+     * un motivo nuovo, scriverlo corto.
+     */
     const player = this.players.get(playerId);
     if (!player) return { accepted: false, reason: 'Giocatore non in stanza' };
+    // Chi è seduto in attesa della prossima partita non gioca questa: la
+    // rifiutiamo qui anche se il client, correttamente, non gli ha nemmeno
+    // mandato la griglia (vedi `waitingSockets`).
+    if (player.waiting) {
+      return { accepted: false, reason: 'In attesa della prossima' };
+    }
     if (this.phase !== 'playing') return { accepted: false, reason: 'Il round non e\' attivo' };
     if (Date.now() > this.roundEndsAt) return { accepted: false, reason: 'Tempo scaduto' };
     if (!this.grid) return { accepted: false, reason: 'Griglia non disponibile' };
@@ -309,7 +540,7 @@ export class Room {
     const normalized = normalizeWord(rawWord);
     if (!normalized) return { accepted: false, reason: 'Parola non valida' };
     if (!pathMatchesWord(this.grid, path, normalized)) {
-      return { accepted: false, reason: 'Parola non corrispondente al percorso' };
+      return { accepted: false, reason: 'Non segue il percorso' };
     }
     if (normalized.length < 3) return { accepted: false, reason: 'Parola troppo corta' };
     // Validazione contro l'insieme ACCETTATO della scheda (dizionario intero):
@@ -323,7 +554,7 @@ export class Room {
     if (!validOnScheda) {
       return {
         accepted: false,
-        reason: this.roundValidWords.size > 0 ? 'Non componibile su questa griglia' : 'Parola non nel dizionario',
+        reason: this.roundValidWords.size > 0 ? 'Non si può comporre qui' : 'Parola non nel dizionario',
       };
     }
     if (player.roundWords.has(normalized)) return { accepted: false, reason: 'Parola gia\' trovata' };
@@ -339,6 +570,7 @@ export class Room {
     player.words.push(found);
     player.roundTimeline.push(found);
     this.roundFoundWords.add(normalized);
+    this.lastActivityAt = Date.now();
 
     // La parola potrebbe valere doppio (trovata da soli), ma l'unicità si sa solo
     // a fine round: il bonus viene versato in `endRound`.
@@ -355,13 +587,16 @@ export class Room {
     this.phase = 'roundEnd';
 
     // Conteggio per parola: quante volte è stata trovata nella stanza.
+    // Solo chi GIOCA la partita (vedi `matchPlayers`): chi è seduto in attesa non
+    // deve comparire in un round a cui non ha partecipato.
+    const playing = this.matchPlayers();
     const wordCounts = new Map<string, number>();
-    for (const p of this.players.values()) {
+    for (const p of playing) {
       for (const w of p.roundWords) wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
     }
 
     const uniquePerPlayer = new Map<string, string[]>();
-    for (const p of this.players.values()) {
+    for (const p of playing) {
       const unique: string[] = [];
       for (const w of p.roundWords) {
         if (wordCounts.get(w) !== 1) continue;
@@ -378,7 +613,7 @@ export class Room {
       if (unique.length > 0) uniquePerPlayer.set(p.id, unique.sort());
     }
 
-    return [...this.players.values()]
+    return playing
       .map((p) => ({
         playerId: p.id,
         nickname: p.nickname,
@@ -411,7 +646,9 @@ export class Room {
   }
 
   finalScores() {
-    return [...this.players.values()]
+    // Chi è in attesa della prossima partita non ha giocato questa: niente voce
+    // in classifica (il podio sarebbe un elenco di zeri).
+    return this.matchPlayers()
       .map((p) => ({
         playerId: p.id,
         nickname: p.nickname,
@@ -424,6 +661,34 @@ export class Room {
   /** Imposta la musica di tutta la stanza (chiamata solo per l'host). */
   setMusic(choice: MusicChoice): void {
     if (isMusicChoice(choice)) this.musicId = choice;
+  }
+
+  /**
+   * Cambia nome e/o avatar di un giocatore nella stanza.
+   *
+   * È l'identità EFFIMERA mostrata in partita: aggiorna il `Player` in memoria,
+   * non il profilo sul server (il nickname del profilo è l'handle di accesso,
+   * con vincolo di unicità). Fino ad ora nome e avatar salivano al server solo a
+   * `addPlayer` (creazione/ingresso): modificarli nella sala d'attesa non
+   * aggiornava `publicPlayers`, quindi la barra avatar, il podio e i risultati
+   * restavano ai valori vecchi.
+   *
+   * Normalizzazione identica ad `addPlayer` (nome ≤ 20, avatar ≤ 8). Solo un
+   * campo presente e non vuoto sovrascrive: un payload parziale non azzera
+   * l'altro valore. Ritorna false se il giocatore non è in stanza.
+   */
+  setIdentity(
+    playerId: string,
+    patch: { nickname?: string; avatar?: string },
+  ): boolean {
+    const player = this.players.get(playerId);
+    if (!player) return false;
+    const nickname = typeof patch.nickname === 'string' ? patch.nickname.trim() : '';
+    if (nickname) player.nickname = nickname.slice(0, 20);
+    const avatar = typeof patch.avatar === 'string' ? patch.avatar : '';
+    if (avatar) player.avatar = avatar.slice(0, 8);
+    this.lastActivityAt = Date.now();
+    return true;
   }
 
   /**
@@ -452,6 +717,7 @@ export class Room {
 
   removePlayer(playerId: string): void {
     this.players.delete(playerId);
+    this.lastActivityAt = Date.now();
     if (this.hostId === playerId) {
       const next = [...this.players.values()].find((p) => p.connected) ?? [...this.players.values()][0];
       this.hostId = next?.id ?? '';
@@ -525,13 +791,27 @@ export class RoomRegistry {
     return [...this.rooms.values()];
   }
 
-  /** Rimuove stanze vuote o terminate da troppo tempo. */
+  /** Rimuove stanze vuote o abbandonate da troppo tempo. */
   cleanup(now = Date.now()): number {
     let removed = 0;
     for (const [code, room] of this.rooms) {
       const empty = room.players.size === 0;
-      const stale = room.phase === 'gameEnd' && now - room.roundEndsAt > 5 * 60_000;
-      if (empty || stale) {
+      /*
+       * Stanza abbandonata: nessuno connesso da dieci minuti.
+       *
+       * Il criterio storico guardava solo `phase === 'gameEnd'` e cinque minuti
+       * dall'ultimo round. Non vale più dal 0.49.0, perché una stanza ferma alla
+       * classifica finale è proprio il posto dove si decide se giocare ancora: se
+       * qualcuno è connesso, quella stanza serve ancora e cancellarla sarebbe
+       * «la stanza è stata chiusa» in faccia a chi sta scegliendo. Il rovescio
+       * della medaglia: una stanza che sopravvive alla partita può restare aperta
+       * per sempre se nessuno esce mai — quindi si misura l'ULTIMA ATTIVITÀ, non
+       * la fine dell'ultimo round, e si interviene anche sulle stanze in lobby che
+       * nessuno ha più guardato.
+       */
+      const someoneHere = [...room.players.values()].some((p) => p.connected);
+      const abandoned = !someoneHere && now - room.lastActivityAt > 10 * 60_000;
+      if (empty || abandoned) {
         this.rooms.delete(code);
         removed++;
       }

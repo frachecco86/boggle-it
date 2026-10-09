@@ -47,11 +47,6 @@ interface CurrentWordProps {
  * piccolo, e scorre in verticale se la definizione è lunga.
  */
 export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
-  // Soglie progressive: oltre le 8 lettere il testo si rimpicciolisce, oltre le
-  // 12 ancora. Servono perché con l'altezza fissa una parola lunga uscirebbe.
-  const sizeClass =
-    word.length > 12 ? ' current-word-banner--xlong' : word.length >= 8 ? ' current-word-banner--long' : '';
-
   /**
    * Parola di cui si sta mostrando la definizione (pannello aperto), o `null`.
    * Una sola per volta: aprire una definizione nuova sostituisce la precedente.
@@ -60,6 +55,18 @@ export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
 
   // La parola "corrente" del fronte: composizione, esito valido o suggerimento.
   const frontWord = word.length > 0 ? word : (feedback?.word ?? hintWord ?? null);
+
+  /*
+   * Soglie progressive: oltre le 8 lettere il testo si rimpicciolisce, oltre le
+   * 12 ancora. Servono perché con l'altezza fissa una parola lunga uscirebbe.
+   *
+   * Si scelgono sulla parola CHE SI VEDE — composizione, esito O suggerimento —
+   * non solo su quella in composizione: una parola RIFIUTATA da 16 lettere veniva
+   * scritta alla dimensione piena del banner (`nowrap`, nessuna classe di
+   * riduzione perché `word` era già vuoto) ed era il caso più largo di tutti.
+   */
+  const frontLen = frontWord?.length ?? 0;
+  const sizeClass = frontLen > 12 ? ' current-word-banner--xlong' : frontLen >= 8 ? ' current-word-banner--long' : '';
 
   /*
    * Il pannello si chiude quando il fronte cambia verso una parola DIVERSA.
@@ -93,7 +100,7 @@ export function CurrentWord({ word, feedback, hintWord }: CurrentWordProps) {
   return (
     <div className="current-word-wrap" aria-live="polite" aria-atomic="true">
       <div
-        className={`current-word-banner${word.length > 0 ? ` current-word-banner--active${sizeClass}` : ''}${
+        className={`current-word-banner${sizeClass}${word.length > 0 ? ' current-word-banner--active' : ''}${
           showFeedback
             ? ` current-word-banner--feedback current-word-banner--${feedback!.kind}${
                 feedback!.kind === 'valid' ? ' current-word-banner--scored' : ''

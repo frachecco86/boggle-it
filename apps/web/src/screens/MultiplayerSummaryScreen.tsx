@@ -15,6 +15,8 @@ export function MultiplayerSummaryScreen() {
     room,
     playerId,
     startRoom,
+    startNewMatch,
+    closeRoom,
     leaveRoom,
     audioSettings,
   } = useAppStore();
@@ -75,10 +77,20 @@ export function MultiplayerSummaryScreen() {
     );
   }
 
+  /*
+   * Con due o più partite nella stessa stanza «Classifica finale» da sola non
+   * dice quale: il numero della partita lo distingue.
+   */
+  const title = !isFinal
+    ? `Fine round ${room?.currentRound ?? ''}`
+    : (room?.matchNumber ?? 1) > 1
+      ? `Classifica finale — partita ${room?.matchNumber}`
+      : 'Classifica finale';
+
   return (
     <div className="screen summary">
       <BackHome onLeave={leaveRoom} />
-      <h2 className="screen__title">{isFinal ? 'Classifica finale' : `Fine round ${room?.currentRound ?? ''}`}</h2>
+      <h2 className="screen__title">{title}</h2>
 
       {/* A fine partita il podio: i primi tre, chi ha vinto e i punti. */}
       {isFinal && <Podium results={results} players={players} meId={playerId} />}
@@ -130,9 +142,35 @@ export function MultiplayerSummaryScreen() {
 
       <div className="summary__actions">
         {isFinal ? (
-          <button className="btn btn--primary btn--big" onClick={leaveRoom}>
-            Torna alla home
-          </button>
+          /*
+           * Fine partita: la stanza NON muore qui.
+           *
+           * L'host decide: «Gioca ancora» apre una partita nuova nella stessa
+           * stanza (stesso codice, stessi amici, schede nuove), «Chiudi la
+           * stanza» la spegne per tutti. Chi non è host vede l'attesa: non può
+           * decidere lui per gli altri, ma non è più costretto a rifare la stanza
+           * e rigirare il link.
+           */
+          isHost ? (
+            <>
+              <button className="btn btn--primary btn--big" onClick={startNewMatch}>
+                Gioca ancora nella stessa stanza
+              </button>
+              <button className="btn btn--ghost" onClick={closeRoom}>
+                Chiudi la stanza
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="lobby__waiting">
+                Chi ha creato la stanza può iniziare una nuova partita: resti qui e parti
+                insieme a lui, lo stesso codice vale ancora.
+              </p>
+              <button className="btn btn--ghost" onClick={leaveRoom}>
+                Esci dalla stanza
+              </button>
+            </>
+          )
         ) : isHost ? (
           <button className="btn btn--primary btn--big" onClick={startRoom} disabled={isLastRound}>
             {isLastRound ? 'Ultimo round…' : 'Prossimo round'}

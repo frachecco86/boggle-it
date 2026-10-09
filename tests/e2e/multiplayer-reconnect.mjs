@@ -44,11 +44,13 @@ const regrid = await Promise.race([gridPromise, wait(4000).then(() => null)]);
 log('Bob riceve di nuovo la griglia:', regrid ? `sì (${regrid.grid.tiles.length} tile, endsAt ${Math.round((regrid.endsAt - Date.now())/1000)}s)` : 'NO');
 log('stessa griglia di Alice:', regrid ? JSON.stringify(regrid.grid.tiles.map(t=>t.letter)) === JSON.stringify(round.grid.tiles.map(t=>t.letter)) : 'n/a');
 
-// nuovo giocatore non deve entrare a partita iniziata
+// un giocatore NUOVO ora entra, se il round in corso è ancora il primo
+// (la regola è in `Room.admitNewPlayer`; il dettaglio completo è in
+// `multiplayer-latejoin.mjs`)
 const c = io(URL, { transports: ['websocket'] });
 await once(c, 'connect');
 const cj = await ack(c, 'room:join', { code, nickname: 'Eve' });
-log('Nuovo giocatore a partita iniziata:', JSON.stringify(cj));
+log('Nuovo giocatore durante il round 1:', cj.ok ? 'entrato' : cj.message, '| giocatori:', cj.state?.players.length);
 
 a.close(); b2.close(); c.close();
 process.exit(0);

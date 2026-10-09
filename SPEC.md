@@ -195,11 +195,22 @@ In caso di parola trovata da più giocatori, ognuno prende i punti base.
 - Le schede sono servite dal catalogo in RAM: `/schede`, `/schede/:id`, `/preview`.
 
 ### 4.4 Validazione
-- **Client (single player)**: validazione istantanea contro l'elenco parole della scheda.
-- **Server (multiplayer)**: ricalcola e valida ogni parola ricevuta (dizionario + percorso).
-  Il client non può inventare parole o percorsi.
-- **Schede**: generate offline o dall'admin, mai dal giocatore: le parole sono già filtrate
-  per qualità.
+
+La regola del gioco è: **una parola vale se è nel dizionario ED è composta da un percorso legale
+sulla griglia**. Il percorso legale (adiacenza a 8 direzioni + nessuna cella ripetuta) garantisce
+GIÀ la componibilità, quindi l'elenco della scheda non è una regola in più: è la **materializzazione
+preventivizzata** di «dizionario ∩ componibili», e serve a non avere un solver nel client.
+
+- **Client (single player)**: validazione istantanea contro `acceptedWords(scheda)` (=`allWords`),
+  più `isValidPath` e `pathMatchesWord`. Nessun dizionario nel client (niente download da 4 MB).
+- **Server (multiplayer)**: ricalcola percorso e parola (`isValidPath`, `pathMatchesWord`) e valida
+  contro l'insieme accettato della scheda (`roundValidWords`). **Il dizionario è solo il ripiego**
+  quando il round gira senza scheda (test, o catalogo vuoto). Il client non può inventare né parole
+  né percorsi: il server ricalcola tutto.
+- **Conseguenza da conoscere** (0.47.0): la scheda è un'**istantanea** del dizionario. Se il
+  dizionario cambia e le schede no, il gioco rifiuta parole vere (`setosa`). Rimedio:
+  `pnpm sync:schede` per le schede versionate + **rigenerazione delle schede dell'admin nel
+  volume**, che `sync:schede` non tocca (vedi README, «Cambiare il dizionario»).
 
 ---
 
@@ -225,7 +236,7 @@ I punti non sono salvati: si derivano (`lunghezza − 2`). I file sono partizion
 | GET | `/config` | no | Configurazione globale (tipo di scheda di default) |
 | GET | `/schede` | no | Totali e conteggi per gruppo |
 | GET | `/schede/:id` | no | Scheda completa (griglia + tutte le parole) |
-| GET | `/preview?gridSize=&difficulty=` | no | Una scheda di esempio + conteggio |
+| GET | `/preview?gridSize=&difficulty=` | Bearer opzionale | Una scheda di esempio + conteggio. Con token valido esclude le schede già viste da quel profilo (`SchedaMemory` con il solo livello `player`) |
 | GET | `/admin/verify` | Bearer | Verifica token |
 | GET | `/admin/config` | Bearer | Legge la configurazione globale |
 | PUT | `/admin/config` | Bearer | Imposta il tipo di scheda di default |
@@ -276,6 +287,53 @@ cancellazione (per ambito o variante, con conferma digitata); tab **Musica** e *
 - Nella schermata di fine round ogni giocatore vede le parole trovate dagli altri.
 - Gestione disconnessione: il giocatore viene marcato "offline"; la partita continua.
 - Riconnessione con lo stesso `playerId` recupera lo stato della stanza.
+- **Si entra anche a partita iniziata** (0.48.0), ma **solo durante il primo round**: chi
+  arriva in ritardo riceve la griglia in corso e gioca il tempo che resta. Nella pausa dopo il
+  round 1 si entra ancora (si gioca dal round successivo).
+- **Dal round 2 in poi si entra e ci si siede** (0.49.0). Il giocatore viene aggiunto alla stanza
+  con `waiting: true`: nessuna griglia, nessuna parola accettata, nessun risultato — e nessun
+  evento di round sul suo socket. Gioca la partita successiva, in automatico, quando l'host ne
+  inizia una. Il rifiuto `GAME_STARTED`/`GAME_ENDED` della 0.47.0/0.48.0 non esiste più: la stanza
+  sopravvive alla partita, quindi «troppo tardi» non è più un motivo per stare fuori.
+  Regola intera in `Room.seatForNewPlayer` (`now` | `nextMatch`).
+- **Si rigioca nella stessa stanza** (0.49.0). A partita conclusa l'host chiama `room:newGame`:
+  la stanza resta dov'è — **stesso codice, stesso link, stessi giocatori, stesse impostazioni** —
+  e si azzerano punteggio, round e fase (`gameEnd`/`roundEnd` → `lobby`). Prima di azzerare i
+  punteggi vengono persistiti (`recordMultiplayerGames`, idempotente), altrimenti la cronologia
+  perderebbe la partita appena finita. `Room.matchNumber` conta le partite della stanza.
+- **L'host può chiudere la stanza** (0.49.0) con `room:close`, **solo fra una partita e l'altra**
+  (`GAME_RUNNING` se c'è un round in corso):emette `room:closed` a tutti, poi la stanza sparisce dal
+  registro. È l'alternativa a «gioca ancora».
+- **Le schede non si ripetono nella stanza** (0.49.0): la memoria delle giocate è `SchedaMemory`
+  (`packages/shared/src/schedaMemory.ts`), a strati — `match` (partita in corso), `room` (questa
+  stanza, sopravvive a `room:newGame`), `player` (cronologia di chi gioca). A ogni pesca si
+  allenta il livello più morbido per ultimo a cadere: prima la storia personale, poi la stanza,
+  **per ultima la partita** (ripetere una griglia nel giro in corso è l'unica cosa davvero
+  vietata). Se anche così non resta niente, si riparte dal pool: una scheda possibile è meglio di
+  un errore.
+- **La memoria per profilo vale anche in multiplayer** (0.50.0). Il livello `player` della stanza
+  non è più vuoto: `Room.syncPlayerMemory` lo riempie con le cronologie dei **presenti** (anche chi
+  è `waiting`, che la prossima partita la giocherà) **sommate** da
+  `ProfileStore.playedSchedaCounts` — una query sola, `SUM(seen_count) GROUP BY scheda_id`. La
+  griglia è quindi quella che **nessuno dei presenti** ha mai visto; se non esiste, `pickScheda`
+  sceglie quella con la **somma dei contatori più bassa** fra i livelli mollati (non quella vista da
+  meno *persone*: una scheda giocata cento volte da uno pesa cento e viene dopo una giocata una
+  volta da sette). Il sync si fa **a ogni pesca**, non a ogni ingresso/uscita: l'unico consumatore è
+  `pickScheda`, e i profili in stanza cambiano anche per strade di recupero (rejoin, rientri).
+  Gli anonimi non hanno cronologia e non pesano.
+- **Le partite in stanza alimentano la cronologia personale** (0.50.0). A round partito
+  `recordRoundScheda` segna la scheda nei profili di `matchPlayers()` (chi è in attesa non la vede,
+  quindi non gli si segna); chi entra a round 1 già partito la vede per la prima volta e viene
+  segnato, chi si riconnette no. Si segna **al round**, non a fine partita: `games.scheda_id` esiste
+  solo per le partite concluse, mentre la griglia l'hai vista comunque.
+- **Entrare in una stanza non cancella più lo storico** (0.50.0). Fino alla 0.49.0 `joinRoom`
+  chiamava `DELETE /me/played-schede` («la cronologia di uno non deve decidere le schede di
+  tutti»): ora quella cronologia la stanza la *usa*, e cancellarla a chi entra romperebbe la
+  funzione. La rotta resta come «dimentica le griglie già viste», esposta nel profilo.
+- **Anche offline la pesca ha una memoria** (0.50.0): `apps/web/src/game/localSchedaMemory.ts`
+  conserva in `localStorage` i contatori **per profilo** (tetto di 800 griglie, si dimentica la più
+  vecchia) e la pesca del bundle usa la stessa `pickScheda` del server. Il server resta autoritativo
+  quando c'è rete.
 - **Riconnessione trasparente**: se il socket si riconnette da solo (rete instabile, app in background), il client rientra in stanza con `room:rejoin` e riprende a inviare parole. Prima il server perdeva il legame e rispondeva "Non in una stanza".
 - **Voce in stanza**: tasto col microfono in basso a destra, si **tiene premuto** per parlare; gli altri
   sentono la voce quasi in diretta (~0,2 s). Tre barrette accanto al nome mostrano chi parla; un secondo
@@ -365,7 +423,9 @@ sbooble/
 
 **Client → Server**
 - `room:create` `{ nickname, avatar, gridSize, difficulty, rounds, roundDurationMs }` → `{ roomCode, playerId, state }`
-- `room:join` `{ roomCode, nickname, playerId? }` → `{ state }`
+- `room:join` `{ roomCode, nickname, playerId?, token? }` → `{ playerId, state }` | `{ code, message }`. Con il proprio `playerId` è un **rientro** ed è sempre ammesso, a qualunque round. Senza `playerId` è un **ingresso nuovo**, e dal 0.49.0 **non c'è più un rifiuto per l'orario**: l'unico motivo per non entrare è `ROOM_FULL`. Chi arriva finché il round 1 è raggiungibile entra e gioca subito (il server re-invia `game:roundStart` con griglia e scadenza); chi arriva dal round 2 in poi, o a partita conclusa, entra con `waiting: true` nella `state` e gioca la partita successiva.
+- `room:newGame` `{ code }` → `{ ok, state } | { code, message }` **(solo host, 0.49.0)** — inizia una **nuova partita nella stessa stanza**: valida da `gameEnd` e dall'ultimo `roundEnd` (pausa inclusa); persiste i punteggi, azzera punteggio di ogni giocatore, riporta la fase a `lobby`, libera chi era in attesa e fa crescere `matchNumber`. Rifiuti: `NOT_HOST`, `GAME_RUNNING` (una partita è in corso: si aspetti la fine), `PLAYER_NOT_FOUND`.
+- `room:close` `{ code }` → `{ ok } | { code, message }` **(solo host, 0.49.0)** — chiude la stanza per tutti. Solo fra una partita e l'altra (`GAME_RUNNING` se un round è in corso), perché chiuderla a round avviato vuol dire guastare la partita a chi sta giocando.
 - `room:rejoin` `{ code, playerId }` → `{ playerId, state }` — rientro dopo una **riconnessione trasparente** del socket: il server ricostruisce il legame socket ↔ giocatore (che Socket.IO perde cambiando `socket.id`) senza far ripartire la partita.
 - `room:start` `{ roomCode }` (solo host)
 - `game:submitWord` `{ word, path }` → `{ accepted, reason?, word?, points? }`
@@ -375,7 +435,9 @@ sbooble/
 - `voice:stop` — rilascia il posto nel canale
 
 **Server → Client**
-- `room:update` `{ players, hostId, gridSize, rounds, phase }`
+- `room:update` `{ players, hostId, gridSize, rounds, phase, matchNumber, ... }` — `players[].waiting` dice chi è seduto ma gioca la partita dopo (0.49.0)
+- `room:newGame` `{ state }` **(0.49.0)** — la stanza ha iniziato una partita nuova: i client azzerano classifica, griglia e timer e tornano in sala d'attesa (il codice stanza non cambia)
+- `room:closed` `{ code }` **(0.49.0)** — l'host ha chiuso la stanza: i client escono in sala d'attesa/home
 - `game:roundStart` `{ round, grid, endsAt, durationMs, schedaId? }`
 - `game:playerWord` `{ playerId, avatar, word, points, score, self }` (broadcast per classifica live)
 - `game:roundEnd` `{ round, results, missedWords, nextRoundInMs }`

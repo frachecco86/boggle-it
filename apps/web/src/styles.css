@@ -876,6 +876,39 @@ button.home__learn--active {
   margin: 10px 0;
 }
 
+/*
+ * Avviso NEUTRO (non è un errore e non è una conferma): «sei arrivato tardi,
+ * giochi alla prossima», «è partita una nuova partita nella stessa stanza».
+ * Azzurrino per distinguerlo dal rosso senza gridare.
+ */
+.banner--info {
+  position: relative;
+  margin: 10px 0;
+  padding-right: 34px;
+  background: rgba(86, 154, 214, 0.14);
+  border: 1px solid rgba(86, 154, 214, 0.4);
+  color: var(--text);
+}
+
+/* X per togliere l'avviso senza uscire dalla schermata. */
+.banner__dismiss {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.banner__dismiss:hover {
+  opacity: 1;
+}
+
 /* ---------- Setup ---------- */
 
 .setup__back {
@@ -1087,6 +1120,29 @@ button.home__learn--active {
 /* Anteprima parola e griglia: la griglia prende tutto lo spazio che avanza. */
 .game__main {
   display: grid;
+  /*
+   * UNA colonna larga QUANTO IL CONTENITORE, mai di più.
+   *
+   * Senza `grid-template-columns` la colonna è quella IMPLICITA, cioè `auto`, la
+   * cui dimensione minima automatica è la *min-content* degli item: può crescere
+   * oltre il contenitore. Il rettangolo della parola è `white-space: nowrap`, e
+   * l'`overflow: hidden` stava sul banner (un nipote), non sull'item
+   * `.current-word-wrap`:
+   * quindi l'esito lungo di una parola rifiutata («PAROLALUNGA  Non si può comporre qui»)
+   * valeva ~552px di min-content e la colonna si allargava a 552px anche su uno
+   * schermo da 360. Il board (`width: 100%`) diventava più largo dello schermo e,
+   * essendo un *size container*, `100cqw` risolveva contro quella larghezza
+   * gonfiata: `--cell` cresceva e la griglia usciva dai bordi (colonne non
+   * toccabili) finché l'esito restava visibile — cioè finché non si toccava una
+   * lettera nuova. Da qui il «la griglia resta zoomata e le tocche successive
+   * non vanno a segno», che si vedeva SOLO sotto i ~560px di viewport: a 980px
+   * («Sito desktop») il testo ci stava e il bug spariva.
+   *
+   * `minmax(0, 1fr)` mette un pavimento di 0: la colonna non può più essere
+   * allargata dal testo. (Il `min-width: 0` su `.game__main` non bastava: limita
+   * `.game__main`, non la sua traccia.)
+   */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   gap: 6px;
   flex: 1 1 auto;
@@ -1231,8 +1287,34 @@ button.home__learn--active {
   z-index: 1;
 }
 
+/*
+ * Involucro della cella: porta SOLO l'animazione d'ingresso (`tile-in`).
+ *
+ * Perché un involucro e non la cella stessa: `animation` è una SHORTHAND, e le
+ * regole di stato (`.tile--selected` → `tile-light-up`, `.tile--hint` → `tile-hint`)
+ * la sovrascrivono. Togliersi la selezione rimetteva `tile-in` nello stile
+ * calcolato: cambiando `animation-name` il browser lo RIPARTE, e le celle appena
+ * rilasciate si sgonfiavano a `scale(0.4)`/`opacity:0` (il `from`, tenuto in vita
+ * da `backwards` per tutto l'`animation-delay`) per poi riaprirsi con l'overshoot.
+ * Succede a ogni parola inviata, ma si vede soprattutto sugli errori; e le
+ * coordinate dello swipe si misurano con `getBoundingClientRect()`, quindi
+ * finivano per misurare rettangoli a metà animazione.
+ *
+ * L'involucro non cambia MAI classe: l'ingresso parte una volta sola per griglia.
+ * Le celle misurano sempre lo stesso quadrato.
+ */
+.grid-cell {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  animation: tile-in 0.55s cubic-bezier(0.2, 1.2, 0.4, 1) backwards;
+}
+
 /* Le lettere riempiono quasi tutta la tile, come Boggle/Ruzzle. */
 .tile {
+  /* Le dimensioni le dà l'involucro (che è quadrato per via delle tracce). */
+  width: 100%;
+  height: 100%;
   aspect-ratio: 1;
   display: grid;
   place-content: center;
@@ -1267,7 +1349,6 @@ button.home__learn--active {
     box-shadow 0.34s ease,
     color 0.28s ease,
     border-color 0.28s ease;
-  animation: tile-in 0.55s cubic-bezier(0.2, 1.2, 0.4, 1) backwards;
   position: relative;
   overflow: hidden;
   color: var(--text);
@@ -1389,6 +1470,10 @@ button.home__learn--active {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .grid-cell {
+    animation: none;
+  }
+
   .tile--selected {
     animation: none;
   }
@@ -1397,22 +1482,52 @@ button.home__learn--active {
     animation: none;
     opacity: 0;
   }
+
+  /* Parola non valida: basta il banner rosso + il suono, niente movimento. */
+  .grid-board--error {
+    animation: none;
+  }
 }
 
-/* Parola non valida: flash morbido, NIENTE scuotimento (era fastidioso). */
+/*
+ * Parola non valida: UNA vibrazione breve (±3px, 180ms), tutta su `transform`.
+ *
+ * Sostituisce due tentativi precedenti: lo scuotimento della griglia (fastidioso)
+ * e poi il `box-shadow` che si ALLARGAVA attorno al board — mezzo secondo in cui
+ * la griglia sembrava ingrandirsi, proprio mentre il giocatore sta per ritoccare.
+ * Qui non c'è né `scale` né alone che cresce.
+ *
+ * L'animazione sta sul BOARD e non sulle celle, ed è la scelta che la rende
+ * innocua per il tocco: `SwipeController.localPoint()` sottrae il rect del board
+ * alle coordinate del dito e `GridBoard.buildLayout()` misura i centri delle
+ * celle RELATIVI a quel rect. Spostando tutto insieme, nessuna coordinata
+ * relativa cambia: un dito che passa in mezzo all'animazione accende comunque la
+ * cella giusta. (Sulle singole celle, invece, i rettangoli si sarebbero mossi
+ * sotto il dito.)
+ *
+ * Il segnale principale resta il banner rosso sopra la griglia: questo è un
+ * cenno, non un allarme.
+ */
 .grid-board--error {
-  animation: error-flash 0.5s ease-out;
+  animation: grid-nudge 0.18s ease-in-out;
 }
 
-@keyframes error-flash {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.5);
+@keyframes grid-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-3px);
   }
   45% {
-    box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.25);
+    transform: translateX(3px);
   }
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 92, 92, 0);
+  70% {
+    transform: translateX(-2px);
+  }
+  90% {
+    transform: translateX(1px);
   }
 }
 
@@ -1486,28 +1601,33 @@ button.home__learn--active {
 }
 
 /*
- * Le lettere si riducono da sole quando la parola è lunga.
+ * Le lettere si riducono da sole quando la parola è lunga: con l'altezza fissa e
+ * `white-space: nowrap` dodici lettere a 1.8rem uscirebbero dal banner; basta
+ * scalare in base alla lunghezza con classi progressive (`--long`/`--xlong`), che
+ * è prevedibile e non chiede misure a runtime (`clamp` con `cqw` non serve).
  *
- * Con l'altezza fissa e `white-space: nowrap`, una parola di 12 lettere a 1.8rem
- * uscirebbe dal banner. `clamp` con `cqw` (container query) non serve: basta
- * scalare in base alla lunghezza via classi progressive, che è prevedibile e
- * non richiede misure a runtime.
+ * Dimensione e «vestito» sono due regole separate, di proposito: le classi di
+ * lunghezza ora si mettono anche sull'ESITO (una parola rifiutata lunga va
+ * rimpicciolita come una in composizione). Se portassero anche il gradiente
+ * viola, una parola RIFIUTATA si vestirebbe del viola della composizione invece
+ * che del rosso dell'errore: il colore è informazione, non decorazione. Il
+ * gradiente quindi sta solo insieme a `--active` (dita sulla griglia).
  */
 .current-word-banner--long {
-  color: #fff;
-  border-color: var(--primary);
-  background: linear-gradient(150deg, var(--primary), var(--primary-soft));
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--primary) 38%, transparent);
   font-size: 1.6rem;
 }
 
 .current-word-banner--xlong {
+  font-size: 1.25rem;
+  letter-spacing: 2px;
+}
+
+.current-word-banner--active.current-word-banner--long,
+.current-word-banner--active.current-word-banner--xlong {
   color: #fff;
   border-color: var(--primary);
   background: linear-gradient(150deg, var(--primary), var(--primary-soft));
   box-shadow: 0 6px 22px color-mix(in srgb, var(--primary) 38%, transparent);
-  font-size: 1.25rem;
-  letter-spacing: 2px;
 }
 
 .current-word-banner__placeholder {
@@ -1550,6 +1670,35 @@ button.home__learn--active {
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 1px;
+}
+
+/*
+ * Parola + motivo si accorciano DA SOLI quando lo spazio non basta.
+ *
+ * Il banner è `white-space: nowrap`: un testo lungo non va a capo, e finché la
+ * colonna del layout poteva allargarsi (vedi `.game__main`) si prendeva i suoi
+ * ~550px. Con la colonna bloccata a `minmax(0, 1fr)` il testo in più viene
+ * tagliato con i puntini di sospensione, e sotto ai 400px una parola rifiutata
+ * lunga si scrive anche più piccola.
+ */
+.current-word-banner__word,
+.current-word-banner__reason {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.current-word-banner--long .current-word-banner__word,
+.current-word-banner--long .current-word-banner__reason {
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+}
+
+.current-word-banner--xlong .current-word-banner__word,
+.current-word-banner--xlong .current-word-banner__reason {
+  font-size: 0.76rem;
+  letter-spacing: 0;
 }
 
 /* Scala di colori per LUNGHEZZA della parola (più lunga = più preziosa). */
@@ -2427,6 +2576,22 @@ button.home__learn--active {
 .badge--off {
   background: var(--danger);
   color: #3a0505;
+}
+
+/*
+ * Chi è seduto in stanza ma gioca la PARTITA successiva (è arrivato a questa già
+ * troppo avanti). Ambra, non rosso: non è un problema, è un turno che arriva.
+ */
+.badge--waiting {
+  background: rgba(232, 168, 56, 0.22);
+  color: var(--text);
+}
+
+/* Righe di servizio sotto le liste della sala d'attesa. */
+.lobby__hint {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
 }
 
 .settings-grid {
@@ -6835,6 +7000,13 @@ button.home__learn--active {
   grid-column: 1 / -1;
   position: relative;
   height: 64px;
+  /*
+   * È lui l'item del grid, quindi è QUI che va messa l'elasticità: `overflow`
+   * diverso da `visible` azzera la sua dimensione minima automatica. Sul banner
+   * (figlio) non serviva a niente: la min-content risaliva comunque.
+   */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .current-word-banner {

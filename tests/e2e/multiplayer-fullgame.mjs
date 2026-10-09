@@ -57,9 +57,10 @@ log('round 2 avviato, griglia diversa =', JSON.stringify(round2.grid.tiles.map(t
 while (events.gameEnd.length < 1) await wait(300);
 log('GAME END. finalScores =', JSON.stringify(events.gameEnd[0].finalScores.map(s=>({n:s.nickname,total:s.totalScore}))));
 
-// test riconnessione a partita in corso/finita
+// riconnessione a partita conclusa: senza `playerId` NON è un rientro, è un
+// ingresso nuovo in una partita finita → GAME_ENDED
 const reconnect = await ack(b, 'room:join', { code, nickname: 'Bob', playerId: undefined });
-log('Bob tenta rejoin senza id (gameStarted):', JSON.stringify(reconnect));
+log('Bob tenta di entrare senza id (partita conclusa):', JSON.stringify(reconnect));
 
 a.close(); b.close();
 process.exit(0);

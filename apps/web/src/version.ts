@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.44.0';
+export const APP_VERSION = '0.52.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,255 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.52.0',
+    date: '2026-10-09',
+    title: 'A parola sbagliata la griglia non esce più dallo schermo',
+    promo: {
+      emoji: '📱',
+      headline: 'Le lettere restano dove devono stare',
+      text: 'Un errore non fa più «ingrandire» la griglia: prima il messaggio sopra le lettere era più lungo dello schermo e se ne prendeva lo spazio, spingendo le colonne ai lati fuori dal bordo — quelle non le toccavi più. Ora il messaggio si accorcia da solo e le lettere restano al loro posto. Al posto dell’ingrandimento, un breviissimo tremito della griglia con una piccola vibrazione del telefono.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le colonne ai lati non finiscono più fuori dallo schermo.** Il colpevole era il messaggio sopra la griglia: la parola rifiutata con il suo motivo stava su una riga sola mai a capo, e il contenitore della griglia la lasciava allargare quanto voleva. Su uno schermo da 360 px quel messaggio ne chiedeva ~550, la griglia si allargava dietro di lui e perdeva le colonne oltre il bordo — per tutto il tempo in cui il messaggio restava su, cioè finché non toccavi una lettera nuova. Da lì il «resta zoomato e le tocche dopo non vanno a segno».',
+          '**Si vedeva solo sul telefono, ed era proprio la pista.** Con «Sito desktop» il bug spariva: la modalità desktop finge uno schermo da 980 px, dove quel messaggio ci sta. Non era nulla di mobile, era una larghezza senza pavimento: bastava restringere la finestra del computer sotto i ~560 px per vederselo in faccia.',
+          '**L’ingrandimento finto è diventato un tremito.** L’animazione d’errore era un alone rosso che si allargava attorno alla griglia: mezzo secondo in cui la griglia sembrava crescere mentre stavi già per ritoccare. Ora è uno spostamento di 3 px per 180 ms, insieme a una doppia vibrazione corta — si sente al tatto ed è diversa da quella della parola trovata. Se hai attivo «riduci le animazioni» resta solo il messaggio rosso.',
+          '**Le celle non si rigonfiano più quando rilasci una parola.** Le lettere avevano una piccola animazione d’ingresso (si aprono da piccole); spegnerla e riaccenderla la faceva ripartire, quindi le celle appena rilasciate si sgonfiavano a metà e schizzavano di nuovo su, con le coordinate dello swipe misurate proprio in quel momento. L’ingresso ora vive su un contenitore che non cambia mai stato: si accende una volta sola per griglia.',
+          '**I messaggi di rifiuto sono più corti.** «Non componibile su questa griglia» e «Parola non corrispondente al percorso» stavano a metà fuori dallo schermo anche dopo la correzione: ora dicono la stessa cosa in poche parole, e se proprio non c’è spazio si accorciano con i puntini invece di tagliarsi di netto.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La correzione è una riga: `grid-template-columns: minmax(0, 1fr)` su `.game__main`** (`apps/web/src/styles.css`). Senza, la colonna era quella *implicita* `auto`, la cui dimensione minima automatica è la **min-content** degli item: poteva superare il contenitore. Il `min-width: 0` già presente su `.game__main` non serviva, perché limita il contenitore, non la sua traccia; e l’`overflow: hidden` era sul banner (figlio del grid item) invece che su `.current-word-wrap`, che è l’item: l’automatic minimum si annulla solo lì. Misurato con Chrome a testa in giù, griglia 4×4 con una parola da 16 lettere rifiutata: a 393 px di viewport il board passava da 385 a **552 px** (163 px fuori dal bordo, cella da 93 a 135 px); a 980 px nessuna differenza, 0 px fuori — la prova che era la larghezza, non il «mobile». Il `100cqw` del *size container* `.grid-board` risolveva contro la larghezza gonfiata: ecco perché a pagare era `--cell`, cioè la dimensione delle lettere.',
+          '**Ingresso delle celle su un involucro `.grid-cell`**, e `animation` tolta da `.tile`. `animation` è una *shorthand*: `.tile--selected` (`tile-light-up`) e `.tile--hint` (`tile-hint`) la sovrascrivevano, quindi togliere la selezione rimetteva `tile-in` nello stile calcolato e, cambiato `animation-name`, il browser lo riavviava (celle a `scale(0.4)`/`opacity: 0` tenute dal `backwards` per tutto l’`animation-delay`, poi overshoot 1.2). Bonus: `cellRefs` ora punta agli involucri, cioè ai rettangoli che **non** si muovono mai — `buildLayout()` e la `tolerance` di `cellTracker` non misurano più una cella a metà transizione. Ci guadagna anche il suggerimento: il ritardo d’ingresso sull’involucro e il `--hint-delay` sulla cella sono due proprietà separate, quindi non si calpestano più.',
+          '**L’animazione d’errore sta sul board, non sulle celle, ed è la scelta che la rende innocua**: `SwipeController.localPoint()` sottrae il rect del board alle coordinate del dito e `GridBoard.buildLayout()` misura i centri relativi a quel rect, quindi una `translateX` su tutto non cambia nessuna coordinata relativa. Niente `scale` e niente `box-shadow` nei `@keyframes grid-nudge` (0,18s).',
+          '**Il segnale d’errore passa da un booleano a un contatore** (`errorSignal` in `GridBoard`, `invalidSeq` in `useSoloGame`): un booleano derivato da `feedback.kind === «invalid»` restava vero finché non si toccava una lettera — cioè teneva una classe accesa su un’animazione one-shot (nel single player non si spegneva mai; il multiplayer aveva un suo `setTimeout` di 500 ms). Ora la durata, lo spegnimento, l’annullamento sul `pointerdown` successivo e il `navigator.vibrate([14, 45, 14])` vivono tutti dentro `GridBoard`, quindi le due modalità si comportano finalmente allo stesso modo.',
+          '**Test.** Nuovo `apps/web/src/styles.game.test.ts`: legge `styles.css` e blocca le quattro cose che avevano rotto tutto — la colonna con pavimento 0, `min-width: 0` + `overflow: hidden` sull’item giusto, `@keyframes grid-nudge` senza `scale()` né `box-shadow`, `animation:` assente da `.tile` e presente su `.grid-cell`, e il `prefers-reduced-motion` che copre entrambi. È un test sul testo del foglio di stile: non c’è jsdom nel progetto, e in questo caso la regola *è* la logica. Motivi di rifiuto più corti in `Room.submitWord` (nessun test dipendeva dal testo, `rooms.test.ts` cerca «attesa»).',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.51.0',
+    date: '2026-10-09',
+    title: 'Cambi nome e avatar valgono anche in partita',
+    promo: {
+      emoji: '🪪',
+      headline: 'Il nome e l’avatar che scegli sei tu',
+      text: 'Cambi nome o avatar nella sala d’attesa di una stanza? Adesso ti riconoscono davvero: il nuovo nome e la nuova faccina compaiono nella barra dei punizioni durante la partita, nel podio finale e nell’elenco dei giocatori. Se hai un profilo, l’avatar cambia anche lì e quando giochi da solo.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Nome e avatar scelti in sala d’attesa arrivano finalmente in partita.** Cambiarli aggiornava solo il tuo dispositivo: la barra sotto la griglia, il podio e l’elenco dei giocatori continuavano a mostrare nome e avatar letti quando eri entrato nella stanza. Ora la modifica parte verso il server e la vedono tutti, in tempo reale.',
+          '**Vale anche a partita già cominciata.** Se cambi nome fra un round e l’altro, i risultati del round e la classifica finale riportano quello nuovo: chi guarda legge sempre l’ultimo nome che ti sei dato.',
+          '**L’avatar, con un profilo, si salva anche sul profilo.** Se sei loggato, il cambio di avatar dalla lobby aggiorna anche il profilo: lo rivedi nella home e giocando da solo, non solo in quella stanza.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Nuovo evento `room:updateIdentity`** (`packages/shared/src/types.ts`): il client manda nome e avatar, il server aggiorna il giocatore e rimanda lo stato a tutta la stanza con il solito `room:update`. Prima nome e avatar salivano solo a `room:create`/`room:join`, e non c’era modo di cambiarli a stanza aperta.',
+          '**La modifica vive nel metodo `Room.setIdentity`** (`apps/server/src/rooms.ts`), accanto a `setMusic`: aggiorna il `Player` in memoria con la stessa normalizzazione di `addPlayer` (nome ≤ 20, avatar ≤ 8). Un campo assente o vuoto non azzera l’altro. È una modifica **effimera** alla stanza: non rinomina il profilo (l’handle di accesso ha un vincolo di unicità e non si tocca da qui).',
+          '**Il client accoda l’invio con un debounce di 250 ms** (`scheduleIdentityPush`, `apps/web/src/state/store.ts`): `setNickname` gira a ogni tasto, e mandare un broadcast a tutta la stanza per ogni lettera sarebbe un bombardamento. Fuori da una stanza è un no-op, quindi l’editore della home continua a funzionare come sempre.',
+          '**Test.** `Room.setIdentity` ha 5 casi in `rooms.test.ts` (aggiorna i valori, non azzera il campo mancante, normalizza, rifiuta un giocatore assente, e — la regressione vera — i risultati del round e la finale usano il nome nuovo); la parte client ha 5 casi in `store.identity.test.ts` (emette in stanza, non emette fuori, una raffica di tasti produce un solo invio col valore finale).',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.50.0',
+    date: '2026-10-08',
+    title: 'Le griglie già viste non tornano più, nemmeno in multiplayer',
+    promo: {
+      emoji: '🧠',
+      headline: 'Il gioco ricorda cosa hai già visto',
+      text: 'Le schede ricordano **quante volte** le hai giocate, non solo se le hai viste. E la memoria ora vale anche in compagnia: la stanza sceglie la griglia che **nessuno dei giocatori presenti** ha mai visto, e se proprio bisogna ripescare si prende quella che il gruppo ha giocato di meno. Il conteggio lo vedi (e lo puoi azzerare) nella schermata del tuo profilo.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Anche in multiplayer le griglie sono scelte con la memoria di tutti.** Le stanze uniscono le cronologie dei giocatori presenti e pescano quella che **nessuno** di loro ha mai visto; se una griglia pulita non esiste più — con 10-15 schede per gruppo succede dopo poche partite — si prende quella **vista di meno**. Prima la cronologia personale contava solo giocando da soli.',
+          '**«Vista di meno» conta le volte, non le persone.** Una griglia che uno ha giocato cento volte pesa cento, e una che sette hanno giocato una volta pesa sette: tocca alla seconda. Serve a non ridarti sempre in faccia la stessa griglia solo perché l’ha vista una persona sola.',
+          '**Le partite in stanza entrano nella tua storia.** Ogni round segna la griglia nel profilo di chi la sta guardando: dopo una sera di partite in quattro, il single player non ti ripropone le stesse identiche griglie di ieri. Chi è seduto in attesa della partita dopo non riceve niente, e infatti non gli si segna niente.',
+          '**Entrare in una stanza non cancella più la cronologia.** Finora succedeva quello: entri in multiplayer e perdi la memoria delle partite giocate da solo. Non serve più, perché adesso quella memoria la stanza la **usa**, non la subisce.',
+          '**Quante griglie ti ricordi, e puoi dimenticarle.** Nella schermata del profilo c’è il numero delle griglie già viste con un bottone «Dimentica e ricomincia»: utile se vuoi rivedere anche le vecchie, o se il catalogo di una difficoltà è esaurito e preferisci ripartire da zero.',
+          '**Funziona anche offline, sull’app senza rete.** Il telefono si ricorda le griglie giocate sul dispositivo (per profilo), quindi anche il single player offline dell’app Android smette di ripetere le stesse lettere.',
+          '**Chi gioca senza profilo non ha memoria**, né prima né adesso: senza account non esiste una cronologia da consultare, e la pesca resta quella casuale di sempre.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**`played_schede` conta le ripetizioni: nuova colonna `seen_count`.** Finora la tabella rispondeva a «l’hai vista?»; ora risponde a «quante volte», che è la domanda di «vista di meno». `markSchedaPlayed` è passato da `INSERT OR IGNORE` a un **upsert** che incrementa il contatore (`ON CONFLICT ... DO UPDATE`), mentre la chiave primaria `(profile_id, scheda_id)` resta una riga per scheda.',
+          '**Migrazione dello schema: `ProfileStore.ensureColumn`.** `CREATE TABLE IF NOT EXISTS` non integra le tabelle esistenti, quindi su tutti i volumi già deployati la colonna nuova non ci sarebbe stata e ogni query sulla cronologia sarebbe caduta con un errore SQL. L’`ALTER TABLE ... ADD COLUMN ... DEFAULT 1` parte solo se `pragma_table_info` non trova la colonna, e il `DEFAULT 1` è anche il significato giusto: le voci storiche valgono una vista. Test: si apre un database vero, si toglie la colonna a colpi di `DROP COLUMN` e si verifica che il server nuovo la rimetta e conti `1`.',
+          '**La somma la fa SQLite, non il JavaScript: `playedSchedaCounts`.** Una query sola per tutta la stanza (`SELECT scheda_id, SUM(seen_count) ... WHERE profile_id IN (...) GROUP BY scheda_id`), con gli id dei profili uniti prima di costruirne i segnaposto: lo stesso account aperto su due dispositivi non deve pesare doppio.',
+          '**`SchedaMemory` non è più un insieme di id: ogni livello ha i suoi conteggi** (`views(layer)`). Il costo di questa scelta è una riga in `pickScheda`, il beneficio è che il ripiegamento smette di essere «una a caso fra quelle già viste» e diventa «quella con la somma dei contatori più bassa, fra i livelli a cui abbiamo rinunciato». Il sorteggio resta uno solo, fra i pari merito.',
+          '**Il livello `player` di una stanza si ricalcola a ogni pesca: `Room.syncPlayerMemory`.** Non si accumula, perché dipende da **chi** è in stanza: se Dario esce, la sua storia deve uscire con lui. Si ricalcola al momento della pesca e non all’ingresso/uscita perché l’unico consumatore è `pickScheda`: così non c’è una strada di ingresso (rejoin, rientro dopo una riconnessione, Partita Nuova) che possa dimenticarsi il sync.',
+          '**La griglia del round entra nei profili a round partito (`recordRoundScheda`), non a fine partita.** `games.scheda_id` esiste solo per le partite **concluse**, quindi non bastava: una griglia la vedi anche se la stanza si chiude al round 2. Chi entra a round 1 già partito la vede per la prima volta e viene segnato (`resendRoundIfPlaying(..., markSeen)`), chi si riconnette no: rimandare la stessa griglia non è una vista nuova.',
+          '**Memoria locale per la pesca offline: `apps/web/src/game/localSchedaMemory.ts`.** Copia in `localStorage` **per profilo** (tetto di 800 griglie, si dimentica la più vecchia), che alimenta la stessa `pickScheda` usata dal server. Il server resta autoritativo quando c’è rete.',
+          '**L’endpoint `DELETE /me/played-schede` non è più chiamato dall’ingresso in stanza** ed è diventato il «dimentica» del profilo. `clearPlayedSchede` sparisce dal client della lobby; resta la rotta, con il suo effetto documentato: è irreversibile.',
+          '**Nuova suite end-to-end: `tests/e2e/multiplayer-memory.mjs`** (9 verifiche, in `pnpm test:e2e`). Due profili registrati davvero, cronologia caricata dall’API e due partite: la prima verifica che si peschi l’unica scheda che nessuno dei due ha visto e che finisca nello storico di entrambi; la seconda — tutte le schede contate due volte, una una sola — verifica che vinca la **somma** dei contatori. Misurato durante lo sviluppo: con i contatori al valore sbagliato la suite fallisce, e fallisce pescando una scheda a caso.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.49.0',
+    date: '2026-10-08',
+    title: 'Si rigioca nella stessa stanza, chi arriva tardi aspetta',
+    promo: {
+      emoji: '🔁',
+      headline: 'La stessa stanza gioca anche la partita dopo',
+      text: 'Finita una partita non si riparte più da zero: chi ha creato la stanza trova «Gioca ancora nella stessa stanza», che azzera i punteggi e pesca griglie mai viste, lasciando tutti lì con lo stesso codice e lo stesso link. L’alternativa è «Chiudi la stanza», e vale per tutti. Chi arriva quando la partita è già lontana non sente più «partita finita»: entra, si siede, chiacchiera con gli altri e gioca la partita dopo, senza dover rimettere il codice.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**«Gioca ancora nella stessa stanza».** A fine partita chi ha creato la stanza ha due bottoni: rigiocare o chiuderla. Rigiocando restano il **codice stanza**, il **link dell’invito**, i **giocatori** e le **impostazioni**; si azzerano i punteggi e i round, e le griglie sono nuove. Prima l’unica uscita era «Torna alla home»: per il secondo giro serviva rifare la stanza e rigirare il link a tutti.',
+          '**Si può anche cambiare idea tra una partita e l’altra.** Griglia, difficoltà, numero di round, durata e musica si possono ritoccare nella sala d’attesa tra un giro e l’altro: cose che prima, con la stanza già chiusa, non si potevano toccare.',
+          '**Chiude solo chi ha creato la stanza, e solo a partita ferma.** «Chiudi la stanza» spegne la stanza per tutti con un avviso; in mezzo a un round il server lo rifiuta, guastare una partita in corso a chi sta giocando non è una scelta degli altri.',
+          '**Chi arriva quando la partita è troppo partita non sta più fuori.** Dal round 2 in avanti, o a partita conclusa, il link funziona: si entra, si prende un posto con la scritta «in attesa», e si gioca la partita successiva. Il suo nome compare tra i presenti, con la fascetta «in attesa», ma il punteggio non lo sfiora: chi gioca dall’inizio non perde niente.',
+          '**Niente griglia e niente classifica di una partita che non giochi.** A chi aspetta non arriva la griglia del round, non viene accettata nessuna parola e non finisce nei risultati: quando parte la partita nuova, però, entra in gioco insieme agli altri, con la griglia e il tempo di tutti.',
+          '**Nella sala d’attesa si capisce cosa sta succedendo.** Un avviso dice se è partita una partita nuova o se sei arrivato tardi; chi aspetta ha la fascetta «in attesa» accanto al nome, e chi ha già giocato vede «partita 2» nel titolo invece di un generico «sala d’attesa».',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Nuovo evento `room:newGame`** (`packages/shared/src/types.ts`): l’host lo invia, il server lo conferma con un ack, salva i punteggi della partita appena finita e lo rimbalza a tutti con lo stato della stanza. Il client risponde con una funzione sola, `applyNewMatch` (`apps/web/src/state/store.ts`), che azzera classifica, griglia, timer e countdown e riporta in lobby: se fosse bastato aggiornare la stanza, sugli schermi sarebbe rimasto il podio di una partita con i punteggi azzerati.',
+          '**Prima di azzerare, i punteggi si salvano.** `room:newGame` chiama la stessa `recordMultiplayerGames` usata a fine partita (idempotente tramite `gamesPersisted`): se si azzerassero i punteggi prima di scriverli, la cronologia perderebbe il round vincitore.',
+          '**La memoria delle schede è diventata a strati: `SchedaMemory`** (`packages/shared/src/schedaMemory.ts`, modulo nuovo). Tre livelli — `match` (questa partita), `room` (questa stanza), `player` (la storia di chi gioca) — con un ordine di rinuncia: quando le schede pulite finiscono si molla prima la storia personale, poi la memoria della stanza, per ultima la partita. Il vincolo forte, «non ripetere una griglia nel giro in corso», è l’ultimo a cadere.',
+          '**Il motivo per cui esistono gli strati.** Finora «non ripetere le schede» era un insieme di id e basta: in multiplayer valeva per la stanza, in solitario per il profilo, e le due cose non si potevano sommare. Con gli strati, agganciare la storia del giocatore alle partite in stanza («non rigioco a te quello che hai già visto») significa passare un altro insieme al costruttore, non riscrivere la scelta della scheda.',
+          '**La stanza ha una vita propria: `matchNumber`, `lastActivityAt` e `waiting`.** `matchNumber` conta le partite giocate nella stessa stanza (serve alla classifica, che senza di esso direbbe solo «finale»); `lastActivityAt` tiene viva una stanza ferma in sala d’attesa, che la pulizia automatica altrimenti cancellerebbe come una partita finita da cinque minuti.',
+          '**`admitNewPlayer` è diventata `seatForNewPlayer` e non dice più di no.** Risponde `now` o `nextMatch`; nel secondo caso il giocatore entra in `room.players` con `waiting: true`. Un elenco solo, quindi: si sta in stanza ma fuori dai punteggi. Prima la persona in sala d’attesa per la stanza non esisteva affatto, e infatti il link le veniva rifiutato.',
+          '**Gli eventi di gioco non vanno più a `io.to(code)` ma a `toPlaying(room)`** (`apps/server/src/index.ts`), che salta i socket di chi aspetta. La chat vocale resta a tutta la stanza: chi aspetta non gioca, ma sta lì con gli altri.',
+          '**Nuova suite end-to-end `tests/e2e/multiplayer-replay.mjs`** (27 verifiche, in `pnpm test:e2e`): due partite di fila nella stessa stanza con la griglia diversa, l’attesa di chi arriva a partita conclusa e di chi arriva al round 2, l’impossibilità di chiudere in mezzo a un round, la chiusura che arriva a tutti. `multiplayer-latejoin.mjs` è stata riscritta: verificava i rifiuti `GAME_STARTED`, ora verifica le sedute.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.48.0',
+    date: '2026-10-08',
+    title: 'Si entra in partita anche arrivando in ritardo',
+    promo: {
+      emoji: '🚪',
+      headline: 'Chi arriva dopo gioca lo stesso',
+      text: 'Se gli amici hanno già iniziato la partita non resti più fuori a guardare: il link della stanza funziona lo stesso e ti ritrovi in gioco, con la griglia in corso e il tempo che resta. Si può entrare finché dura il primo round; dal secondo in poi la partita è chiusa, altrimenti chi arriva tardi parte già con un round di vantaggio o di svantaggio.',
+    },
+    changes: [
+      {
+        kind: 'feature',
+        items: [
+          '**Si entra in una stanza anche a partita iniziata.** Il link dell’invito vale mentre gira il **round 1**: chi arriva in ritardo riceve la griglia in corso, gioca il tempo che resta e compare subito in classifica insieme agli altri. Prima la stanza rispondeva “Partita già iniziata” e chi era in ritardo restava fuori per tutta la partita.',
+          '**Chi arriva nella pausa tra un round e l’altro gioca dal round successivo**: ha un giro intero davanti, quindi entra senza penalità.',
+          '**Il round 2 è la frontiera, ed è chiusa.** Da lì in poi il ritardo ha già perso un round di parole e di parole uniche raddoppiate: la classifica non sarebbe più confrontabile, e il ritardo di uno non lo paga chi gioca dall’inizio. Il messaggio lo dice chiaramente: “La partita è già al round 2: si può entrare solo durante il primo”.',
+          '**Una partita finita ha un messaggio suo.** “La partita è già finita” invece del generico “Partita già iniziata”: non è un ingresso in ritardo, quella partita non esiste più.',
+          '**Il rientro non cambia.** Chi ha già giocato e perde la rete rientra a qualunque round, come prima: la restrizione riguarda solo chi entra per la prima volta.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La regola sta in un punto solo: `Room.admitNewPlayer()`** (`apps/server/src/rooms.ts`). Risponde `ok` in lobby, al countdown del round 1, durante il round 1, nella sua pausa e al countdown del round 2; altrimenti `GAME_STARTED` con il numero di round nel messaggio, o `GAME_ENDED` se la partita è conclusa. Nove test in `rooms.test.ts`, incluso il caso insidioso: con `rounds: 1`, `isGameOver()` è vero **mentre** il round 1 è in corso, e chi giudica dalla sola `phase` sbaglia in un senso o nell’altro.',
+          '**La griglia del round in corso si re-invia a chi entra**, non più solo a chi si riconnette: `resendRoundIfPlaying` è uscita dal ramo “giocatore esistente” di `room:join`. Senza quel reinvio il nuovo arrivato sarebbe agganciato alla stanza ma senza griglia, e la schermata di gioco resterebbe “In attesa della griglia…”.',
+          '**Il client finisce sulla schermata giusta secondo la fase della stanza**: `joinRoom` non manda più sempre in lobby. A round in corso va direttamente in partita (griglia e tempo restante dal `game:roundStart` che il server re-invia subito dopo l’ack) e azzera il timer locale, che altrimenti partirebbe dalla durata dell’ultima partita giocata su quel dispositivo.',
+          '**Conseguenza nota, accettata: il raddoppio si può perdere dopo.** “Parola trovata da uno solo vale doppio” si calcola a fine round contando le scoperte: se chi è entrato in ritardo trova la stessa parola di chi c’era dall’inizio, il raddoppio salta per entrambi. È la stessa regola di sempre (la parola è ancora componibile, quindi resta giocabile), solo più visibile: il ritardo non può anche togliere le parole agli altri.',
+          '**Nuova suite end-to-end: `tests/e2e/multiplayer-latejoin.mjs`** (20 verifiche, entra in `pnpm test:e2e`): ingresso a round 1 con griglia e scadenza identiche agli altri, parola accettata a round in corso, ingresso nella pausa, rifiuto al round 2, rientro con `playerId` ancora valido. Aggiornati i due smoke test che davano per scontato il vecchio rifiuto.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.47.0',
+    date: '2026-10-08',
+    title: 'Le schede conoscono di nuovo tutto il dizionario',
+    promo: {
+      emoji: '🃏',
+      headline: 'Parole vere che prima venivano rifiutate',
+      text: 'Alcune parole italiane c’erano già nel dizionario del gioco, ma la partita le rifiutava: le schede avevano l’elenco delle soluzioni vecchio, fermo a prima delle 4.339 parole tecniche riammesse nella 0.43.0. Gli elenchi sono stati ricalcolati su tutto il dizionario: 315 parole in più accettate, nessuna tolta.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le schede di base accettano di nuovo ogni voce del dizionario.** Le schede contengono le soluzioni già risolte, e il gioco accetta solo quelle: se il dizionario cresce e le schede restano ferme, una parola vera viene rifiutata. Misurato con il dizionario giusto: **101 schede su 270 disallineate** (63 ale, 27 standard, 11 full), **+315 parole accettate e 0 tolte** — è la famiglia delle parole tecniche: `ierica` e `torica` (scheda `4-facile-012`), `sudorale`, `tumorosa` e `torosa` (`4-facile-015`), `cine`, `cotale`, `segosi`, `ramosa`…',
+          '**Le griglie non sono cambiate di una cella.** `sync:schede` riscrive solo gli elenchi `words`/`allWords` con la stessa pipeline del generatore: verificato, **0 griglie modificate** su 270. Le partite già giocate restano riproducibili e la calibrazione delle ale resta valida.',
+          '**I criteri di qualità reggono ancora.** `pnpm --filter @boggle/server verify:schede`: nessuna violazione su tutte e nove le combinazioni dimensione × difficoltà.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**`words.txt` era fermo a 368.100 forme.** È un file generato (gitignored), e su questa macchina era precedente alla 0.43.0: le 4.339 parole tecniche di `technical-words.txt` non c’erano, quindi anche riallineare le schede non sarebbe bastato. Ricreato da `words.br` (versionato, 372.439 forme, `setosa` compresa) con `pnpm --filter @boggle/dictionary build`. Chi riallinea le schede **deve prima ricostruire il dizionario**, altrimenti congela la deriva nel commit.',
+          '**⚠️ DA FARE UNA VOLTA SOLA DOPO QUESTO DEPLOY: rigenerare le ale (e le extra) del volume.** `pnpm sync:schede` allinea **solo le schede versionate** in `packages/shared/schede/`. Quelle generate dall’amministratore vivono nel volume (`schede-ale/`, `schede-extra/`), **non sono in git e non si aggiornano da sole**: restano risolte sul dizionario del giorno in cui sono state create e continuano a rifiutare le parole nuove — è esattamente il caso di **`setosa` sulla scheda ale `6-facile-085`**. Procedura in **`docs/ALE-RUNTIME-SERVER.md`**: pannello admin (elimina + Genera) oppure `node tools/rigenera-ale-server.mjs` (dry-run di default). **Una tantum**: non serve a ogni deploy.',
+          '**Nessun allineamento automatico in build o in deploy, per scelta.** La generazione delle ale costa ~450 MB di picco e alcuni minuti: farla a ogni rilascio sarebbe uno spreco, e il dizionario deployato è sempre lo stesso perché arriva da `words.br` versionato (`ensure-words` lo decomprime, `build-words` prende il ramo offline e conserva i file). Per questo `sync:schede` resta un comando da tastiera e la nuova `pnpm check:schede` è **sola diagnosi** (`sync:schede --check`: non scrive nulla, esce 1 se c’è deriva). Da eseguire **quando cambia il dizionario** (`words.br`, `technical-words.txt`, `consonant-endings.txt`, `frequency-it.txt`), non a ogni rilascio.',
+          '**La validazione è contro la scheda, non contro il dizionario** — e lo era già in entrambe le modalità, mentre la specifica diceva altro. `Room.submitWord` valida contro `roundValidWords` (l’insieme accettato della scheda) e usa il dizionario **solo come ripiego** quando il round gira senza scheda (test o catalogo vuoto); il client single player usa `acceptedWords(scheda)`. Il percorso legale (`isValidPath` + `pathMatchesWord`) garantisce già la componibilità, quindi la scheda è la materializzazione preventiva di «dizionario ∩ componibili»: serve a non avere un solver nel client. Corretta la **SPEC §4.4**, che prometteva la validazione a dizionario.',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.46.0',
+    date: '2026-10-08',
+    title: 'Lo storico delle partite non si riordina più da solo',
+    promo: {
+      emoji: '🕒',
+      headline: 'Le partite recenti restano in ordine',
+      text: 'Due partite finite a un soffio l’una dall’altra (stesso millisecondo) apparivano nello storico in ordine qualunque: chiudendo e riaprendo il profilo potevano scambiarsi di posto. Ora l’ordine è sempre quello reale, dall’ultima alla prima.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le due partite più vicine non si scambiano più di posto.** Lo storico in `Profilo → Le mie statistiche` ordinava solo per istante di fine partita, e due partite salvate nello stesso millisecondo hanno lo stesso identico istante: l’elenco poteva uscire in un ordine e, ricaricando, in quello opposto. Ora il secondo criterio è l’ordine di salvataggio, quindi l’ultima partita giocata è sempre la prima della lista.',
+          '**Corretto anche un test che passava a caso.** Il test dello storico falliva circa **una esecuzione su due** senza che nessuno toccasse niente: inserisce due partite di seguito, cioè proprio il caso in cui il millisecondo collide. È il motivo per cui il difetto è rimasto invisibile così a lungo — quando il test falliva sembrava colpa dell’ambiente, non del codice.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Tie-break sulla `rowid`, non sull’`id`.** La chiave primaria di `games` è un UUID: ordinare per `id` darebbe un ordine sì deterministico ma privo di significato. La `rowid` di SQLite cresce con l’inserimento, quindi è esattamente “salvata dopo”. La query dello storico diventa `ORDER BY played_at DESC, rowid DESC`.',
+          '**Il nuovo test congela l’orologio** (`vi.spyOn` su `Date.now`): tutte le partite hanno lo stesso `played_at` per costruzione, così il test non può passare per caso se il tie-break manca e non può nemmeno diventare verde solo perché il millisecondo è scattato. Misurato: `stats.test.ts` **10 esecuzioni su 10 verdi** (prima: 3 fallimenti su 5).',
+        ],
+      },
+    ],
+  },
+  {
+    version: '0.45.0',
+    date: '2026-10-08',
+    title: 'I test non dipendono più dal `.env` della macchina',
+    promo: {
+      emoji: '🧪',
+      headline: 'Test verdi anche senza un server proprio',
+      text: 'Due test dell’app fallivano su qualsiasi computer che non avesse il collegamento al server di produzione configurato: controllavano gli inviti e la musica dell’APK, che hanno senso solo con un server remoto. Ora il server se lo danno da sé: `pnpm test` è verde anche partendo da zero.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**`pnpm test` passa anche a chi non ha `VITE_SERVER_URL` configurato.** Due test — l’invito multiplayer dall’APK e la musica caricata dall’amministratore — fallivano sul `.env` vuoto, cioè sulla configurazione di chi sviluppa col proxy locale e di qualsiasi persona cloni il repository. Non era la logica ad essere rotta: era il test a chiedere all’ambiente un valore che non gli compete.',
+          '**Nessuna regressione copriva sé stessa.** I due test sono stati ri-scritti in modo che il risultato non cambi fra il portatile, la CI e chi ha il `.env` puntato a un server vero (verificato con tutti e quattro gli assetti: `.env` vuoto, `.env` di produzione, variabile di shell, variabile assurda).',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**Il server remoto lo dichiara il test, non l’ambiente.** `SERVER_URL` è una *costante di modulo* letta da `import.meta.env`, quindi si fissa quando il modulo è caricato; i test la forzavano per via indiretta, ereditandola dal `.env`. Ora usano `vi.stubEnv` + `vi.resetModules` + import dinamico (`roomLinkBuiltWith` / `storeBuiltWith`): il modulo viene ricaricato con il server voluto, come se l’app fosse stata compilata così.',
+          '**Coperto anche il caso opposto**, che prima non era testato: senza server remoto configurato l’invito resta `localhost` e la traccia resta un percorso relativo — ed è il comportamento giusto, perché l’indirizzo della pagina è già quello giusto (stesso host di Vite in sviluppo, monolite in produzione). Prima questi due test verificavano una *disparità* (`not.toBe`): ora confrontano l’URL esatto.',
+          '**Verificato che i test non siano vacui**: introducendo di proposito il difetto originale (`publicAppHref` che non sostituisce `localhost`, `absoluteMusicTrack` che non assolutizza) falliscono 3 test, non 0.',
+        ],
+      },
+    ],
+  },
   {
     version: '0.44.0',
     date: '2026-10-05',
