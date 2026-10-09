@@ -10,7 +10,7 @@
  *  - **patch** `x.y.N`: correzioni e rifiniture.
  */
 
-export const APP_VERSION = '0.51.0';
+export const APP_VERSION = '0.52.0';
 
 export interface ReleaseEntry {
   version: string;
@@ -47,6 +47,38 @@ export interface ReleasePromo {
  * Le voci tecniche (tipo `tech`) spiegano le scelte di implementazione.
  */
 export const RELEASES: ReleaseEntry[] = [
+  {
+    version: '0.52.0',
+    date: '2026-10-09',
+    title: 'A parola sbagliata la griglia non esce più dallo schermo',
+    promo: {
+      emoji: '📱',
+      headline: 'Le lettere restano dove devono stare',
+      text: 'Un errore non fa più «ingrandire» la griglia: prima il messaggio sopra le lettere era più lungo dello schermo e se ne prendeva lo spazio, spingendo le colonne ai lati fuori dal bordo — quelle non le toccavi più. Ora il messaggio si accorcia da solo e le lettere restano al loro posto. Al posto dell’ingrandimento, un breviissimo tremito della griglia con una piccola vibrazione del telefono.',
+    },
+    changes: [
+      {
+        kind: 'fix',
+        items: [
+          '**Le colonne ai lati non finiscono più fuori dallo schermo.** Il colpevole era il messaggio sopra la griglia: la parola rifiutata con il suo motivo stava su una riga sola mai a capo, e il contenitore della griglia la lasciava allargare quanto voleva. Su uno schermo da 360 px quel messaggio ne chiedeva ~550, la griglia si allargava dietro di lui e perdeva le colonne oltre il bordo — per tutto il tempo in cui il messaggio restava su, cioè finché non toccavi una lettera nuova. Da lì il «resta zoomato e le tocche dopo non vanno a segno».',
+          '**Si vedeva solo sul telefono, ed era proprio la pista.** Con «Sito desktop» il bug spariva: la modalità desktop finge uno schermo da 980 px, dove quel messaggio ci sta. Non era nulla di mobile, era una larghezza senza pavimento: bastava restringere la finestra del computer sotto i ~560 px per vederselo in faccia.',
+          '**L’ingrandimento finto è diventato un tremito.** L’animazione d’errore era un alone rosso che si allargava attorno alla griglia: mezzo secondo in cui la griglia sembrava crescere mentre stavi già per ritoccare. Ora è uno spostamento di 3 px per 180 ms, insieme a una doppia vibrazione corta — si sente al tatto ed è diversa da quella della parola trovata. Se hai attivo «riduci le animazioni» resta solo il messaggio rosso.',
+          '**Le celle non si rigonfiano più quando rilasci una parola.** Le lettere avevano una piccola animazione d’ingresso (si aprono da piccole); spegnerla e riaccenderla la faceva ripartire, quindi le celle appena rilasciate si sgonfiavano a metà e schizzavano di nuovo su, con le coordinate dello swipe misurate proprio in quel momento. L’ingresso ora vive su un contenitore che non cambia mai stato: si accende una volta sola per griglia.',
+          '**I messaggi di rifiuto sono più corti.** «Non componibile su questa griglia» e «Parola non corrispondente al percorso» stavano a metà fuori dallo schermo anche dopo la correzione: ora dicono la stessa cosa in poche parole, e se proprio non c’è spazio si accorciano con i puntini invece di tagliarsi di netto.',
+        ],
+      },
+      {
+        kind: 'tech',
+        items: [
+          '**La correzione è una riga: `grid-template-columns: minmax(0, 1fr)` su `.game__main`** (`apps/web/src/styles.css`). Senza, la colonna era quella *implicita* `auto`, la cui dimensione minima automatica è la **min-content** degli item: poteva superare il contenitore. Il `min-width: 0` già presente su `.game__main` non serviva, perché limita il contenitore, non la sua traccia; e l’`overflow: hidden` era sul banner (figlio del grid item) invece che su `.current-word-wrap`, che è l’item: l’automatic minimum si annulla solo lì. Misurato con Chrome a testa in giù, griglia 4×4 con una parola da 16 lettere rifiutata: a 393 px di viewport il board passava da 385 a **552 px** (163 px fuori dal bordo, cella da 93 a 135 px); a 980 px nessuna differenza, 0 px fuori — la prova che era la larghezza, non il «mobile». Il `100cqw` del *size container* `.grid-board` risolveva contro la larghezza gonfiata: ecco perché a pagare era `--cell`, cioè la dimensione delle lettere.',
+          '**Ingresso delle celle su un involucro `.grid-cell`**, e `animation` tolta da `.tile`. `animation` è una *shorthand*: `.tile--selected` (`tile-light-up`) e `.tile--hint` (`tile-hint`) la sovrascrivevano, quindi togliere la selezione rimetteva `tile-in` nello stile calcolato e, cambiato `animation-name`, il browser lo riavviava (celle a `scale(0.4)`/`opacity: 0` tenute dal `backwards` per tutto l’`animation-delay`, poi overshoot 1.2). Bonus: `cellRefs` ora punta agli involucri, cioè ai rettangoli che **non** si muovono mai — `buildLayout()` e la `tolerance` di `cellTracker` non misurano più una cella a metà transizione. Ci guadagna anche il suggerimento: il ritardo d’ingresso sull’involucro e il `--hint-delay` sulla cella sono due proprietà separate, quindi non si calpestano più.',
+          '**L’animazione d’errore sta sul board, non sulle celle, ed è la scelta che la rende innocua**: `SwipeController.localPoint()` sottrae il rect del board alle coordinate del dito e `GridBoard.buildLayout()` misura i centri relativi a quel rect, quindi una `translateX` su tutto non cambia nessuna coordinata relativa. Niente `scale` e niente `box-shadow` nei `@keyframes grid-nudge` (0,18s).',
+          '**Il segnale d’errore passa da un booleano a un contatore** (`errorSignal` in `GridBoard`, `invalidSeq` in `useSoloGame`): un booleano derivato da `feedback.kind === «invalid»` restava vero finché non si toccava una lettera — cioè teneva una classe accesa su un’animazione one-shot (nel single player non si spegneva mai; il multiplayer aveva un suo `setTimeout` di 500 ms). Ora la durata, lo spegnimento, l’annullamento sul `pointerdown` successivo e il `navigator.vibrate([14, 45, 14])` vivono tutti dentro `GridBoard`, quindi le due modalità si comportano finalmente allo stesso modo.',
+          '**Test.** Nuovo `apps/web/src/styles.game.test.ts`: legge `styles.css` e blocca le quattro cose che avevano rotto tutto — la colonna con pavimento 0, `min-width: 0` + `overflow: hidden` sull’item giusto, `@keyframes grid-nudge` senza `scale()` né `box-shadow`, `animation:` assente da `.tile` e presente su `.grid-cell`, e il `prefers-reduced-motion` che copre entrambi. È un test sul testo del foglio di stile: non c’è jsdom nel progetto, e in questo caso la regola *è* la logica. Motivi di rifiuto più corti in `Room.submitWord` (nessun test dipendeva dal testo, `rooms.test.ts` cerca «attesa»).',
+        ],
+      },
+    ],
+  },
   {
     version: '0.51.0',
     date: '2026-10-09',

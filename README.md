@@ -124,8 +124,8 @@ codice già nel campo “Entra”. Dove la condivisione non c'è, il link si cop
   precisione millimetrica, le celle non si accendono "sfiorando il pixel" e non
   "sfarfallano" sul bordo.
 - **Animazioni** con CSS e Web Animations API: pop-in delle celle, trailer luminoso sullo swipe,
-  flash morbido (niente scuotimento) su parola non valida, countdown, confetti a fine round.
-  Tutte rispettano `prefers-reduced-motion`.
+  un tremito di 180 ms (spostamento di 3 px, mai una scala) con vibrazione sul parola non valida,
+  countdown, confetti a fine round. Tutte rispettano `prefers-reduced-motion`.
 
 ---
 
@@ -428,6 +428,13 @@ I deploy sono **riproducibili offline**: `words.br` (626 KB) è versionato, quin
   il controller "agganciato".
 - **Parole duplicate**: il punteggio base va a tutti; il raddoppio spetta a chi trova una
   parola che **nessun altro** ha trovato.
+- **Le colonne del layout di partita hanno un pavimento di 0**: `.game__main` dichiara
+  `grid-template-columns: minmax(0, 1fr)`. Senza, la traccia implicita `auto` ha come minimo la
+  *min-content* degli item, e il banner della parola (`white-space: nowrap`) la allargava oltre lo
+  schermo: la griglia — che legge la propria larghezza in `cqw` — cresceva e perdeva le colonne
+  fuori dal bordo. Si vedeva solo sotto i ~560 px di viewport, quindi sembrava un bug del mobile
+  (con «Sito desktop», 980 px, spariva). Stessa ragione per `min-width: 0` + `overflow: hidden` su
+  `.current-word-wrap`: l’automatic minimum si annulla sul **grid item**, non su un figlio.
 
 ---
 

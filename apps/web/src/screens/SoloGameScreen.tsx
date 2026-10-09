@@ -138,7 +138,7 @@ export function SoloGameScreen() {
           selectedPath={state.selectedPath}
           onPathChange={handlePathChange}
           onCommit={game.commitPath}
-          flashError={feedback?.kind === 'invalid'}
+          errorSignal={state.invalidSeq}
           hintPath={state.hintPath}
         />
       </div>

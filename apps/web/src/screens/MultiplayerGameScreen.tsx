@@ -40,10 +40,10 @@ export function MultiplayerGameScreen() {
   const myBadgeTimer = useRef<number | null>(null);
   const [myWords, setMyWords] = useState<FoundWord[]>([]);
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
-  const [flashError, setFlashError] = useState(false);
+  /** Contatore dei rifiuti: arma la vibrazione della griglia (vedi `GridBoard`). */
+  const [errorSeq, setErrorSeq] = useState(0);
   // Chi sta parlando adesso: l'indicatore compare sull'avatar nella barra.
   const speakers = useVoiceSpeakers();
-  const flashTimer = useRef<number | null>(null);
   const feedbackTimer = useRef<number | null>(null);
 
   // Tick crescente negli ultimi 10 secondi del round. In multiplayer il round è
@@ -63,7 +63,6 @@ export function MultiplayerGameScreen() {
 
   useEffect(() => {
     return () => {
-      if (flashTimer.current) window.clearTimeout(flashTimer.current);
       if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current);
       if (myBadgeTimer.current) window.clearTimeout(myBadgeTimer.current);
     };
@@ -114,9 +113,9 @@ export function MultiplayerGameScreen() {
   const flash = useCallback((feedback: Feedback) => {
     setFeedback(feedback);
     if (feedback.kind === 'invalid') {
-      setFlashError(true);
-      if (flashTimer.current) window.clearTimeout(flashTimer.current);
-      flashTimer.current = window.setTimeout(() => setFlashError(false), 500);
+      // Solo il SEGNALE: durata, spegnimento e vibrazione tattile li decide
+      // `GridBoard`, uguale al single player.
+      setErrorSeq((n) => n + 1);
     }
     /*
      * L'esito NON si spegne da solo: resta finché il giocatore non tocca una
@@ -257,7 +256,7 @@ export function MultiplayerGameScreen() {
           selectedPath={selectedPath}
           onPathChange={handlePathChange}
           onCommit={handleCommit}
-          flashError={flashError}
+          errorSignal={errorSeq}
         />
       </div>
 

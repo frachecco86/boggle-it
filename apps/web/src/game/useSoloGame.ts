@@ -78,6 +78,16 @@ export interface SoloGameState {
   hintPath: number[] | null;
   /** La parola suggerita (testo), mostrata nel riquadro di composizione. */
   hintWord: string | null;
+  /**
+   * Quante parole sono state RIFIUTATE dall'inizio del round.
+   *
+   * Non è un punteggio: è il SEGNALE per la vibrazione della griglia. Serve un
+   * numero che cambia a ogni rifiuto, non un booleano: la classe dell'errore
+   * accende un'animazione una volta sola, e un `feedback.kind === 'invalid'`
+   * che resta vero finché non si tocca una lettera nuova la terrebbe incollata
+   * al board (era così nel single player).
+   */
+  invalidSeq: number;
 }
 
 /**
@@ -108,6 +118,8 @@ export function useSoloGame(options: UseSoloGameOptions) {
   const [roundScores, setRoundScores] = useState<number[]>([]);
   const [selectedPath, setSelectedPath] = useState<number[]>([]);
   const [feedback, setFeedback] = useState<WordFeedback | null>(null);
+  /** Vedi `SoloGameState['invalidSeq']`: conta i rifiuti, non i punti. */
+  const [invalidSeq, setInvalidSeq] = useState(0);
   const [deadline, setDeadline] = useState(0);
   const [timeLeftMs, setTimeLeftMs] = useState(roundDurationMs);
   const [missedWords, setMissedWords] = useState<string[]>([]);
@@ -308,6 +320,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     if (word.length < 3) {
       audio.play('invalid');
       setFeedback({ kind: 'invalid', word, reason: 'Minimo 3 lettere' });
+      setInvalidSeq((n) => n + 1);
       return;
     }
     if (!pathMatchesWord(g, path, word)) return;
@@ -325,6 +338,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
     if (!accepted.includes(word)) {
       audio.play('invalid');
       setFeedback({ kind: 'invalid', word, reason: 'Non una parola valida' });
+      setInvalidSeq((n) => n + 1);
       return;
     }
     const points = scoreForWord(word);
@@ -446,6 +460,7 @@ export function useSoloGame(options: UseSoloGameOptions) {
       loading,
       hintPath,
       hintWord,
+      invalidSeq,
     } satisfies SoloGameState,
     loadError,
     totalScore,

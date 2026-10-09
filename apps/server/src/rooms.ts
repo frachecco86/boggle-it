@@ -512,13 +512,20 @@ export class Room {
    * dizionario -> lunghezza -> duplicato.
    */
   submitWord(playerId: string, rawWord: string, path: number[]): { accepted: boolean; reason?: string; word?: string; points?: number } {
+    /*
+     * I `reason` si VEDONO: finiscono nel rettangolo sopra la griglia, accanto
+     * alla parola, su una riga sola (`nowrap`) larga quanto lo schermo del
+     * telefono. Il testo in più viene tagliato con i puntini, ma tenere le frasi
+     * sopra le ~24 lettere significa nascondere metà messaggio: quando si aggiunge
+     * un motivo nuovo, scriverlo corto.
+     */
     const player = this.players.get(playerId);
     if (!player) return { accepted: false, reason: 'Giocatore non in stanza' };
     // Chi è seduto in attesa della prossima partita non gioca questa: la
     // rifiutiamo qui anche se il client, correttamente, non gli ha nemmeno
     // mandato la griglia (vedi `waitingSockets`).
     if (player.waiting) {
-      return { accepted: false, reason: 'Sei in attesa della prossima partita' };
+      return { accepted: false, reason: 'In attesa della prossima' };
     }
     if (this.phase !== 'playing') return { accepted: false, reason: 'Il round non e\' attivo' };
     if (Date.now() > this.roundEndsAt) return { accepted: false, reason: 'Tempo scaduto' };
@@ -533,7 +540,7 @@ export class Room {
     const normalized = normalizeWord(rawWord);
     if (!normalized) return { accepted: false, reason: 'Parola non valida' };
     if (!pathMatchesWord(this.grid, path, normalized)) {
-      return { accepted: false, reason: 'Parola non corrispondente al percorso' };
+      return { accepted: false, reason: 'Non segue il percorso' };
     }
     if (normalized.length < 3) return { accepted: false, reason: 'Parola troppo corta' };
     // Validazione contro l'insieme ACCETTATO della scheda (dizionario intero):
@@ -547,7 +554,7 @@ export class Room {
     if (!validOnScheda) {
       return {
         accepted: false,
-        reason: this.roundValidWords.size > 0 ? 'Non componibile su questa griglia' : 'Parola non nel dizionario',
+        reason: this.roundValidWords.size > 0 ? 'Non si può comporre qui' : 'Parola non nel dizionario',
       };
     }
     if (player.roundWords.has(normalized)) return { accepted: false, reason: 'Parola gia\' trovata' };
